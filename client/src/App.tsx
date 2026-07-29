@@ -12,9 +12,9 @@ import Admin from "./pages/Admin";
 import DownloadHistory from "./pages/DownloadHistory";
 import Import from "./pages/Import";
 import Search from "./pages/Search";
+import Recommendations from "./pages/Recommendations";
 
 function Router() {
-  // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
       <Route path={"/"} component={Home} />
@@ -24,6 +24,7 @@ function Router() {
       <Route path={"/downloads"} component={DownloadHistory} />
       <Route path={"/import"} component={Import} />
       <Route path={"/search"} component={Search} />
+      <Route path={"/recommendations"} component={Recommendations} />
       <Route path={"/admin"} component={Admin} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
@@ -32,17 +33,10 @@ function Router() {
   );
 }
 
-// NOTE: About Theme
-// - Dark theme is set as default for neon-noir aesthetic
-// - Color palette is defined in index.css with CSS variables
-// - Theme is not switchable for this design
-
 function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider
-        defaultTheme="dark"
-      >
+      <ThemeProvider defaultTheme="dark">
         <TooltipProvider>
           <Toaster />
           <Router />

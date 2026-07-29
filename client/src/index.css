@@ -1,70 +1,39 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
+@import "tailwindcss";
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@theme {
+  --color-background: rgb(15 23 42);
+  --color-foreground: rgb(248 250 252);
+  --color-card: rgb(25 35 55);
+  --color-card-foreground: rgb(248 250 252);
+  --color-primary: rgb(236 72 153);
+  --color-primary-foreground: rgb(15 23 42);
+  --color-secondary: rgb(59 130 246);
+  --color-secondary-foreground: rgb(248 250 252);
+  --color-accent: rgb(34 211 238);
+  --color-accent-foreground: rgb(15 23 42);
+  --color-muted: rgb(71 85 105);
+  --color-muted-foreground: rgb(226 232 240);
+  --color-destructive: rgb(239 68 68);
+  --color-destructive-foreground: rgb(248 250 252);
+  --color-border: rgb(51 65 85);
+  --color-input: rgb(25 35 55);
+  --color-ring: rgb(236 72 153);
+  --radius: 0.5rem;
+}
 
 @layer base {
-  :root {
-    /* Neon-Noir Color Palette */
-    --background: 15 23 42; /* Midnight Navy */
-    --foreground: 248 250 252; /* Off-white */
-    
-    --card: 25 35 55; /* Slightly lighter navy */
-    --card-foreground: 248 250 252;
-    
-    --primary: 236 72 153; /* Hot Pink */
-    --primary-foreground: 15 23 42;
-    
-    --secondary: 59 130 246; /* Electric Blue */
-    --secondary-foreground: 248 250 252;
-    
-    --accent: 34 211 238; /* Cyan */
-    --accent-foreground: 15 23 42;
-    
-    --muted: 71 85 105; /* Slate Gray */
-    --muted-foreground: 226 232 240;
-    
-    --destructive: 239 68 68;
-    --destructive-foreground: 248 250 252;
-    
-    --border: 51 65 85; /* Dark slate */
-    --input: 25 35 55;
-    --ring: 236 72 153; /* Hot Pink ring */
-    
-    --radius: 0.5rem;
-  }
-
-  .dark {
-    --background: 15 23 42;
-    --foreground: 248 250 252;
-    --card: 25 35 55;
-    --card-foreground: 248 250 252;
-    --primary: 236 72 153;
-    --primary-foreground: 15 23 42;
-    --secondary: 59 130 246;
-    --secondary-foreground: 248 250 252;
-    --accent: 34 211 238;
-    --accent-foreground: 15 23 42;
-    --muted: 71 85 105;
-    --muted-foreground: 226 232 240;
-    --destructive: 239 68 68;
-    --destructive-foreground: 248 250 252;
-    --border: 51 65 85;
-    --input: 25 35 55;
-    --ring: 236 72 153;
-  }
-
   * {
-    @apply border-border;
+    border-color: rgb(51 65 85);
   }
 
   html {
-    @apply scroll-smooth;
+    scroll-behavior: smooth;
   }
 
   body {
-    @apply bg-background text-foreground;
+    background-color: rgb(15 23 42);
+    color: rgb(248 250 252);
     font-family: 'Inter', sans-serif;
   }
 
@@ -138,30 +107,27 @@
 
   /* Smooth transitions */
   * {
-    @apply transition-colors duration-200;
+    transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 200ms;
   }
 }
 
 @layer components {
-  .container {
-    @apply mx-auto max-w-7xl px-4 sm:px-6 lg:px-8;
-  }
-
-  .flex {
-    @apply flex min-h-0 min-w-0;
-  }
-
-  .button {
-    @apply inline-flex items-center justify-center rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
-  }
-
   /* Neon button with glow */
   .btn-neon {
-    @apply px-6 py-3 font-bold rounded-lg;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.75rem 1.5rem;
+    font-weight: 700;
+    border-radius: 0.5rem;
     background: rgb(236 72 153);
     color: rgb(15 23 42);
     box-shadow: 0 0 20px rgba(236, 72, 153, 0.5), 0 0 40px rgba(59, 130, 246, 0.3);
     transition: all 0.3s ease;
+    border: none;
+    cursor: pointer;
   }
 
   .btn-neon:hover {
@@ -173,14 +139,25 @@
     transform: scale(0.97);
   }
 
+  .btn-neon:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
   /* Neon outline button */
   .btn-neon-outline {
-    @apply px-6 py-3 font-bold rounded-lg border-2;
-    border-color: rgb(34 211 238);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.75rem 1.5rem;
+    font-weight: 700;
+    border-radius: 0.5rem;
+    border: 2px solid rgb(34 211 238);
     color: rgb(34 211 238);
     background: transparent;
     box-shadow: 0 0 15px rgba(34, 211, 238, 0.3), inset 0 0 15px rgba(34, 211, 238, 0.05);
     transition: all 0.3s ease;
+    cursor: pointer;
   }
 
   .btn-neon-outline:hover {
@@ -191,7 +168,8 @@
 
   /* Card with neon styling */
   .card-neon {
-    @apply rounded-lg p-6;
+    border-radius: 0.5rem;
+    padding: 1.5rem;
     background: rgb(25 35 55);
     border: 1px solid rgb(51 65 85);
     box-shadow: 0 0 20px rgba(34, 211, 238, 0.1);

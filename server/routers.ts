@@ -8,49 +8,77 @@ import {
   getBookById,
   getBookByGutenbergId,
   searchBooks,
+  listBooks,
   getBooksByGenre,
   getBooksByLanguage,
+  getBooksByEducationalLevel,
+  getBooksBySource,
+  getRecentBooks,
+  getPopularBooks,
   createBook,
   updateBook,
+  deleteBook,
+  getBookCount,
   getGenres,
   getGenreBySlug,
   createGenre,
+  getAllSubjects,
+  getOrCreateSubject,
+  linkBookToSubject,
+  getSubjectsByBookId,
   getUserBookshelf,
   addToBookshelf,
   removeFromBookshelf,
   isBookInBookshelf,
+  getBookshelfBookIds,
   getUserDownloadHistory,
   recordDownload,
+  getUserDownloads,
+  getTotalDownloadCount,
+  getReadingProgress,
+  updateReadingProgress,
+  getAllReadingProgress,
+  getCurrentlyReading,
+  getRecommendationsForUser,
+  generateRecommendations,
   getAggregatorLogs,
   createAggregatorLog,
   updateAggregatorLog,
+  getAllUsers,
+  getUserById,
+  updateUserRole,
+  getUserCount,
+  getDashboardStats,
+  getAggregatorSources,
+  updateAggregatorSource,
 } from "./db";
 import { TRPCError } from "@trpc/server";
 import { importGutenbergBook } from "./import";
+import { runAggregator } from "./sources/aggregator";
 
 export const appRouter = router({
-    system: systemRouter,
-    
-    // Import procedures
-    import: router({
-      gutenberg: protectedProcedure
-        .input(z.object({ urlOrId: z.string().min(1) }))
-        .mutation(async ({ input, ctx }) => {
-          if (ctx.user.role !== "admin") {
-            throw new TRPCError({ code: "FORBIDDEN", message: "Admin only" });
-          }
-          return importGutenbergBook(input.urlOrId);
-        }),
-    }),
+  system: systemRouter,
+
+  // Auth
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
-      return {
-        success: true,
-      } as const;
+      return { success: true } as const;
     }),
+  }),
+
+  // Import procedures
+  import: router({
+    gutenberg: protectedProcedure
+      .input(z.object({ urlOrId: z.string().min(1) }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Admin only" });
+        }
+        return importGutenbergBook(input.urlOrId);
+      }),
   }),
 
   // Books procedures
@@ -60,10 +88,50 @@ export const appRouter = router({
         z.object({
           limit: z.number().int().min(1).max(100).default(20),
           offset: z.number().int().min(0).default(0),
+          genre: z.string().optional(),
+          language: z.string().optional(),
+          educationalLevel: z.string().optional(),
+          source: z.string().optional(),
+          search: z.string().optional(),
+          sort: z.enum(["newest", "downloads", "title", "author"]).default("newest"),
         })
       )
       .query(async ({ input }) => {
-        return getBooks(input.limit, input.offset);
+        return listBooks(input);
+      }),
+
+    recent: publicProcedure
+      .input(z.object({ limit: z.number().int().min(1).max(50).default(12) }))
+      .query(async ({ input }) => {
+        return getRecentBooks(input.limit);
+      }),
+
+    popular: publicProcedure
+      .input(z.object({ limit: z.number().int().min(1).max(50).default(12) }))
+      .query(async ({ input }) => {
+        return getPopularBooks(input.limit);
+      }),
+
+    byEducationalLevel: publicProcedure
+      .input(
+        z.object({
+          level: z.string(),
+          limit: z.number().int().min(1).max(50).default(20),
+        })
+      )
+      .query(async ({ input }) => {
+        return getBooksByEducationalLevel(input.level, input.limit);
+      }),
+
+    bySource: publicProcedure
+      .input(
+        z.object({
+          source: z.string(),
+          limit: z.number().int().min(1).max(50).default(20),
+        })
+      )
+      .query(async ({ input }) => {
+        return getBooksBySource(input.source, input.limit);
       }),
 
     getById: publicProcedure
@@ -118,6 +186,12 @@ export const appRouter = router({
         return getBooksByLanguage(input.language, input.limit, input.offset);
       }),
 
+    getSubjects: publicProcedure
+      .input(z.object({ bookId: z.number().int() }))
+      .query(async ({ input }) => {
+        return getSubjectsByBookId(input.bookId);
+      }),
+
     create: protectedProcedure
       .input(
         z.object({
@@ -130,6 +204,13 @@ export const appRouter = router({
           formats: z.string().optional(),
           gutenbergId: z.number().int().optional(),
           genreId: z.number().int().optional(),
+          educationalLevel: z.enum(["primary", "middle_school", "high_school", "college", "university", "professional", "general"]).optional(),
+          source: z.enum(["gutenberg", "kicd", "knec", "doab", "open_textbook", "ajol", "unesco", "worldbank", "google_books", "other"]).optional(),
+          sourceUrl: z.string().optional(),
+          isbn: z.string().optional(),
+          pages: z.number().int().optional(),
+          publisher: z.string().optional(),
+          publishedDate: z.string().optional(),
         })
       )
       .mutation(async ({ input, ctx }) => {
@@ -151,6 +232,8 @@ export const appRouter = router({
           subjects: z.string().optional(),
           formats: z.string().optional(),
           genreId: z.number().int().optional(),
+          educationalLevel: z.enum(["primary", "middle_school", "high_school", "college", "university", "professional", "general"]).optional(),
+          downloadCount: z.number().int().optional(),
         })
       )
       .mutation(async ({ input, ctx }) => {
@@ -160,6 +243,19 @@ export const appRouter = router({
         const { id, ...updates } = input;
         return updateBook(id, updates);
       }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number().int() }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Admin only" });
+        }
+        return deleteBook(input.id);
+      }),
+
+    count: publicProcedure.query(async () => {
+      return getBookCount();
+    }),
   }),
 
   // Genres procedures
@@ -188,6 +284,13 @@ export const appRouter = router({
         }
         return createGenre(input);
       }),
+  }),
+
+  // Subjects procedures
+  subjects: router({
+    list: publicProcedure.query(async () => {
+      return getAllSubjects();
+    }),
   }),
 
   // Bookshelf procedures
@@ -243,16 +346,77 @@ export const appRouter = router({
       .input(
         z.object({
           bookId: z.number().int(),
-          format: z.enum(["epub", "pdf", "txt", "html"]),
+          format: z.enum(["epub", "pdf", "txt", "html", "mobi"]),
         })
       )
       .mutation(async ({ input, ctx }) => {
         return recordDownload(ctx.user.id, input.bookId, input.format);
       }),
+
+    count: protectedProcedure.query(async ({ ctx }) => {
+      return getUserDownloads(ctx.user.id);
+    }),
+  }),
+
+  // Reading progress procedures
+  reading: router({
+    get: protectedProcedure
+      .input(z.object({ bookId: z.number().int() }))
+      .query(async ({ input, ctx }) => {
+        return getReadingProgress(ctx.user.id, input.bookId);
+      }),
+
+    all: protectedProcedure
+      .input(
+        z.object({
+          limit: z.number().int().min(1).max(100).default(20),
+          offset: z.number().int().min(0).default(0),
+        })
+      )
+      .query(async ({ input, ctx }) => {
+        return getAllReadingProgress(ctx.user.id, input.limit, input.offset);
+      }),
+
+    currentlyReading: protectedProcedure.query(async ({ ctx }) => {
+      return getCurrentlyReading(ctx.user.id);
+    }),
+
+    update: protectedProcedure
+      .input(
+        z.object({
+          bookId: z.number().int(),
+          currentPage: z.number().int().optional(),
+          totalPages: z.number().int().optional(),
+          percentage: z.number().int().min(0).max(100).optional(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        await updateReadingProgress(ctx.user.id, input.bookId, {
+          currentPage: input.currentPage,
+          totalPages: input.totalPages,
+          percentage: input.percentage,
+        });
+        return { success: true };
+      }),
+  }),
+
+  // Recommendations procedures
+  recommendations: router({
+    list: protectedProcedure
+      .input(z.object({ limit: z.number().int().min(1).max(50).default(12) }))
+      .query(async ({ input, ctx }) => {
+        return getRecommendationsForUser(ctx.user.id, input.limit);
+      }),
+
+    generate: protectedProcedure.mutation(async ({ ctx }) => {
+      await generateRecommendations(ctx.user.id);
+      return getRecommendationsForUser(ctx.user.id, 12);
+    }),
   }),
 
   // Admin procedures
   admin: router({
+    // Aggregator logs
     aggregatorLogs: protectedProcedure
       .input(
         z.object({
@@ -267,6 +431,27 @@ export const appRouter = router({
         return getAggregatorLogs(input.limit, input.offset);
       }),
 
+    // Trigger aggregator run
+    runAggregator: protectedProcedure
+      .input(
+        z.object({
+          sources: z.array(
+            z.object({
+              name: z.string(),
+              slug: z.string(),
+              enabled: z.boolean(),
+            })
+          ).optional(),
+        }).optional()
+      )
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Admin only" });
+        }
+        const result = await runAggregator(input?.sources);
+        return result;
+      }),
+
     createAggregatorLog: protectedProcedure
       .input(
         z.object({
@@ -274,6 +459,7 @@ export const appRouter = router({
           booksAdded: z.number().int().optional(),
           booksUpdated: z.number().int().optional(),
           errorMessage: z.string().optional(),
+          source: z.string().optional(),
         })
       )
       .mutation(async ({ input, ctx }) => {
@@ -292,6 +478,7 @@ export const appRouter = router({
           booksUpdated: z.number().int().optional(),
           errorMessage: z.string().optional(),
           completedAt: z.date().optional(),
+          source: z.string().optional(),
         })
       )
       .mutation(async ({ input, ctx }) => {
@@ -300,6 +487,83 @@ export const appRouter = router({
         }
         const { id, ...updates } = input;
         return updateAggregatorLog(id, updates);
+      }),
+
+    // Dashboard stats
+    stats: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Admin only" });
+      }
+      return getDashboardStats();
+    }),
+
+    // User management
+    users: protectedProcedure
+      .input(
+        z.object({
+          limit: z.number().int().min(1).max(100).default(50),
+          offset: z.number().int().min(0).default(0),
+        })
+      )
+      .query(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Admin only" });
+        }
+        return getAllUsers(input.limit, input.offset);
+      }),
+
+    getUser: protectedProcedure
+      .input(z.object({ id: z.number().int() }))
+      .query(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Admin only" });
+        }
+        return getUserById(input.id);
+      }),
+
+    updateUserRole: protectedProcedure
+      .input(
+        z.object({
+          id: z.number().int(),
+          role: z.enum(["user", "admin"]),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Admin only" });
+        }
+        return updateUserRole(input.id, input.role);
+      }),
+
+    userCount: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Admin only" });
+      }
+      return getUserCount();
+    }),
+
+    // Source management
+    sources: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Admin only" });
+      }
+      return getAggregatorSources();
+    }),
+
+    updateSource: protectedProcedure
+      .input(
+        z.object({
+          id: z.number().int(),
+          isActive: z.enum(["yes", "no"]).optional(),
+          url: z.string().optional(),
+          config: z.string().optional(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Admin only" });
+        }
+        return updateAggregatorSource(input.id, input);
       }),
   }),
 });

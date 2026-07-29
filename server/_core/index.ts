@@ -8,7 +8,8 @@ import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
-import { runAggregator } from "../aggregator";
+import { runAggregator } from "../sources/aggregator";
+import { initializeDefaultSources, seedDefaultGenres } from "../db";
 import { sdk } from "./sdk";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -38,6 +39,16 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
   registerOAuthRoutes(app);
+
+  // Seed default genres and aggregator sources
+  try {
+    await seedDefaultGenres();
+    await initializeDefaultSources();
+    console.log("[Seed] Default genres and sources initialized");
+  } catch (error) {
+    console.warn("[Seed] Failed to seed defaults (DB may not be available):", error);
+  }
+
   // Aggregator endpoint
   app.post("/api/scheduled/aggregator", async (req, res) => {
     try {
