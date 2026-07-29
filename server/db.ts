@@ -1,5 +1,6 @@
 import { and, eq, like, or, desc, asc, sql, count } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 import {
   InsertUser,
   users,
@@ -35,7 +36,8 @@ let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
+      const client = postgres(process.env.DATABASE_URL, { ssl: 'require', max: 1 });
+      _db = drizzle(client);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
@@ -94,7 +96,8 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       updateSet.lastSignedIn = new Date();
     }
 
-    await db.insert(users).values(values).onDuplicateKeyUpdate({
+    await db.insert(users).values(values).onConflictDoUpdate({
+      target: users.openId,
       set: updateSet,
     });
   } catch (error) {
@@ -316,8 +319,8 @@ export async function getOrCreateSubject(name: string): Promise<number | null> {
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
   const existing = await db.select().from(subjects).where(eq(subjects.slug, slug)).limit(1);
   if (existing.length > 0) return existing[0].id;
-  const result = await db.insert(subjects).values({ name, slug });
-  return (result as any).insertId ?? (result as any)[0]?.insertId ?? null;
+  const result = await db.insert(subjects).values({ name, slug }).returning({ id: subjects.id });
+  return result[0]?.id ?? null;
 }
 
 export async function linkBookToSubject(bookId: number, subjectId: number): Promise<void> {
@@ -364,8 +367,8 @@ export async function getOrCreateGenre(name: string): Promise<number | null> {
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
   const existing = await getGenreBySlug(slug);
   if (existing) return existing.id;
-  const result = await db.insert(genres).values({ name, slug });
-  return (result as any).insertId ?? (result as any)[0]?.insertId ?? null;
+  const result = await db.insert(genres).values({ name, slug }).returning({ id: genres.id });
+  return result[0]?.id ?? null;
 }
 
 // ============ Bookshelf ============

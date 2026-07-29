@@ -1,24 +1,22 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, index, uniqueIndex } from "drizzle-orm/mysql-core";
+import { integer, pgEnum, pgTable, text, timestamp, varchar, index, uniqueIndex, serial } from "drizzle-orm/pg-core";
 
 /**
  * Core user table backing auth flow.
  * Extend this file with additional tables as your product grows.
  * Columns use camelCase to match both database fields and generated types.
  */
-export const users = mysqlTable("users", {
-  /**
-   * Surrogate primary key. Auto-incremented numeric value managed by the database.
-   * Use this for relations between tables.
-   */
-  id: int("id").autoincrement().primaryKey(),
+export const roleEnum = pgEnum("role", ["user", "admin"]);
+
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
   /** Manus OAuth identifier (openId) returned from the OAuth callback. Unique per user. */
   openId: varchar("openId", { length: 64 }).notNull().unique(),
   name: text("name"),
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
-  role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  role: roleEnum("role").default("user").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
 });
 
@@ -28,8 +26,8 @@ export type InsertUser = typeof users.$inferInsert;
 /**
  * Genres/categories for organizing books (primary category labels)
  */
-export const genres = mysqlTable("genres", {
-  id: int("id").autoincrement().primaryKey(),
+export const genres = pgTable("genres", {
+  id: serial("id").primaryKey(),
   name: varchar("name", { length: 128 }).notNull().unique(),
   slug: varchar("slug", { length: 128 }).notNull().unique(),
   description: text("description"),
@@ -42,8 +40,8 @@ export type InsertGenre = typeof genres.$inferInsert;
 /**
  * Subjects - specific subject tags for books (more granular than genres)
  */
-export const subjects = mysqlTable("subjects", {
-  id: int("id").autoincrement().primaryKey(),
+export const subjects = pgTable("subjects", {
+  id: serial("id").primaryKey(),
   name: varchar("name", { length: 255 }).notNull().unique(),
   slug: varchar("slug", { length: 255 }).notNull().unique(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -57,9 +55,17 @@ export type InsertSubject = typeof subjects.$inferInsert;
 /**
  * Books from Project Gutenberg and other sources
  */
-export const books = mysqlTable("books", {
-  id: int("id").autoincrement().primaryKey(),
-  gutenbergId: int("gutenbergId").unique(), // Project Gutenberg ID
+export const educationalLevelEnum = pgEnum("educationalLevel", [
+  "primary", "middle_school", "high_school", "college", "university", "professional", "general"
+]);
+
+export const sourceEnum = pgEnum("source", [
+  "gutenberg", "kicd", "knec", "doab", "open_textbook", "ajol", "unesco", "worldbank", "google_books", "other"
+]);
+
+export const books = pgTable("books", {
+  id: serial("id").primaryKey(),
+  gutenbergId: integer("gutenbergId").unique(), // Project Gutenberg ID
   title: varchar("title", { length: 255 }).notNull(),
   author: varchar("author", { length: 255 }),
   description: text("description"),
@@ -67,22 +73,18 @@ export const books = mysqlTable("books", {
   coverUrl: text("coverUrl"), // URL to book cover image
   subjects: text("subjects"), // JSON array of subjects
   formats: text("formats"), // JSON object with format URLs (epub, pdf, txt, html)
-  downloadCount: int("downloadCount").default(0),
-  genreId: int("genreId").references(() => genres.id),
-  educationalLevel: mysqlEnum("educationalLevel", [
-    "primary", "middle_school", "high_school", "college", "university", "professional", "general"
-  ]),
-  source: mysqlEnum("source", [
-    "gutenberg", "kicd", "knec", "doab", "open_textbook", "ajol", "unesco", "worldbank", "google_books", "other"
-  ]).default("gutenberg"),
+  downloadCount: integer("downloadCount").default(0),
+  genreId: integer("genreId").references(() => genres.id),
+  educationalLevel: educationalLevelEnum("educationalLevel"),
+  source: sourceEnum("source").default("gutenberg"),
   sourceUrl: text("sourceUrl"), // Original URL from source
   isbn: varchar("isbn", { length: 20 }),
-  pages: int("pages"),
+  pages: integer("pages"),
   publisher: varchar("publisher", { length: 255 }),
   publishedDate: varchar("publishedDate", { length: 50 }),
-  rating: int("rating"), // 1-5 stars
+  rating: integer("rating"), // 1-5 stars
   importedAt: timestamp("importedAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 }, (table) => ({
   titleIdx: index("books_title_idx").on(table.title),
   authorIdx: index("books_author_idx").on(table.author),
@@ -97,12 +99,12 @@ export type InsertBook = typeof books.$inferInsert;
 /**
  * Book-Subject junction table (many-to-many)
  */
-export const bookSubjects = mysqlTable("bookSubjects", {
-  id: int("id").autoincrement().primaryKey(),
-  bookId: int("bookId")
+export const bookSubjects = pgTable("bookSubjects", {
+  id: serial("id").primaryKey(),
+  bookId: integer("bookId")
     .notNull()
     .references(() => books.id, { onDelete: "cascade" }),
-  subjectId: int("subjectId")
+  subjectId: integer("subjectId")
     .notNull()
     .references(() => subjects.id, { onDelete: "cascade" }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -116,12 +118,12 @@ export type InsertBookSubject = typeof bookSubjects.$inferInsert;
 /**
  * User bookshelf - saved books
  */
-export const bookshelves = mysqlTable("bookshelves", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId")
+export const bookshelves = pgTable("bookshelves", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
-  bookId: int("bookId")
+  bookId: integer("bookId")
     .notNull()
     .references(() => books.id, { onDelete: "cascade" }),
   savedAt: timestamp("savedAt").defaultNow().notNull(),
@@ -135,12 +137,12 @@ export type InsertBookshelf = typeof bookshelves.$inferInsert;
 /**
  * Download history - track user downloads
  */
-export const downloadHistory = mysqlTable("downloadHistory", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId")
+export const downloadHistory = pgTable("downloadHistory", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
-  bookId: int("bookId")
+  bookId: integer("bookId")
     .notNull()
     .references(() => books.id, { onDelete: "cascade" }),
   format: varchar("format", { length: 50 }).notNull(), // epub, pdf, txt, html, mobi
@@ -156,20 +158,20 @@ export type InsertDownloadHistory = typeof downloadHistory.$inferInsert;
 /**
  * Reading progress - track what users are reading
  */
-export const readingProgress = mysqlTable("readingProgress", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId")
+export const readingProgress = pgTable("readingProgress", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
-  bookId: int("bookId")
+  bookId: integer("bookId")
     .notNull()
     .references(() => books.id, { onDelete: "cascade" }),
-  currentPage: int("currentPage").default(0),
-  totalPages: int("totalPages"),
-  percentage: int("percentage").default(0), // 0-100
+  currentPage: integer("currentPage").default(0),
+  totalPages: integer("totalPages"),
+  percentage: integer("percentage").default(0), // 0-100
   lastReadAt: timestamp("lastReadAt").defaultNow().notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 }, (table) => ({
   uniquePair: uniqueIndex("reading_progress_user_book_unique").on(table.userId, table.bookId),
   userIdx: index("reading_progress_user_idx").on(table.userId),
@@ -181,15 +183,15 @@ export type InsertReadingProgress = typeof readingProgress.$inferInsert;
 /**
  * Book recommendations - algorithmic recommendations based on user behavior
  */
-export const recommendations = mysqlTable("recommendations", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId")
+export const recommendations = pgTable("recommendations", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
-  bookId: int("bookId")
+  bookId: integer("bookId")
     .notNull()
     .references(() => books.id, { onDelete: "cascade" }),
-  score: int("score").default(0), // recommendation score
+  score: integer("score").default(0), // recommendation score
   reason: varchar("reason", { length: 255 }), // e.g., "based on your reading of X"
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => ({
@@ -203,12 +205,14 @@ export type InsertRecommendation = typeof recommendations.$inferInsert;
 /**
  * Aggregator logs - track bulk import runs
  */
-export const aggregatorLogs = mysqlTable("aggregatorLogs", {
-  id: int("id").autoincrement().primaryKey(),
+export const aggregatorStatusEnum = pgEnum("aggregatorStatus", ["pending", "running", "success", "failed"]);
+
+export const aggregatorLogs = pgTable("aggregatorLogs", {
+  id: serial("id").primaryKey(),
   source: varchar("source", { length: 50 }).default("gutenberg"), // which source was aggregated
-  status: mysqlEnum("status", ["pending", "running", "success", "failed"]).default("pending").notNull(),
-  booksAdded: int("booksAdded").default(0),
-  booksUpdated: int("booksUpdated").default(0),
+  status: aggregatorStatusEnum("status").default("pending").notNull(),
+  booksAdded: integer("booksAdded").default(0),
+  booksUpdated: integer("booksUpdated").default(0),
   errorMessage: text("errorMessage"),
   startedAt: timestamp("startedAt").defaultNow().notNull(),
   completedAt: timestamp("completedAt"),
@@ -222,17 +226,19 @@ export type InsertAggregatorLog = typeof aggregatorLogs.$inferInsert;
 /**
  * Aggregator sources - configuration for each aggregation source
  */
-export const aggregatorSources = mysqlTable("aggregatorSources", {
-  id: int("id").autoincrement().primaryKey(),
+export const isActiveEnum = pgEnum("isActive", ["yes", "no"]);
+
+export const aggregatorSources = pgTable("aggregatorSources", {
+  id: serial("id").primaryKey(),
   name: varchar("name", { length: 128 }).notNull().unique(),
   slug: varchar("slug", { length: 128 }).notNull().unique(),
   url: text("url"),
-  isActive: mysqlEnum("isActive", ["yes", "no"]).default("yes").notNull(),
+  isActive: isActiveEnum("isActive").default("yes").notNull(),
   lastRunAt: timestamp("lastRunAt"),
-  booksFetched: int("booksFetched").default(0),
+  booksFetched: integer("booksFetched").default(0),
   config: text("config"), // JSON config for the source
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 export type AggregatorSource = typeof aggregatorSources.$inferSelect;
