@@ -3,9 +3,31 @@
   "installCommand": "pnpm install --no-frozen-lockfile",
   "buildCommand": "pnpm build",
   "outputDirectory": "dist/public",
+  "functions": {
+    "api/index.ts": {
+      "memory": 512,
+      "maxDuration": 30
+    }
+  },
   "rewrites": [
     {
-      "source": "/((?!assets|__manus__).*)",
+      "source": "/api/trpc/(.*)",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/scheduled/(.*)",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/auth/(.*)",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/storage/(.*)",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/((?!api|auth|storage|assets|_next).*)",
       "destination": "/index.html"
     }
   ]
