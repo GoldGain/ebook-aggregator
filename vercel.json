@@ -2,26 +2,11 @@
   "version": 2,
   "installCommand": "pnpm install --no-frozen-lockfile",
   "buildCommand": "pnpm build",
-  "outputDirectory": "dist",
-  "routes": [
+  "outputDirectory": "dist/public",
+  "rewrites": [
     {
-      "src": "/trpc/(.*)",
-      "dest": "/index.js"
-    },
-    {
-      "src": "/auth/(.*)",
-      "dest": "/index.js"
-    },
-    {
-      "src": "/api/(.*)",
-      "dest": "/index.js"
-    },
-    {
-      "handle": "filesystem"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/public/index.html"
+      "source": "/((?!assets|__manus__).*)",
+      "destination": "/index.html"
     }
   ]
 }
