@@ -172,9 +172,32 @@ export async function getBookByTitleAuthor(title: string, author?: string): Prom
   return result.length > 0 ? result[0] : undefined;
 }
 
-export async function searchBooks(query: string, limit: number = 20, offset: number = 0) {
+export async function searchBooks(query: string, limit: number = 20, offset: number = 0): Promise<Book[]> {
   const db = await getDb();
   if (!db) return [];
+
+  // Use PostgreSQL full-text search with tsvector for ranked results
+  try {
+    const tsQuery = query.trim().split(/\s+/).filter(Boolean).map(w => `${w.replace(/[^a-zA-Z0-9]/g, '')}:*`).join(" & ");
+    if (tsQuery) {
+      const rawResult = await db.execute(
+        sql`SELECT * FROM books
+            WHERE search_vector @@ to_tsquery('english', ${tsQuery})
+            ORDER BY ts_rank(search_vector, to_tsquery('english', ${tsQuery})) DESC,
+                     "downloadCount" DESC NULLS LAST
+            LIMIT ${limit} OFFSET ${offset}`
+      );
+      // postgres-js returns an array directly; drizzle wraps it
+      const rows = (Array.isArray(rawResult) ? rawResult : (rawResult as any).rows ?? []) as Book[];
+      if (rows.length > 0) {
+        return rows;
+      }
+    }
+  } catch {
+    // Fall through to ILIKE search
+  }
+
+  // Trigram / ILIKE fallback for fuzzy matching and short queries
   const searchTerm = `%${query}%`;
   return db
     .select()
@@ -187,6 +210,7 @@ export async function searchBooks(query: string, limit: number = 20, offset: num
         like(books.description, searchTerm),
       )
     )
+    .orderBy(desc(books.downloadCount))
     .limit(limit)
     .offset(offset);
 }

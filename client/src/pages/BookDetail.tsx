@@ -2,7 +2,7 @@ import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { Loader2, BookOpen, Download, Heart, Share2, FileText, ExternalLink, Calendar, Globe } from "lucide-react";
+import { Loader2, BookOpen, Download, Heart, Share2, ExternalLink, Calendar, Globe, ArrowLeft, Copy, Check } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -138,26 +138,49 @@ export default function BookDetail() {
     kicd: "bg-purple-500/10 text-purple-400",
     knec: "bg-yellow-500/10 text-yellow-400",
     ajol: "bg-red-500/10 text-red-400",
+    internet_archive: "bg-cyan-500/10 text-cyan-400",
+    open_library: "bg-teal-500/10 text-teal-400",
+    openstax: "bg-indigo-500/10 text-indigo-400",
+    mit_ocw: "bg-pink-500/10 text-pink-400",
+    pubmed: "bg-emerald-500/10 text-emerald-400",
   };
+
+  const [copied, setCopied] = useState(false);
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(window.location.href);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    toast.success("Link copied!");
+  };
+
+  // Similar books
+  const { data: similarBooks } = trpc.books.getSimilar.useQuery(
+    { bookId, limit: 6 },
+    { enabled: !!bookId }
+  );
 
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Navigation */}
-      <nav className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
+      <nav className="border-b border-border bg-card/60 backdrop-blur-md sticky top-0 z-50">
         <div className="container flex items-center justify-between h-16">
-          <button onClick={() => navigate("/")} className="text-2xl font-bold neon-glow hover:opacity-80 transition">LUMINA</button>
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" onClick={() => navigate("/catalog")} className="text-foreground hover:text-primary">Catalog</Button>
+          <button onClick={() => navigate("/")} className="flex items-center gap-2">
+            <BookOpen className="w-6 h-6 text-primary" />
+            <span className="font-black text-lg neon-glow hidden sm:inline">LUMINA</span>
+          </button>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => navigate("/catalog")} className="text-muted-foreground hover:text-primary">Catalog</Button>
+            <Button variant="ghost" size="sm" onClick={() => navigate("/search")} className="text-muted-foreground hover:text-primary">Search</Button>
             {user?.role === "admin" && (
-              <Button variant="ghost" onClick={() => navigate("/admin")} className="text-foreground hover:text-primary">Admin</Button>
+              <Button variant="ghost" size="sm" onClick={() => navigate("/admin")} className="text-muted-foreground hover:text-primary">Admin</Button>
             )}
           </div>
         </div>
       </nav>
 
-      <div className="container py-12">
-        <Button variant="ghost" onClick={() => navigate("/catalog")} className="mb-8 text-muted-foreground hover:text-primary">
-          ← Back to Catalog
+      <div className="container py-8">
+        <Button variant="ghost" size="sm" onClick={() => window.history.back()} className="mb-6 text-muted-foreground hover:text-primary gap-2">
+          <ArrowLeft className="w-4 h-4" /> Back
         </Button>
 
         <div className="grid md:grid-cols-3 gap-12">
@@ -204,15 +227,21 @@ export default function BookDetail() {
                 </Button>
               )}
 
-              <Button variant="outline" className="w-full gap-2" onClick={() => {
-                navigator.share?.({
-                  title: book.title,
-                  text: `Check out "${book.title}" by ${book.author} on Lumina Books`,
-                });
-              }}>
-                <Share2 className="w-5 h-5" />
-                Share
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" className="flex-1 gap-2" onClick={() => {
+                  if (navigator.share) {
+                    navigator.share({ title: book.title, text: `Check out "${book.title}" by ${book.author} on Lumina Books`, url: window.location.href });
+                  } else {
+                    handleCopyLink();
+                  }
+                }}>
+                  <Share2 className="w-4 h-4" />
+                  Share
+                </Button>
+                <Button variant="outline" size="sm" className="gap-1" onClick={handleCopyLink}>
+                  {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+                </Button>
+              </div>
             </div>
 
             {/* Book Info Card */}
@@ -397,6 +426,32 @@ export default function BookDetail() {
             </div>
           </div>
         </div>
+
+        {/* Similar Books */}
+        {similarBooks && similarBooks.length > 0 && (
+          <div className="mt-16 border-t border-border pt-12">
+            <h2 className="text-2xl font-black mb-6">YOU MAY ALSO LIKE</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              {similarBooks.map((sb: any) => (
+                <div
+                  key={sb.id}
+                  onClick={() => navigate(`/book/${sb.id}`)}
+                  className="card-neon cursor-pointer group hover:border-primary/60 transition-all"
+                >
+                  {sb.coverUrl ? (
+                    <img src={sb.coverUrl} alt={sb.title} className="w-full h-36 object-cover rounded mb-2 group-hover:opacity-90 transition" />
+                  ) : (
+                    <div className="w-full h-36 bg-gradient-to-br from-primary/20 to-secondary/20 rounded mb-2 flex items-center justify-center">
+                      <BookOpen className="w-8 h-8 text-muted-foreground/40" />
+                    </div>
+                  )}
+                  <p className="text-xs font-bold line-clamp-2 group-hover:text-primary transition">{sb.title}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-1">{sb.author}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

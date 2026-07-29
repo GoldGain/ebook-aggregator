@@ -55,6 +55,8 @@ import {
 import { TRPCError } from "@trpc/server";
 import { importGutenbergBook } from "./import";
 import { runAggregator } from "./sources/aggregator";
+import { getDb } from "./db";
+import { sql, eq } from "drizzle-orm";
 
 export const appRouter = router({
   system: systemRouter,
@@ -158,21 +160,71 @@ export const appRouter = router({
           offset: z.number().int().min(0).default(0),
           source: z.string().optional(),
           educationalLevel: z.string().optional(),
+          genre: z.string().optional(),
+          language: z.string().optional(),
+          sort: z.enum(["newest", "downloads", "title", "author"]).optional(),
         })
       )
       .query(async ({ input }) => {
         // Use listBooks with search for filtered results
-        if (input.source || input.educationalLevel) {
+        if (input.source || input.educationalLevel || input.genre || input.language || input.sort) {
           return listBooks({
             limit: input.limit,
             offset: input.offset,
             search: input.query,
             source: input.source,
             educationalLevel: input.educationalLevel,
+            genre: input.genre,
+            language: input.language,
+            sort: input.sort,
           });
         }
         return searchBooks(input.query, input.limit, input.offset);
       }),
+
+    autocomplete: publicProcedure
+      .input(
+        z.object({
+          query: z.string().min(1).max(100),
+          limit: z.number().int().min(1).max(10).default(5),
+        })
+      )
+      .query(async ({ input }) => {
+        const results = await searchBooks(input.query, input.limit, 0);
+        return results.map(b => ({ id: b.id, title: b.title, author: b.author, coverUrl: b.coverUrl }));
+      }),
+
+    getSimilar: publicProcedure
+      .input(
+        z.object({
+          bookId: z.number().int(),
+          limit: z.number().int().min(1).max(12).default(6),
+        })
+      )
+      .query(async ({ input }) => {
+        const book = await getBookById(input.bookId);
+        if (!book) return [];
+        // Search by first subject keyword for related books
+        const subjectKeyword = (() => {
+          try { const s = JSON.parse(book.subjects || "[]"); return s[0] || ""; } catch { return ""; }
+        })();
+        if (subjectKeyword) {
+          const related = await searchBooks(subjectKeyword, input.limit + 1, 0);
+          return related.filter(b => b.id !== input.bookId).slice(0, input.limit);
+        }
+        const popular = await getPopularBooks(input.limit + 1);
+        return popular.filter(b => b.id !== input.bookId).slice(0, input.limit);
+      }),
+
+    languages: publicProcedure.query(async () => {
+      const db = await getDb();
+      if (!db) return [];
+      const rawResult = await db.execute(
+        sql`SELECT language, COUNT(*) as cnt FROM books WHERE language IS NOT NULL AND language != '' GROUP BY language ORDER BY cnt DESC LIMIT 20`
+      );
+      const rows = (Array.isArray(rawResult) ? rawResult : (rawResult as any).rows ?? []) as { language: string; cnt: number }[];
+      return rows;
+    }),
 
     byGenre: publicProcedure
       .input(

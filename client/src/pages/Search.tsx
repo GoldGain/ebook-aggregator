@@ -1,56 +1,187 @@
 import { useLocation, useSearch } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
-import { Loader2, BookOpen, Search as SearchIcon, X } from "lucide-react";
-import { useState, useEffect, useMemo } from "react";
+import { Input } from "@/components/ui/input";
+import {
+  Loader2, BookOpen, Search as SearchIcon, X, SlidersHorizontal,
+  ChevronLeft, ChevronRight, ArrowRight
+} from "lucide-react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useDebounce } from "@/hooks/useDebounce";
+
+const SOURCES = [
+  { key: "", label: "All Sources" },
+  { key: "gutenberg", label: "Project Gutenberg" },
+  { key: "doab", label: "DOAB" },
+  { key: "open_textbook", label: "Open Textbook Library" },
+  { key: "internet_archive", label: "Internet Archive" },
+  { key: "open_library", label: "Open Library" },
+  { key: "openstax", label: "OpenStax" },
+  { key: "libretexts", label: "LibreTexts" },
+  { key: "wikibooks", label: "Wikibooks" },
+  { key: "wikisource", label: "Wikisource" },
+  { key: "doaj", label: "DOAJ" },
+  { key: "pubmed", label: "PubMed Central" },
+  { key: "saylor", label: "Saylor Academy" },
+  { key: "oer_commons", label: "OER Commons" },
+  { key: "mit_ocw", label: "MIT OpenCourseWare" },
+  { key: "ck12", label: "CK-12" },
+  { key: "openlearn", label: "OpenLearn" },
+  { key: "kicd", label: "KICD" },
+  { key: "knec", label: "KNEC" },
+  { key: "ajol", label: "AJOL" },
+  { key: "easy_elimu", label: "Easy Elimu" },
+  { key: "atika_school", label: "Atika School" },
+  { key: "kenyaplex", label: "KenyaPlex" },
+  { key: "schools_net", label: "Schools Net Kenya" },
+  { key: "cbc_resources", label: "CBC Resources" },
+  { key: "teachers_updates", label: "Teachers Updates" },
+];
+
+const LEVELS = [
+  { key: "", label: "All Levels" },
+  { key: "primary", label: "Primary" },
+  { key: "middle_school", label: "Middle School" },
+  { key: "high_school", label: "High School" },
+  { key: "college", label: "College" },
+  { key: "university", label: "University" },
+  { key: "professional", label: "Professional" },
+  { key: "general", label: "General" },
+];
+
+const SORT_OPTIONS = [
+  { key: "newest", label: "Newest First" },
+  { key: "downloads", label: "Most Downloaded" },
+  { key: "title", label: "Title A–Z" },
+  { key: "author", label: "Author A–Z" },
+];
+
+const LANGUAGES = [
+  { code: "en", label: "English" },
+  { code: "fr", label: "French" },
+  { code: "de", label: "German" },
+  { code: "es", label: "Spanish" },
+  { code: "sw", label: "Swahili" },
+  { code: "pt", label: "Portuguese" },
+  { code: "ar", label: "Arabic" },
+  { code: "zh", label: "Chinese" },
+];
+
+const POPULAR_SEARCHES = ["mathematics", "biology", "history", "physics", "economics", "literature", "computer science"];
+
+function BookCard({ book, onClick }: { book: any; onClick: () => void }) {
+  return (
+    <div
+      onClick={onClick}
+      className="card-neon cursor-pointer group hover:border-primary/60 transition-all duration-200 flex gap-4 p-4"
+    >
+      {book.coverUrl ? (
+        <img
+          src={book.coverUrl}
+          alt={book.title}
+          className="w-16 h-20 object-cover rounded flex-shrink-0 group-hover:opacity-90 transition"
+          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+        />
+      ) : (
+        <div className="w-16 h-20 bg-gradient-to-br from-primary/20 to-secondary/20 rounded flex-shrink-0 flex items-center justify-center">
+          <BookOpen className="w-6 h-6 text-muted-foreground/50" />
+        </div>
+      )}
+      <div className="flex-1 min-w-0">
+        <h3 className="font-bold text-sm mb-1 line-clamp-2 group-hover:text-primary transition leading-snug">{book.title}</h3>
+        <p className="text-xs text-muted-foreground mb-2 line-clamp-1">{book.author || "Unknown Author"}</p>
+        {book.description && (
+          <p className="text-[11px] text-muted-foreground/70 line-clamp-2 mb-2">{book.description}</p>
+        )}
+        <div className="flex flex-wrap gap-1">
+          {book.language && (
+            <span className="px-1.5 py-0.5 bg-accent/10 text-accent rounded text-[10px]">
+              {book.language.toUpperCase()}
+            </span>
+          )}
+          {book.source && (
+            <span className="px-1.5 py-0.5 bg-primary/10 text-primary rounded text-[10px]">
+              {book.source.replace(/_/g, " ")}
+            </span>
+          )}
+          {book.educationalLevel && (
+            <span className="px-1.5 py-0.5 bg-secondary/10 text-secondary rounded text-[10px]">
+              {book.educationalLevel.replace(/_/g, " ")}
+            </span>
+          )}
+          {book.downloadCount > 0 && (
+            <span className="px-1.5 py-0.5 bg-muted/30 text-muted-foreground rounded text-[10px]">
+              {book.downloadCount} ↓
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Search() {
   const [, navigate] = useLocation();
-  const [search] = useSearch();
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchStr] = useSearch();
+  const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
   const [selectedSource, setSelectedSource] = useState<string>("");
   const [selectedLevel, setSelectedLevel] = useState<string>("");
+  const [selectedLanguage, setSelectedLanguage] = useState<string>("");
+  const [selectedSort, setSelectedSort] = useState<"newest" | "downloads" | "title" | "author">("newest");
+  const [selectedGenre, setSelectedGenre] = useState<string>("");
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  // Parse query from URL
-  const params = useMemo(() => new URLSearchParams(search), [search]);
+  const params = useMemo(() => new URLSearchParams(searchStr), [searchStr]);
   const queryFromUrl = params.get("q") || "";
 
-  const [query, setQuery] = useState(queryFromUrl);
   const [searchInput, setSearchInput] = useState(queryFromUrl);
-
-  // Debounced search input
-  const debouncedQuery = useDebounce(searchInput, 400);
+  const [query, setQuery] = useState(queryFromUrl);
+  const debouncedQuery = useDebounce(searchInput, 350);
 
   useEffect(() => {
-    setSearchQuery(debouncedQuery);
+    if (debouncedQuery !== query) {
+      setQuery(debouncedQuery);
+      setCurrentPage(0);
+      if (debouncedQuery) {
+        window.history.replaceState({}, "", `?q=${encodeURIComponent(debouncedQuery)}`);
+      }
+    }
   }, [debouncedQuery]);
 
-  // Initialize from URL
   useEffect(() => {
-    if (queryFromUrl) {
+    if (queryFromUrl && queryFromUrl !== searchInput) {
       setSearchInput(queryFromUrl);
       setQuery(queryFromUrl);
     }
   }, [queryFromUrl]);
 
   const pageSize = 20;
+  const genres = trpc.genres.list.useQuery();
 
-  // Fetch search results
   const { data: results, isLoading } = trpc.books.search.useQuery(
     {
-      query: query || "",
+      query: query || " ",
       limit: pageSize,
       offset: currentPage * pageSize,
       source: selectedSource || undefined,
       educationalLevel: selectedLevel || undefined,
+      language: selectedLanguage || undefined,
+      sort: selectedSort,
+      genre: selectedGenre || undefined,
     },
-    { enabled: !!query }
+    { enabled: !!(query || selectedSource || selectedLevel || selectedLanguage || selectedGenre) }
+  );
+
+  const { data: suggestions } = trpc.books.autocomplete.useQuery(
+    { query: searchInput, limit: 6 },
+    { enabled: searchInput.length >= 2 && showSuggestions }
   );
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
+    setShowSuggestions(false);
     if (searchInput.trim()) {
       setCurrentPage(0);
       setQuery(searchInput);
@@ -58,158 +189,340 @@ export default function Search() {
     }
   };
 
-  const handleClearSearch = () => {
-    setSearchInput("");
-    setQuery("");
-    setCurrentPage(0);
+  const clearFilters = () => {
     setSelectedSource("");
     setSelectedLevel("");
-    window.history.pushState({}, "", "/search");
+    setSelectedLanguage("");
+    setSelectedGenre("");
+    setSelectedSort("newest");
+    setCurrentPage(0);
   };
 
-  const handleBookClick = (bookId: number) => {
-    navigate(`/book/${bookId}`);
-  };
-
-  const hasMorePages = results && results.length === pageSize;
+  const hasFilters = !!(selectedSource || selectedLevel || selectedLanguage || selectedGenre || selectedSort !== "newest");
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {/* Navigation */}
-      <nav className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container flex items-center justify-between h-16">
-          <button onClick={() => navigate("/")} className="text-2xl font-bold neon-glow hover:opacity-80 transition">LUMINA</button>
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" onClick={() => navigate("/catalog")} className="text-foreground hover:text-primary">Catalog</Button>
-            <Button variant="ghost" onClick={() => navigate("/bookshelf")} className="text-foreground hover:text-primary">Bookshelf</Button>
-          </div>
+      {/* Header */}
+      <header className="border-b border-border bg-card/60 backdrop-blur-md sticky top-0 z-50">
+        <div className="container flex items-center gap-4 h-16">
+          <button onClick={() => navigate("/")} className="flex items-center gap-2 flex-shrink-0">
+            <BookOpen className="w-6 h-6 text-primary" />
+            <span className="font-black text-lg neon-glow hidden sm:inline">LUMINA</span>
+          </button>
+          <form onSubmit={handleSearch} className="flex-1 relative">
+            <div className="relative">
+              <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                ref={inputRef}
+                type="text"
+                placeholder="Search books, authors, subjects..."
+                value={searchInput}
+                onChange={(e) => { setSearchInput(e.target.value); setShowSuggestions(true); }}
+                onFocus={() => setShowSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                className="pl-9 pr-9 bg-card border-border focus:border-primary h-10 text-sm"
+                autoFocus
+              />
+              {searchInput && (
+                <button
+                  type="button"
+                  onClick={() => { setSearchInput(""); setQuery(""); inputRef.current?.focus(); }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+            {/* Autocomplete dropdown */}
+            {showSuggestions && suggestions && suggestions.length > 0 && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-xl z-50 overflow-hidden">
+                {suggestions.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onMouseDown={() => {
+                      setSearchInput(s.title);
+                      setQuery(s.title);
+                      navigate(`/book/${s.id}`);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-primary/10 transition text-left"
+                  >
+                    {s.coverUrl ? (
+                      <img src={s.coverUrl} alt="" className="w-8 h-10 object-cover rounded flex-shrink-0" />
+                    ) : (
+                      <div className="w-8 h-10 bg-primary/10 rounded flex-shrink-0 flex items-center justify-center">
+                        <BookOpen className="w-4 h-4 text-primary/50" />
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{s.title}</p>
+                      <p className="text-xs text-muted-foreground truncate">{s.author}</p>
+                    </div>
+                    <ArrowRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 ml-auto" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </form>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowFilters(!showFilters)}
+            className={`gap-2 flex-shrink-0 ${hasFilters ? "border-primary text-primary" : ""}`}
+          >
+            <SlidersHorizontal className="w-4 h-4" />
+            <span className="hidden sm:inline">Filters</span>
+            {hasFilters && <span className="w-2 h-2 rounded-full bg-primary" />}
+          </Button>
         </div>
-      </nav>
+      </header>
 
-      <div className="container py-12">
-        {/* Search Form */}
-        <div className="mb-8">
-          <form onSubmit={handleSearch} className="mb-6">
-            <div className="flex gap-2 max-w-2xl mx-auto">
-              <div className="relative flex-1">
-                <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                <input
-                  type="text"
-                  value={searchInput}
-                  onChange={(e) => { setSearchInput(e.target.value); setCurrentPage(0); }}
-                  onKeyDown={(e) => { if (e.key === "Enter") handleSearch(e); }}
-                  placeholder="Search by title, author, subject, or ISBN..."
-                  className="w-full pl-10 pr-10 py-3 bg-card border border-accent/50 rounded-lg text-foreground focus:border-primary outline-none text-lg"
-                />
-                {searchInput && (
-                  <button type="button" onClick={handleClearSearch} className="absolute right-3 top-1/2 -translate-y-1/2">
-                    <X className="w-5 h-5 text-muted-foreground hover:text-foreground" />
+      <div className="container py-6">
+        <div className="flex gap-6">
+          {/* ─── Filters Sidebar ─── */}
+          <aside className={`${showFilters ? "block" : "hidden"} lg:block w-52 flex-shrink-0`}>
+            <div className="card-neon p-4 sticky top-24">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-sm">Filters</h3>
+                {hasFilters && (
+                  <button onClick={clearFilters} className="text-xs text-muted-foreground hover:text-primary transition">
+                    Clear all
                   </button>
                 )}
               </div>
-              <Button type="submit" className="btn-neon gap-2 px-6">
-                <SearchIcon className="w-5 h-5" />
-                Search
-              </Button>
-            </div>
-          </form>
 
-          {/* Filters */}
-          {query && (
-            <div className="flex gap-3 max-w-2xl mx-auto mb-4">
-              <select value={selectedSource} onChange={(e) => { setSelectedSource(e.target.value); setCurrentPage(0); }} className="px-3 py-1.5 bg-background border border-border rounded text-sm text-foreground focus:border-primary outline-none">
-                <option value="">All Sources</option>
-                <option value="gutenberg">Project Gutenberg</option>
-                <option value="doab">DOAB</option>
-                <option value="open_textbook">Open Textbook</option>
-                <option value="kicd">KICD</option>
-                <option value="knec">KNEC</option>
-                <option value="ajol">AJOL</option>
-              </select>
-              <select value={selectedLevel} onChange={(e) => { setSelectedLevel(e.target.value); setCurrentPage(0); }} className="px-3 py-1.5 bg-background border border-border rounded text-sm text-foreground focus:border-primary outline-none">
-                <option value="">All Levels</option>
-                <option value="primary">Primary</option>
-                <option value="middle_school">Middle School</option>
-                <option value="high_school">High School</option>
-                <option value="college">College</option>
-                <option value="university">University</option>
-                <option value="general">General</option>
-              </select>
-            </div>
-          )}
-
-          {query ? (
-            <div className="text-center">
-              <p className="text-muted-foreground">
-                {isLoading ? "Searching..." : `Found ${results?.length || 0} book${results?.length !== 1 ? "s" : ""}`}
-              </p>
-            </div>
-          ) : null}
-        </div>
-
-        {/* Results */}
-        {isLoading ? (
-          <div className="flex justify-center py-20">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
-          </div>
-        ) : results && results.length > 0 ? (
-          <>
-            <div className="space-y-4 mb-12">
-              {results.map((book) => (
-                <div key={book.id} onClick={() => handleBookClick(book.id)} className="card-neon cursor-pointer group flex gap-6 hover:bg-card transition p-4">
-                  {book.coverUrl ? (
-                    <img src={book.coverUrl} alt={book.title} className="w-20 h-28 object-cover rounded group-hover:opacity-80 transition flex-shrink-0" />
-                  ) : (
-                    <div className="w-20 h-28 bg-gradient-to-br from-primary/20 to-secondary/20 rounded flex items-center justify-center flex-shrink-0">
-                      <BookOpen className="w-8 h-8 text-muted-foreground" />
-                    </div>
-                  )}
-                  <div className="flex-1">
-                    <h3 className="font-bold text-lg mb-1 group-hover:text-primary transition">{book.title}</h3>
-                    <p className="text-sm text-muted-foreground mb-2">{book.author || "Unknown Author"}</p>
-                    {book.description && <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{book.description}</p>}
-                    <div className="flex gap-2 flex-wrap">
-                      {book.language && <span className="text-xs px-2 py-1 bg-accent/10 text-accent rounded">{book.language.toUpperCase()}</span>}
-                      {book.source && <span className="text-xs px-2 py-1 bg-primary/10 text-primary rounded">{book.source}</span>}
-                      {book.educationalLevel && <span className="text-xs px-2 py-1 bg-secondary/10 text-secondary rounded">{book.educationalLevel.replace("_", " ")}</span>}
-                      {book.downloadCount ? <span className="text-xs px-2 py-1 bg-muted/10 text-muted-foreground rounded">{book.downloadCount} downloads</span> : null}
-                    </div>
-                  </div>
+              {/* Sort */}
+              <div className="mb-5">
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Sort By</p>
+                <div className="space-y-0.5">
+                  {SORT_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.key}
+                      onClick={() => { setSelectedSort(opt.key as any); setCurrentPage(0); }}
+                      className={`w-full text-left px-2.5 py-1.5 rounded text-xs transition ${
+                        selectedSort === opt.key
+                          ? "bg-primary/20 text-primary font-medium"
+                          : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
                 </div>
-              ))}
+              </div>
+
+              {/* Source */}
+              <div className="mb-5">
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Source</p>
+                <select
+                  value={selectedSource}
+                  onChange={(e) => { setSelectedSource(e.target.value); setCurrentPage(0); }}
+                  className="w-full bg-card border border-border rounded px-2.5 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none"
+                >
+                  {SOURCES.map((s) => (
+                    <option key={s.key} value={s.key}>{s.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Level */}
+              <div className="mb-5">
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Level</p>
+                <div className="space-y-0.5">
+                  {LEVELS.map((l) => (
+                    <button
+                      key={l.key}
+                      onClick={() => { setSelectedLevel(l.key); setCurrentPage(0); }}
+                      className={`w-full text-left px-2.5 py-1.5 rounded text-xs transition ${
+                        selectedLevel === l.key
+                          ? "bg-primary/20 text-primary font-medium"
+                          : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
+                      }`}
+                    >
+                      {l.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Language */}
+              <div className="mb-5">
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Language</p>
+                <div className="space-y-0.5">
+                  <button
+                    onClick={() => { setSelectedLanguage(""); setCurrentPage(0); }}
+                    className={`w-full text-left px-2.5 py-1.5 rounded text-xs transition ${
+                      !selectedLanguage ? "bg-primary/20 text-primary font-medium" : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
+                    }`}
+                  >
+                    All Languages
+                  </button>
+                  {LANGUAGES.map((lang) => (
+                    <button
+                      key={lang.code}
+                      onClick={() => { setSelectedLanguage(lang.code); setCurrentPage(0); }}
+                      className={`w-full text-left px-2.5 py-1.5 rounded text-xs transition ${
+                        selectedLanguage === lang.code
+                          ? "bg-primary/20 text-primary font-medium"
+                          : "text-muted-foreground hover:text-foreground hover:bg-muted/30"
+                      }`}
+                    >
+                      {lang.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Genre */}
+              {genres.data && genres.data.length > 0 && (
+                <div className="mb-2">
+                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Genre</p>
+                  <select
+                    value={selectedGenre}
+                    onChange={(e) => { setSelectedGenre(e.target.value); setCurrentPage(0); }}
+                    className="w-full bg-card border border-border rounded px-2.5 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none"
+                  >
+                    <option value="">All Genres</option>
+                    {genres.data.map((g) => (
+                      <option key={g.id} value={g.slug}>{g.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+          </aside>
+
+          {/* ─── Results ─── */}
+          <main className="flex-1 min-w-0">
+            {/* Results header */}
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                {query ? (
+                  <h2 className="text-base font-bold">
+                    Results for <span className="text-primary">"{query}"</span>
+                  </h2>
+                ) : (
+                  <h2 className="text-base font-bold text-muted-foreground">Search the library</h2>
+                )}
+                {results && query && (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {results.length === pageSize ? `${pageSize}+ results` : `${results.length} result${results.length !== 1 ? "s" : ""}`}
+                    {currentPage > 0 && ` · Page ${currentPage + 1}`}
+                  </p>
+                )}
+              </div>
             </div>
 
-            {/* Pagination */}
-            {hasMorePages && (
-              <div className="flex items-center justify-between">
-                <Button onClick={() => setCurrentPage(Math.max(0, currentPage - 1))} disabled={currentPage === 0} className="btn-neon">Previous</Button>
-                <span className="text-muted-foreground">Page {currentPage + 1}</span>
-                <Button onClick={() => setCurrentPage(currentPage + 1)} className="btn-neon">Next</Button>
+            {/* Active filter chips */}
+            {hasFilters && (
+              <div className="flex flex-wrap gap-2 mb-4">
+                {selectedSource && (
+                  <span className="flex items-center gap-1 px-2.5 py-1 bg-primary/10 text-primary rounded-full text-xs">
+                    {SOURCES.find(s => s.key === selectedSource)?.label}
+                    <button onClick={() => setSelectedSource("")}><X className="w-3 h-3" /></button>
+                  </span>
+                )}
+                {selectedLevel && (
+                  <span className="flex items-center gap-1 px-2.5 py-1 bg-accent/10 text-accent rounded-full text-xs">
+                    {LEVELS.find(l => l.key === selectedLevel)?.label}
+                    <button onClick={() => setSelectedLevel("")}><X className="w-3 h-3" /></button>
+                  </span>
+                )}
+                {selectedLanguage && (
+                  <span className="flex items-center gap-1 px-2.5 py-1 bg-secondary/10 text-secondary rounded-full text-xs">
+                    {LANGUAGES.find(l => l.code === selectedLanguage)?.label}
+                    <button onClick={() => setSelectedLanguage("")}><X className="w-3 h-3" /></button>
+                  </span>
+                )}
+                {selectedSort !== "newest" && (
+                  <span className="flex items-center gap-1 px-2.5 py-1 bg-muted/30 text-muted-foreground rounded-full text-xs">
+                    {SORT_OPTIONS.find(s => s.key === selectedSort)?.label}
+                    <button onClick={() => setSelectedSort("newest")}><X className="w-3 h-3" /></button>
+                  </span>
+                )}
               </div>
             )}
-          </>
-        ) : query ? (
-          <div className="card-neon text-center py-12">
-            <BookOpen className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
-            <p className="text-muted-foreground mb-6">No books found matching "{query}"</p>
-            <Button onClick={() => navigate("/catalog")} className="btn-neon">Browse Catalog</Button>
-          </div>
-        ) : (
-          <div className="card-neon text-center py-12">
-            <SearchIcon className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
-            <h3 className="text-2xl font-bold mb-4">Search the Library</h3>
-            <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-              Search across all sources including Project Gutenberg, DOAB, Open Textbook Library, KICD, and more.
-            </p>
-            <div className="flex flex-wrap gap-2 justify-center">
-              {["fiction", "mathematics", "science", "history", "education"].map((tag) => (
-                <button key={tag} onClick={() => { setSearchInput(tag); setQuery(tag); }} className="px-4 py-2 bg-background border border-border rounded-full text-sm hover:border-primary hover:text-primary transition">
-                  {tag}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+
+            {/* Loading */}
+            {isLoading && (
+              <div className="flex justify-center py-24">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              </div>
+            )}
+
+            {/* Empty state */}
+            {!isLoading && !query && !selectedSource && !selectedLevel && (
+              <div className="text-center py-20">
+                <SearchIcon className="w-14 h-14 mx-auto mb-4 text-muted-foreground/30" />
+                <h3 className="text-xl font-bold mb-2">Search Lumina Books</h3>
+                <p className="text-muted-foreground text-sm max-w-sm mx-auto mb-6">
+                  Search across millions of free ebooks from 50+ open-access sources worldwide.
+                </p>
+                <div className="flex flex-wrap gap-2 justify-center">
+                  {POPULAR_SEARCHES.map((tag) => (
+                    <button
+                      key={tag}
+                      onClick={() => { setSearchInput(tag); setQuery(tag); }}
+                      className="px-3 py-1.5 bg-card border border-border rounded-full text-xs hover:border-primary hover:text-primary transition"
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* No results */}
+            {!isLoading && query && results && results.length === 0 && (
+              <div className="text-center py-20">
+                <BookOpen className="w-14 h-14 mx-auto mb-4 text-muted-foreground/30" />
+                <h3 className="text-xl font-bold mb-2">No results found</h3>
+                <p className="text-muted-foreground text-sm mb-6">
+                  No books matched "<strong>{query}</strong>". Try different keywords or remove filters.
+                </p>
+                {hasFilters && (
+                  <Button variant="outline" size="sm" onClick={clearFilters}>Clear Filters</Button>
+                )}
+              </div>
+            )}
+
+            {/* Results list */}
+            {!isLoading && results && results.length > 0 && (
+              <>
+                <div className="space-y-2.5">
+                  {results.map((book) => (
+                    <BookCard key={book.id} book={book} onClick={() => navigate(`/book/${book.id}`)} />
+                  ))}
+                </div>
+
+                {/* Pagination */}
+                <div className="flex items-center justify-between mt-8 pt-6 border-t border-border">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
+                    disabled={currentPage === 0}
+                    className="gap-2"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    Previous
+                  </Button>
+                  <span className="text-sm text-muted-foreground">Page {currentPage + 1}</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(p => p + 1)}
+                    disabled={!results || results.length < pageSize}
+                    className="gap-2"
+                  >
+                    Next
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                </div>
+              </>
+            )}
+          </main>
+        </div>
       </div>
     </div>
   );

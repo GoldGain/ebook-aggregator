@@ -2,7 +2,7 @@ import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { Loader2, Plus, RefreshCw, Users, BookOpen, Download, BarChart3, Shield, Globe, Clock, CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { Loader2, Plus, RefreshCw, Users, BookOpen, Download, BarChart3, Globe, Clock, CheckCircle, XCircle, Play, Search, TrendingUp } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -61,13 +61,17 @@ export default function Admin() {
     },
   });
 
+  const [runningSource, setRunningSource] = useState<string | null>(null);
+
   const runAggregatorMutation = trpc.admin.runAggregator.useMutation({
     onSuccess: (data) => {
       toast.success(`Aggregator complete! Added: ${data?.totalAdded}, Updated: ${data?.totalUpdated}`);
+      setRunningSource(null);
       refetchLogs();
     },
     onError: () => {
       toast.error("Aggregator failed");
+      setRunningSource(null);
     },
   });
 
@@ -142,9 +146,18 @@ export default function Admin() {
     });
   };
 
-  const handleRunAggregator = () => {
-    toast.info("Starting aggregator... This may take a few minutes.");
-    runAggregatorMutation.mutate({});
+  const handleRunAggregator = (sourceKey?: string) => {
+    const label = sourceKey ? sourceKey.replace(/_/g, " ") : "all sources";
+    toast.info(`Starting aggregator for ${label}...`);
+    setRunningSource(sourceKey || "all");
+    if (sourceKey) {
+      // Find matching source from loaded sources list
+      runAggregatorMutation.mutate({
+        sources: [{ name: sourceKey, slug: sourceKey, enabled: true }],
+      });
+    } else {
+      runAggregatorMutation.mutate({});
+    }
   };
 
   const toggleSource = (sourceId: number, isActive: "yes" | "no") => {
@@ -170,10 +183,13 @@ export default function Admin() {
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center gap-4 mb-4">
-            <div className="accent-line-left">
-              <h1 className="text-4xl font-bold neon-glow">ADMIN PANEL</h1>
+              <div className="accent-line-left">
+                <h1 className="text-4xl font-bold neon-glow">ADMIN PANEL</h1>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => navigate("/search")} className="ml-auto gap-2 text-muted-foreground hover:text-primary">
+                <Search className="w-4 h-4" /> Search Library
+              </Button>
             </div>
-          </div>
           <p className="text-muted-foreground text-lg">Manage your ebook aggregator platform</p>
         </div>
 
@@ -258,19 +274,45 @@ export default function Admin() {
 
             {/* Run Aggregator */}
             <div className="card-neon p-6">
-              <h3 className="text-xl font-bold mb-4 text-primary">Manual Aggregator</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                Run the multi-source aggregator to fetch new books from all enabled sources.
-                This may take a few minutes.
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-primary">Aggregator Control</h3>
+                <Button
+                  onClick={() => handleRunAggregator()}
+                  disabled={runAggregatorMutation.isPending}
+                  className="btn-neon gap-2"
+                >
+                  <RefreshCw className={`w-4 h-4 ${runAggregatorMutation.isPending && runningSource === "all" ? "animate-spin" : ""}`} />
+                  {runAggregatorMutation.isPending && runningSource === "all" ? "Running..." : "Run All Sources"}
+                </Button>
+              </div>
+              <p className="text-sm text-muted-foreground mb-6">
+                Run the aggregator for all enabled sources, or trigger individual sources below.
               </p>
-              <Button
-                onClick={handleRunAggregator}
-                disabled={runAggregatorMutation.isPending}
-                className="btn-neon gap-2"
-              >
-                <RefreshCw className={`w-5 h-5 ${runAggregatorMutation.isPending ? "animate-spin" : ""}`} />
-                {runAggregatorMutation.isPending ? "Running..." : "Run Aggregator Now"}
-              </Button>
+              {sources && sources.length > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {sources.filter(s => s.isActive === "yes").map((src) => (
+                    <div key={src.id} className="flex items-center justify-between p-3 bg-background/50 rounded border border-border">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate capitalize">{src.name}</p>
+                        <p className="text-[10px] text-muted-foreground truncate">{src.url}</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleRunAggregator(src.slug)}
+                        disabled={runAggregatorMutation.isPending}
+                        className="ml-2 flex-shrink-0 gap-1"
+                      >
+                        {runAggregatorMutation.isPending && runningSource === src.slug ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Play className="w-3 h-3" />
+                        )}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -367,7 +409,7 @@ export default function Admin() {
               <div className="card-neon p-4">
                 <h4 className="font-bold mb-2 text-primary">Run Full Aggregator</h4>
                 <p className="text-sm text-muted-foreground mb-3">Fetch from all enabled sources</p>
-                <Button onClick={handleRunAggregator} disabled={runAggregatorMutation.isPending} variant="outline" size="sm" className="gap-2">
+                <Button onClick={() => handleRunAggregator()} disabled={runAggregatorMutation.isPending} variant="outline" size="sm" className="gap-2">
                   <RefreshCw className={`w-4 h-4 ${runAggregatorMutation.isPending ? "animate-spin" : ""}`} />
                   Run Now
                 </Button>
@@ -471,7 +513,7 @@ export default function Admin() {
         {activeTab === "logs" && (
           <div>
             <div className="mb-8">
-              <Button onClick={handleRunAggregator} disabled={runAggregatorMutation.isPending} className="btn-neon gap-2">
+              <Button onClick={() => handleRunAggregator()} disabled={runAggregatorMutation.isPending} className="btn-neon gap-2">
                 <RefreshCw className={`w-5 h-5 ${runAggregatorMutation.isPending ? "animate-spin" : ""}`} />
                 {runAggregatorMutation.isPending ? "Running..." : "Start Aggregator"}
               </Button>

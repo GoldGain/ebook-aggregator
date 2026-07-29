@@ -60,7 +60,11 @@ export const educationalLevelEnum = pgEnum("educationalLevel", [
 ]);
 
 export const sourceEnum = pgEnum("source", [
-  "gutenberg", "kicd", "knec", "doab", "open_textbook", "ajol", "unesco", "worldbank", "google_books", "other"
+  "gutenberg", "kicd", "knec", "doab", "open_textbook", "ajol", "unesco", "worldbank", "google_books",
+  "internet_archive", "open_library", "oer_commons", "mit_ocw", "openstax", "libretexts",
+  "wikibooks", "wikisource", "doaj", "pubmed", "ssrn", "saylor", "merlot", "openlearn",
+  "kenyaplex", "easy_elimu", "atika_school", "schools_net", "teacher_co_ke", "cbc_resources",
+  "teachers_updates", "ck12", "oasis", "other"
 ]);
 
 export const books = pgTable("books", {
