@@ -8,17 +8,18 @@ function isIpAddress(host: string) {
   return host.includes(":");
 }
 
-function isSecureRequest(req: Request) {
-  if (req.protocol === "https") return true;
+function isSecureRequest(req: Request): boolean {
+  if ((req as any).protocol === "https") return true;
 
-  const forwardedProto = req.headers["x-forwarded-proto"];
+  const headers = (req as any).headers as Record<string, string | string[] | undefined>;
+  const forwardedProto = headers["x-forwarded-proto"];
   if (!forwardedProto) return false;
 
   const protoList = Array.isArray(forwardedProto)
     ? forwardedProto
     : forwardedProto.split(",");
 
-  return protoList.some(proto => proto.trim().toLowerCase() === "https");
+  return protoList.some((proto: string) => proto.trim().toLowerCase() === "https");
 }
 
 export function getSessionCookieOptions(
@@ -40,6 +41,7 @@ export function getSessionCookieOptions(
   //       : undefined;
 
   return {
+    domain: undefined,
     httpOnly: true,
     path: "/",
     sameSite: "none",
