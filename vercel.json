@@ -1,35 +1,27 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "dist/public/**",
-      "use": "@vercel/static"
-    },
-    {
-      "src": "dist/index.js",
-      "use": "@vercel/node"
-    }
-  ],
+  "installCommand": "pnpm install --no-frozen-lockfile",
+  "buildCommand": "pnpm build",
+  "outputDirectory": "dist",
   "routes": [
     {
       "src": "/trpc/(.*)",
-      "dest": "/dist/index.js"
+      "dest": "/index.js"
     },
     {
       "src": "/auth/(.*)",
-      "dest": "/dist/index.js"
+      "dest": "/index.js"
     },
     {
       "src": "/api/(.*)",
-      "dest": "/dist/index.js"
+      "dest": "/index.js"
     },
     {
-      "src": "/assets/(.*)",
-      "dest": "/dist/public/assets/$1"
+      "handle": "filesystem"
     },
     {
       "src": "/(.*)",
-      "dest": "/dist/public/index.html"
+      "dest": "/public/index.html"
     }
   ]
 }
