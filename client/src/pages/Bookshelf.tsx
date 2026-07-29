@@ -30,13 +30,13 @@ export default function Bookshelf() {
 
   // Currently reading
   const { data: currentlyReading, isLoading: currentLoading } = trpc.reading.currentlyReading.useQuery(
-    {},
+    undefined,
     { enabled: !!user && activeTab === "reading" }
   );
 
   // Download count
   const { data: downloadCount } = trpc.downloads.count.useQuery(
-    {},
+    undefined,
     { enabled: !!user }
   );
 

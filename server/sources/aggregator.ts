@@ -156,7 +156,7 @@ async function aggregateGutenberg(): Promise<{ added: number; updated: number; e
           for (const subject of book.subjects.slice(0, 5)) {
             const subjectId = await getOrCreateSubject(subject);
             if (subjectId) {
-              await linkBookToSubject(bookId as number, subjectId);
+              if (typeof bookId === "number") await linkBookToSubject(bookId, subjectId);
             }
           }
         }
@@ -208,7 +208,7 @@ async function aggregateDoab(): Promise<{ added: number; updated: number; errors
           for (const subject of book.subjects.slice(0, 5)) {
             const subjectId = await getOrCreateSubject(subject);
             if (subjectId) {
-              await linkBookToSubject(bookId as number, subjectId);
+              if (typeof bookId === "number") await linkBookToSubject(bookId, subjectId);
             }
           }
         }
@@ -259,7 +259,7 @@ async function aggregateOpenTextbook(): Promise<{ added: number; updated: number
           for (const subject of book.subjects.slice(0, 5)) {
             const subjectId = await getOrCreateSubject(subject);
             if (subjectId) {
-              await linkBookToSubject(bookId as number, subjectId);
+              if (typeof bookId === "number") await linkBookToSubject(bookId, subjectId);
             }
           }
         }
@@ -308,7 +308,7 @@ async function aggregateKicd(): Promise<{ added: number; updated: number; errors
           for (const subject of book.subjects.slice(0, 5)) {
             const subjectId = await getOrCreateSubject(subject);
             if (subjectId) {
-              await linkBookToSubject(bookId as number, subjectId);
+              if (typeof bookId === "number") await linkBookToSubject(bookId, subjectId);
             }
           }
         }
@@ -356,7 +356,7 @@ async function aggregateKnec(): Promise<{ added: number; updated: number; errors
           for (const subject of book.subjects.slice(0, 5)) {
             const subjectId = await getOrCreateSubject(subject);
             if (subjectId) {
-              await linkBookToSubject(bookId as number, subjectId);
+              if (typeof bookId === "number") await linkBookToSubject(bookId, subjectId);
             }
           }
         }

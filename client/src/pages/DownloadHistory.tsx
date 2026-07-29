@@ -22,7 +22,7 @@ export default function DownloadHistory() {
 
   // Fetch download count
   const { data: downloadCount } = trpc.downloads.count.useQuery(
-    {},
+    undefined,
     { enabled: !!user }
   );
 

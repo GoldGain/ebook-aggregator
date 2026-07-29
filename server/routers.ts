@@ -156,9 +156,21 @@ export const appRouter = router({
           query: z.string().min(1).max(200),
           limit: z.number().int().min(1).max(100).default(20),
           offset: z.number().int().min(0).default(0),
+          source: z.string().optional(),
+          educationalLevel: z.string().optional(),
         })
       )
       .query(async ({ input }) => {
+        // Use listBooks with search for filtered results
+        if (input.source || input.educationalLevel) {
+          return listBooks({
+            limit: input.limit,
+            offset: input.offset,
+            search: input.query,
+            source: input.source,
+            educationalLevel: input.educationalLevel,
+          });
+        }
         return searchBooks(input.query, input.limit, input.offset);
       }),
 

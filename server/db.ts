@@ -273,11 +273,11 @@ export async function getBooksByLanguage(language: string, limit: number = 20, o
   return db.select().from(books).where(eq(books.language, language)).limit(limit).offset(offset);
 }
 
-export async function createBook(book: InsertBook) {
+export async function createBook(book: InsertBook): Promise<number | undefined> {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.insert(books).values(book);
-  return result;
+  const result = await db.insert(books).values(book).returning({ id: books.id });
+  return result[0]?.id;
 }
 
 export async function updateBook(id: number, updates: Partial<InsertBook>) {

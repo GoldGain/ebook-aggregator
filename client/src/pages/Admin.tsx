@@ -27,7 +27,7 @@ export default function Admin() {
 
   // Dashboard stats
   const { data: stats, isLoading: statsLoading } = trpc.admin.stats.useQuery(
-    {},
+    undefined,
     { enabled: !!user && user.role === "admin" }
   );
 
@@ -45,7 +45,7 @@ export default function Admin() {
 
   // Sources
   const { data: sources, isLoading: sourcesLoading, refetch: refetchSources } = trpc.admin.sources.useQuery(
-    {},
+    undefined,
     { enabled: !!user && user.role === "admin" && activeTab === "sources" }
   );
 

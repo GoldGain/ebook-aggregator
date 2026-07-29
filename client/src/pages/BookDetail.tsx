@@ -184,17 +184,17 @@ export default function BookDetail() {
                 </Button>
               )}
 
-              {readingProgress && readingProgress.percentage === 100 ? (
+              {readingProgress && (readingProgress.percentage ?? 0) === 100 ? (
                 <span className="block w-full text-center py-2 px-4 bg-primary/20 text-primary rounded text-sm font-medium">
                   Completed
                 </span>
-              ) : readingProgress && readingProgress.percentage > 0 ? (
+              ) : readingProgress && (readingProgress.percentage ?? 0) > 0 ? (
                 <div className="card-neon p-3">
                   <p className="text-xs text-muted-foreground mb-1">Reading Progress</p>
                   <div className="w-full bg-background rounded-full h-2 mb-1">
-                    <div className="bg-primary h-2 rounded-full transition-all" style={{ width: `${readingProgress.percentage}%` }} />
+                    <div className="bg-primary h-2 rounded-full transition-all" style={{ width: `${readingProgress.percentage ?? 0}%` }} />
                   </div>
-                  <p className="text-xs text-primary font-medium">{readingProgress.percentage}% complete</p>
+                  <p className="text-xs text-primary font-medium">{readingProgress.percentage ?? 0}% complete</p>
                 </div>
               ) : null}
 
@@ -284,14 +284,14 @@ export default function BookDetail() {
             </p>
 
             {/* Reading Progress Bar (for logged in users) */}
-            {user && readingProgress && readingProgress.percentage > 0 && (
+            {user && readingProgress && (readingProgress.percentage ?? 0) > 0 && (
               <div className="mb-8 card-neon p-4">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium">Your Progress</span>
-                  <span className="text-sm text-primary">{readingProgress.percentage}%</span>
+                  <span className="text-sm text-primary">{readingProgress.percentage ?? 0}%</span>
                 </div>
                 <div className="w-full bg-background rounded-full h-3">
-                  <div className="bg-gradient-to-r from-primary to-accent h-3 rounded-full transition-all" style={{ width: `${readingProgress.percentage}%` }} />
+                  <div className="bg-gradient-to-r from-primary to-accent h-3 rounded-full transition-all" style={{ width: `${readingProgress.percentage ?? 0}%` }} />
                 </div>
                 {readingProgress.currentPage && (
                   <p className="text-xs text-muted-foreground mt-2">
