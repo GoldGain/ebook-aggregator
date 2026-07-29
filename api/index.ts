@@ -1,5 +1,6 @@
 // Vercel Serverless Function - wraps the Express server for API routes
 import "dotenv/config";
+import type { VercelRequest, VercelResponse } from "@vercel/node";
 import express from "express";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "../server/_core/oauth";
@@ -20,7 +21,7 @@ registerStorageProxy(app);
 registerOAuthRoutes(app);
 
 // Aggregator endpoint
-app.post("/api/scheduled/aggregator", async (req, res) => {
+app.post("/api/scheduled/aggregator", async (req: any, res: any) => {
   try {
     const user = await sdk.authenticateRequest(req);
     if (!user.isCron) {
@@ -46,4 +47,6 @@ app.use(
   })
 );
 
-export default app;
+export default function handler(req: VercelRequest, res: VercelResponse) {
+  return app(req, res);
+}
