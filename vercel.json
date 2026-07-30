@@ -1,10 +1,10 @@
 {
   "version": 2,
   "installCommand": "pnpm install --no-frozen-lockfile",
-  "buildCommand": "pnpm build && npx esbuild api/index.ts --platform=node --bundle --format=esm --outfile=api/index.js --alias:@shared=./shared --external:pg-native --external:mock-aws-s3 --external:aws-sdk --external:nock",
+  "buildCommand": "pnpm build && npx esbuild api/handler.ts --platform=node --bundle --format=esm --outfile=api/handler.js --alias:@shared=./shared --external:pg-native --external:mock-aws-s3 --external:aws-sdk --external:nock",
   "outputDirectory": "dist/public",
   "functions": {
-    "api/index.js": {
+    "api/handler.js": {
       "memory": 512,
       "maxDuration": 30
     }
@@ -12,19 +12,19 @@
   "rewrites": [
     {
       "source": "/api/trpc/(.*)",
-      "destination": "/api/index"
+      "destination": "/api/handler"
     },
     {
       "source": "/api/scheduled/(.*)",
-      "destination": "/api/index"
+      "destination": "/api/handler"
     },
     {
       "source": "/auth/(.*)",
-      "destination": "/api/index"
+      "destination": "/api/handler"
     },
     {
       "source": "/storage/(.*)",
-      "destination": "/api/index"
+      "destination": "/api/handler"
     },
     {
       "source": "/((?!api|auth|storage|assets|_next).*)",
