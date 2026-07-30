@@ -32,14 +32,28 @@ import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
-// Lazily create the drizzle instance so local tooling can run without a DB.
+const DATABASE_CONNECT_TIMEOUT_SECONDS = 10;
+const DATABASE_IDLE_TIMEOUT_SECONDS = 10;
+const DATABASE_MAX_LIFETIME_SECONDS = 60;
+
+// Lazily create one reusable client per warm function instance. These settings are
+// compatible with Supabase's transaction pooler and prevent a stalled connection
+// attempt from consuming the full Vercel function timeout.
 export async function getDb() {
-  if (!_db && process.env.DATABASE_URL) {
+  if (!_db && ENV.databaseUrl) {
     try {
-      const client = postgres(process.env.DATABASE_URL, { ssl: 'require', max: 1 });
+      const client = postgres(ENV.databaseUrl, {
+        ssl: "require",
+        max: 4,
+        idle_timeout: DATABASE_IDLE_TIMEOUT_SECONDS,
+        max_lifetime: DATABASE_MAX_LIFETIME_SECONDS,
+        connect_timeout: DATABASE_CONNECT_TIMEOUT_SECONDS,
+        // Supabase transaction pooling does not support prepared statements.
+        prepare: false,
+      });
       _db = drizzle(client);
     } catch (error) {
-      console.warn("[Database] Failed to connect:", error);
+      console.warn("[Database] Failed to initialize client:", error);
       _db = null;
     }
   }

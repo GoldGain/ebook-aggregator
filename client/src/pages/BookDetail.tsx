@@ -11,6 +11,7 @@ export default function BookDetail() {
   const [, navigate] = useLocation();
   const { user } = useAuth();
   const [isSaved, setIsSaved] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const bookId = parseInt(id || "0", 10);
 
@@ -66,6 +67,12 @@ export default function BookDetail() {
       toast.success("Reading progress updated!");
     },
   });
+
+  // Keep every hook above conditional render paths so React sees a stable hook order.
+  const { data: similarBooks } = trpc.books.getSimilar.useQuery(
+    { bookId, limit: 6 },
+    { enabled: !!bookId }
+  );
 
   const handleToggleBookshelf = () => {
     if (!user) {
@@ -145,19 +152,12 @@ export default function BookDetail() {
     pubmed: "bg-emerald-500/10 text-emerald-400",
   };
 
-  const [copied, setCopied] = useState(false);
   const handleCopyLink = () => {
     navigator.clipboard.writeText(window.location.href);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
     toast.success("Link copied!");
   };
-
-  // Similar books
-  const { data: similarBooks } = trpc.books.getSimilar.useQuery(
-    { bookId, limit: 6 },
-    { enabled: !!bookId }
-  );
 
   return (
     <div className="min-h-screen bg-background text-foreground">
