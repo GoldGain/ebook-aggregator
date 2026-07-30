@@ -1,7 +1,7 @@
 {
   "version": 2,
   "installCommand": "pnpm install --no-frozen-lockfile",
-  "buildCommand": "pnpm build && npx esbuild api/index.ts --platform=node --packages=external --bundle --format=esm --outfile=api/index.js --alias:@shared=./shared",
+  "buildCommand": "pnpm build && npx esbuild api/index.ts --platform=node --bundle --format=esm --outfile=api/index.js --alias:@shared=./shared --external:pg-native --external:mock-aws-s3 --external:aws-sdk --external:nock",
   "outputDirectory": "dist/public",
   "functions": {
     "api/index.js": {

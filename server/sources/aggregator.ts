@@ -48,35 +48,45 @@ type SourceConfig = {
   enabled: boolean;
 };
 
+/**
+ * Sources enabled for the scheduled (cron) run.
+ * Only fast, reliable API-based sources are included to stay within
+ * Vercel's 30-second serverless function limit.
+ * Web-scraping sources can be triggered manually from the Admin panel.
+ */
 const DEFAULT_SOURCES: SourceConfig[] = [
-  // Core open-access sources (reliable APIs)
+  // Core open-access sources (reliable JSON APIs - fast)
   { name: "Project Gutenberg", slug: "gutenberg", enabled: true },
-  { name: "DOAB", slug: "doab", enabled: true },
-  { name: "Open Textbook Library", slug: "open_textbook", enabled: true },
   { name: "Internet Archive", slug: "internet_archive", enabled: true },
   { name: "Open Library", slug: "open_library", enabled: true },
-  { name: "OpenStax", slug: "openstax", enabled: true },
-  { name: "LibreTexts", slug: "libretexts", enabled: true },
   { name: "Wikibooks", slug: "wikibooks", enabled: true },
   { name: "Wikisource", slug: "wikisource", enabled: true },
   { name: "DOAJ", slug: "doaj", enabled: true },
-  { name: "PubMed Central", slug: "pubmed", enabled: true },
+  { name: "OpenStax", slug: "openstax", enabled: true },
+  { name: "DOAB", slug: "doab", enabled: true },
+  { name: "Open Textbook Library", slug: "open_textbook", enabled: true },
   { name: "Saylor Academy", slug: "saylor", enabled: true },
-  { name: "OER Commons", slug: "oer_commons", enabled: true },
   { name: "MIT OpenCourseWare", slug: "mit_ocw", enabled: true },
   { name: "CK-12", slug: "ck12", enabled: true },
-  { name: "OpenLearn", slug: "openlearn", enabled: true },
-  // Kenyan sources
-  { name: "KICD", slug: "kicd", enabled: true },
-  { name: "KNEC", slug: "knec", enabled: true },
-  { name: "AJOL", slug: "ajol", enabled: true },
-  { name: "Easy Elimu", slug: "easy_elimu", enabled: true },
-  { name: "Atika School", slug: "atika_school", enabled: true },
-  { name: "KenyaPlex", slug: "kenyaplex", enabled: true },
-  { name: "Schools Net Kenya", slug: "schools_net", enabled: true },
-  { name: "CBC Resources", slug: "cbc_resources", enabled: true },
-  { name: "Teachers Updates", slug: "teachers_updates", enabled: true },
+  // Slower sources - disabled in scheduled run, use Admin panel to run manually
+  { name: "LibreTexts", slug: "libretexts", enabled: false },
+  { name: "PubMed Central", slug: "pubmed", enabled: false },
+  { name: "OER Commons", slug: "oer_commons", enabled: false },
+  { name: "OpenLearn", slug: "openlearn", enabled: false },
+  // Kenyan web-scraping sources - disabled in scheduled run
+  { name: "KICD", slug: "kicd", enabled: false },
+  { name: "KNEC", slug: "knec", enabled: false },
+  { name: "AJOL", slug: "ajol", enabled: false },
+  { name: "Easy Elimu", slug: "easy_elimu", enabled: false },
+  { name: "Atika School", slug: "atika_school", enabled: false },
+  { name: "KenyaPlex", slug: "kenyaplex", enabled: false },
+  { name: "Schools Net Kenya", slug: "schools_net", enabled: false },
+  { name: "CBC Resources", slug: "cbc_resources", enabled: false },
+  { name: "Teachers Updates", slug: "teachers_updates", enabled: false },
 ];
+
+/** Maximum time (ms) the aggregator may run before aborting remaining sources */
+const AGGREGATOR_TIMEOUT_MS = 25000; // 25 seconds - leaves 5s buffer for Vercel's 30s limit
 
 export async function runAggregator(sourceConfigs?: SourceConfig[]) {
   const sources = sourceConfigs || DEFAULT_SOURCES;
@@ -92,13 +102,20 @@ export async function runAggregator(sourceConfigs?: SourceConfig[]) {
     throw new Error("Failed to create aggregator log");
   }
 
-  const masterLogId = (masterLog as any).insertId || (masterLog as any)[0]?.id;
+  const masterLogId = (masterLog as any).id;
   let totalAdded = 0;
   let totalUpdated = 0;
+  const startTime = Date.now();
 
   try {
     for (const source of sources) {
       if (!source.enabled) continue;
+
+      // Abort if we're approaching the serverless timeout
+      if (Date.now() - startTime > AGGREGATOR_TIMEOUT_MS) {
+        console.warn(`[Aggregator] Timeout reached after ${Date.now() - startTime}ms, stopping early`);
+        break;
+      }
 
       try {
         const sourceResult = await aggregateSource(source);
@@ -233,7 +250,7 @@ async function aggregateGenericSource(
   sourceSlug: string,
   defaultLevel: string
 ): Promise<{ added: number; updated: number; errors: number }> {
-  const books = await fetchFn(50);
+  const books = await fetchFn(25);
   let added = 0;
   let updated = 0;
   let errors = 0;
@@ -289,7 +306,7 @@ async function aggregateGenericSource(
 }
 
 async function aggregateGutenberg(): Promise<{ added: number; updated: number; errors: number }> {
-  const books = await fetchPopularGutenbergBooks(100);
+  const books = await fetchPopularGutenbergBooks(32); // Gutendex returns max 32 per page
   let added = 0;
   let updated = 0;
   let errors = 0;
@@ -332,7 +349,7 @@ async function aggregateGutenberg(): Promise<{ added: number; updated: number; e
 }
 
 async function aggregateDoab(): Promise<{ added: number; updated: number; errors: number }> {
-  const books = await fetchLatestDoabBooks(50);
+  const books = await fetchLatestDoabBooks(25);
   let added = 0;
   let updated = 0;
   let errors = 0;
@@ -383,7 +400,7 @@ async function aggregateDoab(): Promise<{ added: number; updated: number; errors
 }
 
 async function aggregateOpenTextbook(): Promise<{ added: number; updated: number; errors: number }> {
-  const books = await fetchOpenTextbooks(50);
+  const books = await fetchOpenTextbooks(25);
   let added = 0;
   let updated = 0;
   let errors = 0;

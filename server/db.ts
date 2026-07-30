@@ -569,7 +569,8 @@ export async function getAggregatorLogs(limit: number = 20, offset: number = 0) 
 export async function createAggregatorLog(log: InsertAggregatorLog) {
   const db = await getDb();
   if (!db) return undefined;
-  return db.insert(aggregatorLogs).values(log);
+  const result = await db.insert(aggregatorLogs).values(log).returning({ id: aggregatorLogs.id });
+  return result[0];
 }
 
 export async function updateAggregatorLog(id: number, updates: Partial<InsertAggregatorLog>) {
