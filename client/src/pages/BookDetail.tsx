@@ -137,6 +137,7 @@ export default function BookDetail() {
 
   const formats = book.formats ? JSON.parse(book.formats) : {};
   const subjects = book.subjects ? JSON.parse(book.subjects) : [];
+  const canDownload = book.directDownloadAllowed && book.rightsStatus !== "metadata_only";
 
   const SOURCE_COLORS: Record<string, string> = {
     gutenberg: "bg-green-500/10 text-green-400",
@@ -352,30 +353,30 @@ export default function BookDetail() {
 
             {/* Download Options */}
             <div className="mb-8">
-              <h2 className="text-2xl font-bold mb-4 text-primary">Download</h2>
+              <h2 className="text-2xl font-bold mb-4 text-primary">{canDownload ? "Download" : "Access"}</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {formats.epub && (
+                {canDownload && formats.epub && (
                   <Button onClick={() => handleDownload("epub", formats.epub)} className="btn-neon gap-2 h-auto py-3 flex-col">
                     <Download className="w-5 h-5" />
                     <span>EPUB Format</span>
                     <span className="text-xs opacity-75">E-reader</span>
                   </Button>
                 )}
-                {formats.pdf && (
+                {canDownload && formats.pdf && (
                   <Button onClick={() => handleDownload("pdf", formats.pdf)} className="btn-neon gap-2 h-auto py-3 flex-col">
                     <Download className="w-5 h-5" />
                     <span>PDF Format</span>
                     <span className="text-xs opacity-75">Print-friendly</span>
                   </Button>
                 )}
-                {formats.txt && (
+                {canDownload && formats.txt && (
                   <Button onClick={() => handleDownload("txt", formats.txt)} className="btn-neon gap-2 h-auto py-3 flex-col">
                     <Download className="w-5 h-5" />
                     <span>Plain Text</span>
                     <span className="text-xs opacity-75">Text file</span>
                   </Button>
                 )}
-                {formats.html && (
+                {canDownload && formats.html && (
                   <Button onClick={() => handleDownload("html", formats.html)} className="btn-neon gap-2 h-auto py-3 flex-col">
                     <Download className="w-5 h-5" />
                     <span>HTML Format</span>
@@ -383,19 +384,21 @@ export default function BookDetail() {
                   </Button>
                 )}
               </div>
-              {Object.keys(formats).length === 0 && (
+              {(!canDownload || Object.keys(formats).length === 0) && (
                 <div className="card-neon p-4 text-center">
-                  <p className="text-muted-foreground text-sm">No download formats available</p>
+                  <p className="text-muted-foreground text-sm">
+                    {book.sourceUrl ? "This record links to the original source for access." : "No verified download formats are available for this record."}
+                  </p>
                 </div>
               )}
-              <p className="text-xs text-muted-foreground mt-4">
-                {book.source === "gutenberg" ? "All books are in the public domain via Project Gutenberg" :
-                 book.source === "doab" ? "Open access academic books from DOAB" :
-                 book.source === "open_textbook" ? "Open textbooks from Open Textbook Library" :
-                 book.source === "kicd" ? "Kenyan Institute of Curriculum Development resources" :
-                 book.source === "knec" ? "Kenya National Examinations Council resources" :
-                 "Free open-access resources"}
-              </p>
+              <div className="text-xs text-muted-foreground mt-4 space-y-1">
+                <p>{book.licenseName || "Rights information has not yet been verified for this record."}</p>
+                {book.licenseUrl && (
+                  <a href={book.licenseUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-accent hover:text-primary transition">
+                    <ExternalLink className="w-3 h-3" /> License and access terms
+                  </a>
+                )}
+              </div>
             </div>
 
             {/* Source URL */}

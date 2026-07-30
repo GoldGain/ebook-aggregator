@@ -55,6 +55,7 @@ import {
 import { TRPCError } from "@trpc/server";
 import { importGutenbergBook } from "./import";
 import { runAggregator } from "./sources/aggregator";
+import { isApprovedSource } from "./sources/policy";
 import { getDb } from "./db";
 import { sql, eq } from "drizzle-orm";
 
@@ -512,8 +513,15 @@ export const appRouter = router({
         if (ctx.user.role !== "admin") {
           throw new TRPCError({ code: "FORBIDDEN", message: "Admin only" });
         }
-        const result = await runAggregator(input?.sources);
-        return result;
+        const requestedSources = input?.sources;
+        const unsupportedSource = requestedSources?.find(source => source.enabled && !isApprovedSource(source.slug));
+        if (unsupportedSource) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `Source '${unsupportedSource.slug}' has not been approved for automated ingestion`,
+          });
+        }
+        return runAggregator(requestedSources);
       }),
 
     createAggregatorLog: protectedProcedure
@@ -626,6 +634,16 @@ export const appRouter = router({
       .mutation(async ({ input, ctx }) => {
         if (ctx.user.role !== "admin") {
           throw new TRPCError({ code: "FORBIDDEN", message: "Admin only" });
+        }
+        const source = (await getAggregatorSources()).find(item => item.id === input.id);
+        if (!source) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Catalog source not found" });
+        }
+        if (input.isActive === "yes" && !isApprovedSource(source.slug)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `Source '${source.slug}' has not been approved for automated ingestion`,
+          });
         }
         return updateAggregatorSource(input.id, input);
       }),

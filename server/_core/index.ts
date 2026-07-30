@@ -8,7 +8,7 @@ import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
-import { runAggregator } from "../sources/aggregator";
+import { runScheduledAggregator } from "../sources/aggregator";
 import { initializeDefaultSources, seedDefaultGenres } from "../db";
 import { sdk } from "./sdk";
 
@@ -49,7 +49,25 @@ async function startServer() {
     console.warn("[Seed] Failed to seed defaults (DB may not be available):", error);
   }
 
-  // Aggregator endpoint
+  // Vercel Cron invokes this route with GET and an Authorization bearer token.
+  // One source is selected per run to remain within the serverless duration limit.
+  app.get("/api/scheduled/aggregator", async (req, res) => {
+    const cronSecret = process.env.CRON_SECRET;
+    const authorization = req.headers.authorization;
+    if (!cronSecret || authorization !== `Bearer ${cronSecret}`) {
+      return res.status(401).json({ error: "unauthorized" });
+    }
+
+    try {
+      const result = await runScheduledAggregator();
+      res.json({ ok: true, ...result });
+    } catch (error) {
+      console.error("Scheduled aggregator error:", error);
+      res.status(500).json({ error: "scheduled ingestion failed", timestamp: new Date().toISOString() });
+    }
+  });
+
+  // Retain the existing authenticated task callback for compatibility.
   app.post("/api/scheduled/aggregator", async (req, res) => {
     try {
       const user = await sdk.authenticateRequest(req);
@@ -57,15 +75,11 @@ async function startServer() {
         return res.status(403).json({ error: "cron-only" });
       }
 
-      const result = await runAggregator();
+      const result = await runScheduledAggregator();
       res.json({ ok: true, ...result });
     } catch (error) {
-      console.error("Aggregator error:", error);
-      res.status(500).json({
-        error: error instanceof Error ? error.message : "Unknown error",
-        stack: error instanceof Error ? error.stack : undefined,
-        timestamp: new Date().toISOString(),
-      });
+      console.error("Scheduled aggregator error:", error);
+      res.status(500).json({ error: "scheduled ingestion failed", timestamp: new Date().toISOString() });
     }
   });
 
