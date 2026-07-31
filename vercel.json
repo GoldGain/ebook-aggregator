@@ -4,14 +4,14 @@
   "buildCommand": "pnpm run build",
   "outputDirectory": "dist/public",
   "functions": {
-    "api/handler.js": {
+    "api/index.js": {
       "maxDuration": 60
     }
   },
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "/api/handler"
+      "dest": "/api/index"
     },
     {
       "src": "/assets/(.*)",
