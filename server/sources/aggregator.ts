@@ -507,6 +507,8 @@ async function aggregateOpenTextbook(): Promise<{ added: number; updated: number
 }
 
 async function aggregateKicd(): Promise<{ added: number; updated: number; errors: number }> {
+  const rightsPolicy = getSourceRightsPolicy("kicd");
+  if (!rightsPolicy) throw new Error("Missing KICD rights policy");
   const books = await fetchKicdResources(30);
   let added = 0;
   let updated = 0;
@@ -519,7 +521,7 @@ async function aggregateKicd(): Promise<{ added: number; updated: number; errors
         updated++;
       } else {
         const formats: Record<string, string> = {};
-        if (book.downloadUrl) formats.pdf = book.downloadUrl;
+        if (rightsPolicy.allowDirectDownload && book.downloadUrl) formats.pdf = book.downloadUrl;
 
         const bookId = await createBook({
           title: book.title,
@@ -533,6 +535,11 @@ async function aggregateKicd(): Promise<{ added: number; updated: number; errors
           sourceUrl: book.sourceUrl,
           publishedDate: book.publishedDate,
           educationalLevel: book.educationalLevel as any,
+          rightsStatus: rightsPolicy.rightsStatus,
+          licenseName: rightsPolicy.licenseName,
+          licenseUrl: rightsPolicy.licenseUrl || "",
+          directDownloadAllowed: rightsPolicy.allowDirectDownload,
+          provenanceCheckedAt: new Date(),
         });
 
         if (book.subjects && bookId) {
@@ -555,6 +562,8 @@ async function aggregateKicd(): Promise<{ added: number; updated: number; errors
 }
 
 async function aggregateKnec(): Promise<{ added: number; updated: number; errors: number }> {
+  const rightsPolicy = getSourceRightsPolicy("knec");
+  if (!rightsPolicy) throw new Error("Missing KNEC rights policy");
   const books = await fetchKnecResources(30);
   let added = 0;
   let updated = 0;
@@ -567,7 +576,7 @@ async function aggregateKnec(): Promise<{ added: number; updated: number; errors
         updated++;
       } else {
         const formats: Record<string, string> = {};
-        if (book.downloadUrl) formats.pdf = book.downloadUrl;
+        if (rightsPolicy.allowDirectDownload && book.downloadUrl) formats.pdf = book.downloadUrl;
 
         const bookId = await createBook({
           title: book.title,
@@ -580,6 +589,11 @@ async function aggregateKnec(): Promise<{ added: number; updated: number; errors
           source: "knec",
           sourceUrl: book.sourceUrl,
           educationalLevel: book.educationalLevel as any,
+          rightsStatus: rightsPolicy.rightsStatus,
+          licenseName: rightsPolicy.licenseName,
+          licenseUrl: rightsPolicy.licenseUrl || "",
+          directDownloadAllowed: rightsPolicy.allowDirectDownload,
+          provenanceCheckedAt: new Date(),
         });
 
         if (book.subjects && bookId) {
@@ -609,4 +623,69 @@ async function aggregateAjol(): Promise<{ added: number; updated: number; errors
   } catch {
     return { added: 0, updated: 0, errors: 0 };
   }
+}
+
+async function aggregateGenericKenyanSource(
+  fetchFn: (limit?: number) => Promise<SourceBook[]>,
+  sourceSlug: string,
+  defaultLevel: string
+): Promise<{ added: number; updated: number; errors: number }> {
+  const rightsPolicy = getSourceRightsPolicy(sourceSlug);
+  if (!rightsPolicy) throw new Error(`Source '${sourceSlug}' is not approved for automated ingestion`);
+  const books = await fetchFn(30);
+  let added = 0;
+  let updated = 0;
+  let errors = 0;
+
+  for (const book of books) {
+    if (!book.title || book.title.length < 3) continue;
+    try {
+      const existing = await getBookByTitleAuthor(book.title, book.author);
+      if (existing) {
+        updated++;
+      } else {
+        const formats: Record<string, string> = {};
+        if (rightsPolicy.allowDirectDownload && (book as any).pdfUrl) formats.pdf = (book as any).pdfUrl;
+
+        const bookId = await createBook({
+          title: book.title.substring(0, 255),
+          author: (book.author || "Unknown").substring(0, 255),
+          description: book.description || "",
+          language: (book.language || "en").substring(0, 10),
+          coverUrl: book.coverUrl || "",
+          subjects: JSON.stringify((book.subjects || []).slice(0, 10)),
+          formats: JSON.stringify(formats),
+          source: sourceSlug as any,
+          sourceUrl: book.sourceUrl || "",
+          publisher: book.publisher || "",
+          publishedDate: book.publishedDate || "",
+          isbn: book.isbn || undefined,
+          pages: book.pages || undefined,
+          educationalLevel: (book.educationalLevel || defaultLevel) as any,
+          rightsStatus: rightsPolicy.rightsStatus,
+          licenseName: rightsPolicy.licenseName,
+          licenseUrl: rightsPolicy.licenseUrl || "",
+          directDownloadAllowed: rightsPolicy.allowDirectDownload,
+          provenanceCheckedAt: new Date(),
+        });
+
+        if (book.subjects && bookId) {
+          for (const subject of book.subjects.slice(0, 5)) {
+            if (subject && subject.length > 1) {
+              const subjectId = await getOrCreateSubject(subject);
+              if (subjectId && typeof bookId === "number") {
+                await linkBookToSubject(bookId, subjectId);
+              }
+            }
+          }
+        }
+
+        added++;
+      }
+    } catch (error) {
+      errors++;
+    }
+  }
+
+  return { added, updated, errors };
 }

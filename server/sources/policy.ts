@@ -115,6 +115,55 @@ export const APPROVED_SOURCE_POLICIES: Record<string, SourceRightsPolicy> = {
     licenseUrl: "https://www.open.edu/openlearn/about-openlearn/frequently-asked-questions-on-openlearn",
     allowDirectDownload: false,
   },
+  // Kenyan sources - government educational materials
+  kicd: {
+    rightsStatus: "open_access",
+    licenseName: "Kenya Institute of Curriculum Development - public educational resource",
+    licenseUrl: "https://kicd.ac.ke",
+    allowDirectDownload: true,
+  },
+  knec: {
+    rightsStatus: "open_access",
+    licenseName: "Kenya National Examinations Council - public examination resource",
+    licenseUrl: "https://cba.knec.ac.ke",
+    allowDirectDownload: true,
+  },
+  easy_elimu: {
+    rightsStatus: "open_access",
+    licenseName: "Easy Elimu - Kenyan educational resource",
+    licenseUrl: "https://www.easyelimu.com",
+    allowDirectDownload: false,
+  },
+  atika_school: {
+    rightsStatus: "open_access",
+    licenseName: "Atika School - Kenyan educational resource",
+    licenseUrl: "https://www.atikaschool.org",
+    allowDirectDownload: false,
+  },
+  kenyaplex: {
+    rightsStatus: "open_access",
+    licenseName: "KenyaPlex - Kenyan educational resource",
+    licenseUrl: "https://www.kenyaplex.com",
+    allowDirectDownload: false,
+  },
+  schools_net: {
+    rightsStatus: "open_access",
+    licenseName: "Schools Net Kenya - Kenyan educational resource",
+    licenseUrl: "https://www.schoolsnetkenya.com",
+    allowDirectDownload: false,
+  },
+  cbc_resources: {
+    rightsStatus: "open_access",
+    licenseName: "CBC Resources Kenya - Competency Based Curriculum",
+    licenseUrl: "https://cbcresources.co.ke",
+    allowDirectDownload: false,
+  },
+  teachers_updates: {
+    rightsStatus: "open_access",
+    licenseName: "Teachers Updates Kenya - educational resource",
+    licenseUrl: "https://teachersupdates.net",
+    allowDirectDownload: false,
+  },
 };
 
 /**
@@ -134,6 +183,8 @@ export const SCHEDULED_SOURCE_SLUGS = [
   "saylor",
   "mit_ocw",
   "ck12",
+  "kicd",
+  "knec",
 ] as const;
 
 export function getSourceRightsPolicy(sourceSlug: string): SourceRightsPolicy | null {

@@ -35,7 +35,7 @@ export async function importGutenbergBook(urlOrId: string) {
     });
   }
 
-  // Create book in database
+  // Create book in database with full rights metadata
   const result = await createBook({
     gutenbergId,
     title: gutenbergBook.title,
@@ -44,6 +44,13 @@ export async function importGutenbergBook(urlOrId: string) {
     coverUrl: gutenbergBook.coverImage,
     subjects: JSON.stringify(gutenbergBook.subjects),
     formats: JSON.stringify(gutenbergBook.formats),
+    source: "gutenberg",
+    sourceUrl: `https://www.gutenberg.org/ebooks/${gutenbergId}`,
+    rightsStatus: "public_domain",
+    licenseName: "Project Gutenberg public-domain collection",
+    licenseUrl: "https://www.gutenberg.org/policy/license.html",
+    directDownloadAllowed: true,
+    provenanceCheckedAt: new Date(),
   });
 
   return result;

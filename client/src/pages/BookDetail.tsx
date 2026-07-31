@@ -90,7 +90,15 @@ export default function BookDetail() {
     if (user) {
       recordDownloadMutation.mutate({ bookId, format: format as any });
     }
-    window.open(url, "_blank");
+    // Create a temporary anchor element to trigger a proper download
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = '';
+    link.rel = 'noopener noreferrer';
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handleMarkAsRead = () => {

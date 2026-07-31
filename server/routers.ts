@@ -345,7 +345,7 @@ export const appRouter = router({
           gutenbergId: z.number().int().optional(),
           genreId: z.number().int().optional(),
           educationalLevel: z.enum(["primary", "middle_school", "high_school", "college", "university", "professional", "general"]).optional(),
-          source: z.enum(["gutenberg", "kicd", "knec", "doab", "open_textbook", "ajol", "unesco", "worldbank", "google_books", "other"]).optional(),
+          source: z.enum(["gutenberg", "kicd", "knec", "doab", "open_textbook", "internet_archive", "open_library", "openstax", "libretexts", "wikibooks", "wikisource", "doaj", "pubmed", "ssrn", "saylor", "oer_commons", "mit_ocw", "ck12", "openlearn", "ajol", "easy_elimu", "atika_school", "kenyaplex", "schools_net", "cbc_resources", "teachers_updates", "merlot", "unesco", "worldbank", "google_books", "other"]).optional(),
           sourceUrl: z.string().optional(),
           isbn: z.string().optional(),
           pages: z.number().int().optional(),
