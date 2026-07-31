@@ -31,6 +31,11 @@ import {
   type SourceBook,
 } from "./multi-source";
 import {
+  getSourceRightsPolicy,
+  isApprovedSource,
+  selectScheduledSource,
+} from "./policy";
+import {
   createBook,
   getBookByGutenbergId,
   createAggregatorLog,
@@ -89,7 +94,13 @@ const DEFAULT_SOURCES: SourceConfig[] = [
 const AGGREGATOR_TIMEOUT_MS = 25000; // 25 seconds - leaves 5s buffer for Vercel's 30s limit
 
 export async function runAggregator(sourceConfigs?: SourceConfig[]) {
-  const sources = sourceConfigs || DEFAULT_SOURCES;
+  const requestedSources = sourceConfigs ?? DEFAULT_SOURCES.filter(source => isApprovedSource(source.slug));
+  const unsupportedSource = requestedSources.find(source => source.enabled && !isApprovedSource(source.slug));
+  if (unsupportedSource) {
+    throw new Error(`Source '${unsupportedSource.slug}' is not approved for automated ingestion`);
+  }
+
+  const sources = requestedSources.filter(source => source.enabled);
   const results: Record<string, { added: number; updated: number; errors: number }> = {};
 
   // Create a master log entry
@@ -185,7 +196,22 @@ export async function runAggregator(sourceConfigs?: SourceConfig[]) {
   }
 }
 
+export async function runScheduledAggregator(now = new Date()) {
+  const scheduledSlug = selectScheduledSource(now);
+  const source = DEFAULT_SOURCES.find(candidate => candidate.slug === scheduledSlug);
+  if (!source) {
+    throw new Error(`Scheduled source '${scheduledSlug}' is not configured`);
+  }
+
+  return runAggregator([{ ...source, enabled: true }]);
+}
+
 async function aggregateSource(source: SourceConfig): Promise<{ added: number; updated: number; errors: number }> {
+  const rightsPolicy = getSourceRightsPolicy(source.slug);
+  if (!rightsPolicy) {
+    throw new Error(`Source '${source.slug}' is not approved for automated ingestion`);
+  }
+
   switch (source.slug) {
     case "gutenberg":
       return aggregateGutenberg();
@@ -250,6 +276,11 @@ async function aggregateGenericSource(
   sourceSlug: string,
   defaultLevel: string
 ): Promise<{ added: number; updated: number; errors: number }> {
+  const rightsPolicy = getSourceRightsPolicy(sourceSlug);
+  if (!rightsPolicy) {
+    throw new Error(`Source '${sourceSlug}' is not approved for automated ingestion`);
+  }
+
   const books = await fetchFn(25);
   let added = 0;
   let updated = 0;
@@ -263,8 +294,8 @@ async function aggregateGenericSource(
         updated++;
       } else {
         const formats: Record<string, string> = {};
-        if (book.pdfUrl) formats.pdf = book.pdfUrl;
-        if (book.epubUrl) formats.epub = book.epubUrl;
+        if (rightsPolicy.allowDirectDownload && book.pdfUrl) formats.pdf = book.pdfUrl;
+        if (rightsPolicy.allowDirectDownload && book.epubUrl) formats.epub = book.epubUrl;
 
         const bookId = await createBook({
           title: book.title.substring(0, 255),
@@ -281,6 +312,11 @@ async function aggregateGenericSource(
           isbn: book.isbn || undefined,
           pages: book.pages || undefined,
           educationalLevel: (book.educationalLevel || defaultLevel) as any,
+          rightsStatus: rightsPolicy.rightsStatus,
+          licenseName: rightsPolicy.licenseName,
+          licenseUrl: rightsPolicy.licenseUrl || "",
+          directDownloadAllowed: rightsPolicy.allowDirectDownload,
+          provenanceCheckedAt: new Date(),
         });
 
         // Link subjects
@@ -306,6 +342,8 @@ async function aggregateGenericSource(
 }
 
 async function aggregateGutenberg(): Promise<{ added: number; updated: number; errors: number }> {
+  const rightsPolicy = getSourceRightsPolicy("gutenberg");
+  if (!rightsPolicy) throw new Error("Missing Gutenberg rights policy");
   const books = await fetchPopularGutenbergBooks(32); // Gutendex returns max 32 per page
   let added = 0;
   let updated = 0;
@@ -327,6 +365,11 @@ async function aggregateGutenberg(): Promise<{ added: number; updated: number; e
           formats: JSON.stringify(book.formats),
           source: "gutenberg",
           sourceUrl: `https://www.gutenberg.org/ebooks/${book.id}`,
+          rightsStatus: rightsPolicy.rightsStatus,
+          licenseName: rightsPolicy.licenseName,
+          licenseUrl: rightsPolicy.licenseUrl || "",
+          directDownloadAllowed: rightsPolicy.allowDirectDownload,
+          provenanceCheckedAt: new Date(),
         });
 
         if (book.subjects && bookId) {
@@ -349,6 +392,8 @@ async function aggregateGutenberg(): Promise<{ added: number; updated: number; e
 }
 
 async function aggregateDoab(): Promise<{ added: number; updated: number; errors: number }> {
+  const rightsPolicy = getSourceRightsPolicy("doab");
+  if (!rightsPolicy) throw new Error("Missing DOAB rights policy");
   const books = await fetchLatestDoabBooks(25);
   let added = 0;
   let updated = 0;
@@ -378,6 +423,11 @@ async function aggregateDoab(): Promise<{ added: number; updated: number; errors
           publishedDate: book.publishedDate,
           isbn: book.isbn || undefined,
           educationalLevel: "university",
+          rightsStatus: rightsPolicy.rightsStatus,
+          licenseName: rightsPolicy.licenseName,
+          licenseUrl: rightsPolicy.licenseUrl || "",
+          directDownloadAllowed: rightsPolicy.allowDirectDownload,
+          provenanceCheckedAt: new Date(),
         });
 
         if (book.subjects && bookId) {
@@ -400,6 +450,8 @@ async function aggregateDoab(): Promise<{ added: number; updated: number; errors
 }
 
 async function aggregateOpenTextbook(): Promise<{ added: number; updated: number; errors: number }> {
+  const rightsPolicy = getSourceRightsPolicy("open_textbook");
+  if (!rightsPolicy) throw new Error("Missing Open Textbook rights policy");
   const books = await fetchOpenTextbooks(25);
   let added = 0;
   let updated = 0;
@@ -428,6 +480,11 @@ async function aggregateOpenTextbook(): Promise<{ added: number; updated: number
           publishedDate: book.publishedDate,
           pages: book.pages,
           educationalLevel: "college",
+          rightsStatus: rightsPolicy.rightsStatus,
+          licenseName: rightsPolicy.licenseName,
+          licenseUrl: rightsPolicy.licenseUrl || "",
+          directDownloadAllowed: rightsPolicy.allowDirectDownload,
+          provenanceCheckedAt: new Date(),
         });
 
         if (book.subjects && bookId) {

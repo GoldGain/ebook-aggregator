@@ -1,4 +1,4 @@
-import { integer, pgEnum, pgTable, text, timestamp, varchar, index, uniqueIndex, serial } from "drizzle-orm/pg-core";
+import { boolean, integer, pgEnum, pgTable, text, timestamp, varchar, index, uniqueIndex, serial } from "drizzle-orm/pg-core";
 
 /**
  * Core user table backing auth flow.
@@ -59,6 +59,10 @@ export const educationalLevelEnum = pgEnum("educationalLevel", [
   "primary", "middle_school", "high_school", "college", "university", "professional", "general"
 ]);
 
+export const rightsStatusEnum = pgEnum("rightsStatus", [
+  "public_domain", "open_access", "metadata_only", "unknown"
+]);
+
 export const sourceEnum = pgEnum("source", [
   "gutenberg", "kicd", "knec", "doab", "open_textbook", "ajol", "unesco", "worldbank", "google_books",
   "internet_archive", "open_library", "oer_commons", "mit_ocw", "openstax", "libretexts",
@@ -82,6 +86,11 @@ export const books = pgTable("books", {
   educationalLevel: educationalLevelEnum("educationalLevel"),
   source: sourceEnum("source").default("gutenberg"),
   sourceUrl: text("sourceUrl"), // Original URL from source
+  rightsStatus: rightsStatusEnum("rightsStatus").default("unknown").notNull(),
+  licenseName: varchar("licenseName", { length: 255 }),
+  licenseUrl: text("licenseUrl"),
+  directDownloadAllowed: boolean("directDownloadAllowed").default(false).notNull(),
+  provenanceCheckedAt: timestamp("provenanceCheckedAt"),
   isbn: varchar("isbn", { length: 20 }),
   pages: integer("pages"),
   publisher: varchar("publisher", { length: 255 }),

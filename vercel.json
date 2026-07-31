@@ -1,4 +1,5 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
   "installCommand": "pnpm install --no-frozen-lockfile",
   "buildCommand": "npx vite build && npx esbuild api/handler.ts --platform=node --bundle --format=esm --outfile=api/handler.js --alias:@shared=./shared --external:pg-native --external:mock-aws-s3 --external:aws-sdk --external:nock",
@@ -9,6 +10,12 @@
       "maxDuration": 30
     }
   },
+  "crons": [
+    {
+      "path": "/api/scheduled/aggregator",
+      "schedule": "0 3 * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/trpc/(.*)",

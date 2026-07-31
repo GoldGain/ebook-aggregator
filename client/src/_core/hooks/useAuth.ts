@@ -1,7 +1,7 @@
 import { startLogin } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { TRPCClientError } from "@trpc/client";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect } from "react";
 
 type UseAuthOptions = {
   redirectOnUnauthenticated?: boolean;
@@ -50,24 +50,28 @@ export function useAuth(options?: UseAuthOptions) {
     }
   }, [logoutMutation, utils]);
 
-  const state = useMemo(() => {
-    localStorage.setItem(
-      "manus-runtime-user-info",
-      JSON.stringify(meQuery.data)
-    );
-    return {
-      user: meQuery.data ?? null,
-      loading: meQuery.isLoading || logoutMutation.isPending,
-      error: meQuery.error ?? logoutMutation.error ?? null,
-      isAuthenticated: Boolean(meQuery.data),
-    };
-  }, [
-    meQuery.data,
-    meQuery.error,
-    meQuery.isLoading,
-    logoutMutation.error,
-    logoutMutation.isPending,
-  ]);
+  // Browser storage is a side effect and must not run while React is rendering.
+  useEffect(() => {
+    try {
+      if (meQuery.data) {
+        localStorage.setItem(
+          "manus-runtime-user-info",
+          JSON.stringify(meQuery.data)
+        );
+      } else {
+        localStorage.removeItem("manus-runtime-user-info");
+      }
+    } catch {
+      // Storage can be unavailable in restricted browser contexts; auth remains usable.
+    }
+  }, [meQuery.data]);
+
+  const state = {
+    user: meQuery.data ?? null,
+    loading: meQuery.isLoading || logoutMutation.isPending,
+    error: meQuery.error ?? logoutMutation.error ?? null,
+    isAuthenticated: Boolean(meQuery.data),
+  };
 
   useEffect(() => {
     if (!redirectOnUnauthenticated) return;
