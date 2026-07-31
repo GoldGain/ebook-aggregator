@@ -2,6 +2,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { supabaseAdmin } from "./supabaseAuth";
 import { z } from "zod";
 import {
   getBooks,
@@ -65,6 +66,80 @@ export const appRouter = router({
   // Auth
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
+
+    /** Sign up with email + password via Supabase Auth */
+    signUp: publicProcedure
+      .input(z.object({
+        email: z.string().email(),
+        password: z.string().min(6),
+        name: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { data, error } = await supabaseAdmin.auth.admin.createUser({
+          email: input.email,
+          password: input.password,
+          email_confirm: true,
+          user_metadata: { name: input.name ?? "" },
+        });
+        if (error) throw new TRPCError({ code: "BAD_REQUEST", message: error.message });
+        // Sign in immediately to get an access token
+        const { data: signInData, error: signInError } = await supabaseAdmin.auth.signInWithPassword({
+          email: input.email,
+          password: input.password,
+        });
+        if (signInError || !signInData.session) {
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: signInError?.message ?? "Sign-in after sign-up failed" });
+        }
+        return {
+          accessToken: signInData.session.access_token,
+          refreshToken: signInData.session.refresh_token,
+          user: {
+            id: data.user!.id,
+            email: data.user!.email,
+            name: input.name ?? "",
+          },
+        };
+      }),
+
+    /** Sign in with email + password via Supabase Auth */
+    signIn: publicProcedure
+      .input(z.object({
+        email: z.string().email(),
+        password: z.string().min(1),
+      }))
+      .mutation(async ({ input }) => {
+        const { data, error } = await supabaseAdmin.auth.signInWithPassword({
+          email: input.email,
+          password: input.password,
+        });
+        if (error || !data.session) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: error?.message ?? "Invalid credentials" });
+        }
+        return {
+          accessToken: data.session.access_token,
+          refreshToken: data.session.refresh_token,
+          user: {
+            id: data.user.id,
+            email: data.user.email,
+            name: (data.user.user_metadata?.name as string) ?? "",
+          },
+        };
+      }),
+
+    /** Refresh an access token using a refresh token */
+    refreshToken: publicProcedure
+      .input(z.object({ refreshToken: z.string() }))
+      .mutation(async ({ input }) => {
+        const { data, error } = await supabaseAdmin.auth.refreshSession({ refresh_token: input.refreshToken });
+        if (error || !data.session) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: error?.message ?? "Token refresh failed" });
+        }
+        return {
+          accessToken: data.session.access_token,
+          refreshToken: data.session.refresh_token,
+        };
+      }),
+
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });

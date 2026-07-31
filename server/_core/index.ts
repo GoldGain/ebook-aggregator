@@ -3,14 +3,12 @@ import express from "express";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
-import { registerOAuthRoutes } from "./oauth";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { runScheduledAggregator } from "../sources/aggregator";
 import { initializeDefaultSources, seedDefaultGenres } from "../db";
-import { sdk } from "./sdk";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -38,7 +36,6 @@ async function startServer() {
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
-  registerOAuthRoutes(app);
 
   // Seed default genres and aggregator sources
   try {
@@ -59,22 +56,6 @@ async function startServer() {
     }
 
     try {
-      const result = await runScheduledAggregator();
-      res.json({ ok: true, ...result });
-    } catch (error) {
-      console.error("Scheduled aggregator error:", error);
-      res.status(500).json({ error: "scheduled ingestion failed", timestamp: new Date().toISOString() });
-    }
-  });
-
-  // Retain the existing authenticated task callback for compatibility.
-  app.post("/api/scheduled/aggregator", async (req, res) => {
-    try {
-      const user = await sdk.authenticateRequest(req);
-      if (!user.isCron) {
-        return res.status(403).json({ error: "cron-only" });
-      }
-
       const result = await runScheduledAggregator();
       res.json({ ok: true, ...result });
     } catch (error) {

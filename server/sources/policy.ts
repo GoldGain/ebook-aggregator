@@ -73,6 +73,48 @@ export const APPROVED_SOURCE_POLICIES: Record<string, SourceRightsPolicy> = {
     licenseUrl: "https://openlibrary.org/developers/api",
     allowDirectDownload: false,
   },
+  internet_archive: {
+    rightsStatus: "open_access",
+    licenseName: "Internet Archive open-access or public-domain item",
+    licenseUrl: "https://archive.org/about/terms.php",
+    allowDirectDownload: true,
+  },
+  saylor: {
+    rightsStatus: "open_access",
+    licenseName: "Saylor Academy openly licensed course material",
+    licenseUrl: "https://www.saylor.org/about/",
+    allowDirectDownload: false,
+  },
+  mit_ocw: {
+    rightsStatus: "open_access",
+    licenseName: "MIT OpenCourseWare CC BY-NC-SA",
+    licenseUrl: "https://ocw.mit.edu/terms/",
+    allowDirectDownload: false,
+  },
+  ck12: {
+    rightsStatus: "open_access",
+    licenseName: "CK-12 openly licensed educational content",
+    licenseUrl: "https://www.ck12.org/terms/",
+    allowDirectDownload: false,
+  },
+  libretexts: {
+    rightsStatus: "open_access",
+    licenseName: "LibreTexts openly licensed textbook",
+    licenseUrl: "https://libretexts.org/",
+    allowDirectDownload: false,
+  },
+  oer_commons: {
+    rightsStatus: "open_access",
+    licenseName: "OER Commons open educational resource",
+    licenseUrl: "https://www.oercommons.org/",
+    allowDirectDownload: false,
+  },
+  openlearn: {
+    rightsStatus: "open_access",
+    licenseName: "OpenLearn free course material from The Open University",
+    licenseUrl: "https://www.open.edu/openlearn/about-openlearn/frequently-asked-questions-on-openlearn",
+    allowDirectDownload: false,
+  },
 };
 
 /**
@@ -84,6 +126,14 @@ export const SCHEDULED_SOURCE_SLUGS = [
   "doab",
   "open_textbook",
   "openstax",
+  "open_library",
+  "internet_archive",
+  "wikibooks",
+  "wikisource",
+  "doaj",
+  "saylor",
+  "mit_ocw",
+  "ck12",
 ] as const;
 
 export function getSourceRightsPolicy(sourceSlug: string): SourceRightsPolicy | null {

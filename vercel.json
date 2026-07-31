@@ -1,11 +1,15 @@
 {
   "version": 2,
-  "buildCommand": "npm run build",
+  "installCommand": "pnpm install",
+  "buildCommand": "pnpm run build",
   "outputDirectory": "dist/public",
   "builds": [
     {
       "src": "api/handler.ts",
-      "use": "@vercel/node"
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 60
+      }
     },
     {
       "src": "dist/public/**",
@@ -14,12 +18,19 @@
   ],
   "routes": [
     {
-      "src": "/api/trpc/(.*)",
+      "src": "/api/(.*)",
       "dest": "/api/handler"
     },
     {
+      "src": "/assets/(.*)",
+      "dest": "/dist/public/assets/$1"
+    },
+    {
+      "handle": "filesystem"
+    },
+    {
       "src": "/(.*)",
-      "dest": "/dist/public/$1"
+      "dest": "/dist/public/index.html"
     }
   ]
 }

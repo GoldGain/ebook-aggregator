@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
-import { startLogin } from "@/const";
+import { AuthModal } from "@/components/AuthModal";
 import {
   Loader2, Search, BookOpen, ChevronRight, TrendingUp, Star,
   Globe, GraduationCap, Users, Download, Zap, Shield, Library,
@@ -119,6 +119,7 @@ export default function Home() {
   const [, navigate] = useLocation();
   const [activeCategoryIdx, setActiveCategoryIdx] = useState(0);
   const heroRef = useRef<HTMLDivElement>(null);
+  const [authOpen, setAuthOpen] = useState(false);
 
   const recentBooks = trpc.books.recent.useQuery({ limit: 8 });
   const popularBooks = trpc.books.popular.useQuery({ limit: 8 });
@@ -162,7 +163,7 @@ export default function Home() {
                 <span className="hidden sm:inline">{user.name?.split(" ")[0] || "Account"}</span>
               </Button>
             ) : (
-              <Button onClick={() => startLogin()} className="btn-neon text-sm px-4 py-2">Sign In</Button>
+              <Button onClick={() => setAuthOpen(true)} className="btn-neon text-sm px-4 py-2">Sign In</Button>
             )}
           </div>
         </div>
@@ -441,7 +442,7 @@ export default function Home() {
               <p className="text-muted-foreground mb-8 text-lg">
                 Create a free account to save books, track your reading progress, and get personalised recommendations.
               </p>
-              <Button onClick={() => startLogin()} className="btn-neon px-8 py-3 text-base gap-2">
+              <Button onClick={() => setAuthOpen(true)} className="btn-neon px-8 py-3 text-base gap-2">
                 <BookOpen className="w-5 h-5" />
                 Get Started — It's Free
               </Button>
@@ -483,7 +484,7 @@ export default function Home() {
                     <li><button onClick={() => navigate("/reading")} className="hover:text-primary transition">Reading Progress</button></li>
                   </>
                 ) : (
-                  <li><button onClick={() => startLogin()} className="hover:text-primary transition">Sign In / Register</button></li>
+                  <li><button onClick={() => setAuthOpen(true)} className="hover:text-primary transition">Sign In / Register</button></li>
                 )}
               </ul>
             </div>
@@ -500,6 +501,9 @@ export default function Home() {
           </div>
         </div>
       </footer>
+
+      {/* Auth Modal */}
+      <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
     </div>
   );
 }

@@ -64,6 +64,7 @@ const DEFAULT_SOURCES: SourceConfig[] = [
   { name: "Project Gutenberg", slug: "gutenberg", enabled: true },
   { name: "Internet Archive", slug: "internet_archive", enabled: true },
   { name: "Open Library", slug: "open_library", enabled: true },
+  { name: "LibreTexts", slug: "libretexts", enabled: true },
   { name: "Wikibooks", slug: "wikibooks", enabled: true },
   { name: "Wikisource", slug: "wikisource", enabled: true },
   { name: "DOAJ", slug: "doaj", enabled: true },
@@ -74,7 +75,6 @@ const DEFAULT_SOURCES: SourceConfig[] = [
   { name: "MIT OpenCourseWare", slug: "mit_ocw", enabled: true },
   { name: "CK-12", slug: "ck12", enabled: true },
   // Slower sources - disabled in scheduled run, use Admin panel to run manually
-  { name: "LibreTexts", slug: "libretexts", enabled: false },
   { name: "PubMed Central", slug: "pubmed", enabled: false },
   { name: "OER Commons", slug: "oer_commons", enabled: false },
   { name: "OpenLearn", slug: "openlearn", enabled: false },
