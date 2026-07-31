@@ -109,7 +109,7 @@ var init_ajol = __esm({
   }
 });
 
-// api/index.ts
+// api/server.ts
 import "dotenv/config";
 import express from "express";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
@@ -3124,7 +3124,7 @@ async function createContext(opts) {
   };
 }
 
-// api/index.ts
+// api/server.ts
 var app = express();
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
