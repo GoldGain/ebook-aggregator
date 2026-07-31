@@ -1,35 +1,17 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
-  "installCommand": "pnpm install --no-frozen-lockfile",
-  "buildCommand": "npx vite build && npx esbuild api/handler.ts --platform=node --bundle --format=esm --outfile=api/handler.js --alias:@shared=./shared --external:pg-native --external:mock-aws-s3 --external:aws-sdk --external:nock",
-  "outputDirectory": "dist/public",
-  "crons": [
+  "installCommand": "npm install",
+  "buildCommand": "npm run build",
+  "builds": [
     {
-      "path": "/api/scheduled/aggregator",
-      "schedule": "0 3 * * *"
+      "src": "api/handler.ts",
+      "use": "@vercel/node"
     }
   ],
-  "rewrites": [
+  "routes": [
     {
-      "source": "/api/trpc/(.*)",
-      "destination": "/api/handler"
-    },
-    {
-      "source": "/api/scheduled/(.*)",
-      "destination": "/api/handler"
-    },
-    {
-      "source": "/auth/(.*)",
-      "destination": "/api/handler"
-    },
-    {
-      "source": "/storage/(.*)",
-      "destination": "/api/handler"
-    },
-    {
-      "source": "/((?!api|auth|storage|assets|_next).*)",
-      "destination": "/index.html"
+      "src": "/api/trpc/(.*)",
+      "dest": "/api/handler"
     }
   ]
 }
