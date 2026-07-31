@@ -4,7 +4,7 @@
   "buildCommand": "pnpm run build",
   "outputDirectory": "dist/public",
   "functions": {
-    "api/handler.ts": {
+    "api/handler.js": {
       "maxDuration": 60
     }
   },

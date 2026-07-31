@@ -2,7 +2,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
-import { supabaseAdmin } from "./supabaseAuth";
+import { supabaseAdmin, supabasePublic } from "./supabaseAuth";
 import { z } from "zod";
 import {
   getBooks,
@@ -75,7 +75,7 @@ export const appRouter = router({
         name: z.string().optional(),
       }))
       .mutation(async ({ input }) => {
-        const { data, error } = await supabaseAdmin.auth.admin.createUser({
+        const { data, error } = await (supabaseAdmin.auth as any).admin.createUser({
           email: input.email,
           password: input.password,
           email_confirm: true,
@@ -83,7 +83,7 @@ export const appRouter = router({
         });
         if (error) throw new TRPCError({ code: "BAD_REQUEST", message: error.message });
         // Sign in immediately to get an access token
-        const { data: signInData, error: signInError } = await supabaseAdmin.auth.signInWithPassword({
+        const { data: signInData, error: signInError } = await (supabasePublic.auth as any).signInWithPassword({
           email: input.email,
           password: input.password,
         });
@@ -108,7 +108,7 @@ export const appRouter = router({
         password: z.string().min(1),
       }))
       .mutation(async ({ input }) => {
-        const { data, error } = await supabaseAdmin.auth.signInWithPassword({
+        const { data, error } = await (supabasePublic.auth as any).signInWithPassword({
           email: input.email,
           password: input.password,
         });
@@ -130,7 +130,7 @@ export const appRouter = router({
     refreshToken: publicProcedure
       .input(z.object({ refreshToken: z.string() }))
       .mutation(async ({ input }) => {
-        const { data, error } = await supabaseAdmin.auth.refreshSession({ refresh_token: input.refreshToken });
+        const { data, error } = await (supabasePublic.auth as any).refreshSession({ refresh_token: input.refreshToken });
         if (error || !data.session) {
           throw new TRPCError({ code: "UNAUTHORIZED", message: error?.message ?? "Token refresh failed" });
         }
@@ -142,7 +142,7 @@ export const appRouter = router({
 
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      (ctx.res as any).clearCookie?.(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
     }),
   }),
