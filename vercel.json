@@ -1,7 +1,5 @@
 {
   "version": 2,
-  "installCommand": "npm install --no-package-lock --legacy-peer-deps",
-  "buildCommand": "npm run build",
   "builds": [
     {
       "src": "api/handler.ts",
