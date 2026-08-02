@@ -5,6 +5,11 @@ interface LibGenBook {
   title: string;
   author: string;
   year: string;
+  publisher: string;
+  language: string;
+  pages: string;
+  format: string;
+  filesize: string;
   md5: string;
   source: string;
   sourceUrl: string;
