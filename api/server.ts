@@ -74,31 +74,64 @@ app.get("/api/libgen", async (req: any, res: any) => {
       title: string;
       author: string;
       year: string;
+      publisher: string;
+      language: string;
+      pages: string;
+      format: string;
+      filesize: string;
       md5: string;
       source: string;
       sourceUrl: string;
       formats: { pdf: string };
     }> = [];
 
-    $("tr").each((_i: number, row: any) => {
+    // Target the results table by its id
+    $("#tablelibgen tr").each((_i: number, row: any) => {
       const cells = $(row).find("td");
-      if (cells.length < 3) return;
+      if (cells.length < 9) return;
 
-      const titleCell = cells.eq(0);
-      const title = titleCell.text().trim();
+      // Cell 0: Title — the <a> linking to edition.php has the book title
+      const titleLink = cells.eq(0).find('a[href*="edition.php"]').first();
+      if (!titleLink.length) return;
+      const title = titleLink.text().trim();
 
-      const href = titleCell.find("a").attr("href") || "";
-      const md5Match = href.match(/md5=([a-f0-9]{32})/);
+      // Cell 1: Author
+      const author = cells.eq(1).text().trim();
+
+      // Cell 2: Publisher
+      const publisher = cells.eq(2).text().trim();
+
+      // Cell 3: Year/Date
+      const year = cells.eq(3).text().trim();
+
+      // Cell 4: Language
+      const language = cells.eq(4).text().trim();
+
+      // Cell 5: Pages
+      const pages = cells.eq(5).text().trim();
+
+      // Cell 6: File size
+      const filesize = cells.eq(6).text().trim();
+
+      // Cell 7: Format
+      const format = cells.eq(7).text().trim();
+
+      // Cell 8: MD5 download link — the Libgen badge link
+      const md5Link = cells.eq(8).find('a[href*="md5="]').first();
+      const md5Href = md5Link.attr("href") || "";
+      const md5Match = md5Href.match(/md5=([a-f0-9]{32})/);
       const md5 = md5Match ? md5Match[1] : "";
 
-      const author = cells.eq(1).text().trim();
-      const year = cells.eq(2).text().trim();
-
-      if (title && md5) {
+      if (title && md5 && title.length > 2) {
         books.push({
           title,
           author: author || "Unknown",
           year: year || "",
+          publisher: publisher || "",
+          language: language || "",
+          pages: pages || "",
+          format: format || "",
+          filesize: filesize || "",
           md5,
           source: "libgen",
           sourceUrl: `http://libgen.li/get.php?md5=${md5}`,
