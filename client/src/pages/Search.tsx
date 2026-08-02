@@ -4,10 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Loader2, BookOpen, Search as SearchIcon, X, SlidersHorizontal,
-  ChevronLeft, ChevronRight, ArrowRight
+  ChevronLeft, ChevronRight, ArrowRight, Globe
 } from "lucide-react";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useDebounce } from "@/hooks/useDebounce";
+import { LibGenResults } from "@/components/LibGenResults";
 
 const SOURCES = [
   { key: "", label: "All Sources" },
@@ -521,6 +522,20 @@ export default function Search() {
                 </div>
               </>
             )}
+            {/* LibGen results — external search */}
+            {query && query.length >= 2 && (
+              <div className="mt-8 pt-6 border-t border-border">
+                <div className="flex items-center gap-2 mb-4">
+                  <Globe className="w-5 h-5 text-primary" />
+                  <h3 className="font-bold text-sm">LibGen Results</h3>
+                  <span className="text-xs text-muted-foreground">
+                    (additional external results)
+                  </span>
+                </div>
+                <LibGenResults query={query} />
+              </div>
+            )}
+
           </main>
         </div>
       </div>
