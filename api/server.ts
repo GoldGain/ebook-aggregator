@@ -59,7 +59,8 @@ app.get("/api/libgen", async (req: any, res: any) => {
     const url = `http://libgen.li/index.php?req=${encodedQuery}&lg_topic=libgen&open=0&view=simple&res=100&phrase=1&column=def`;
 
     const axios = await import("axios");
-    const cheerio = await import("cheerio");
+    const cheerioModule = await import("cheerio");
+    const cheerio = cheerioModule.default || cheerioModule;
 
     const response = await axios.default.get(url, {
       timeout: 30000,
@@ -68,7 +69,7 @@ app.get("/api/libgen", async (req: any, res: any) => {
       },
     });
 
-    const $ = cheerio.default.load(response.data);
+    const $ = cheerio.load(response.data);
     const books: Array<{
       title: string;
       author: string;
