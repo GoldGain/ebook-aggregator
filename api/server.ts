@@ -45,6 +45,89 @@ app.use(
   })
 );
 
+// LibGen search endpoint — scrapes Library Genesis for book metadata
+app.get("/api/libgen", async (req: any, res: any) => {
+  const q = req.query.q as string | undefined;
+  const limit = parseInt(req.query.limit as string || "20", 10);
+
+  if (!q || q.length < 2) {
+    return res.status(400).json({ error: 'Query parameter "q" is required (min 2 chars)' });
+  }
+
+  try {
+    const encodedQuery = encodeURIComponent(q);
+    const url = `http://libgen.li/index.php?req=${encodedQuery}&lg_topic=libgen&open=0&view=simple&res=100&phrase=1&column=def`;
+
+    const axios = await import("axios");
+    const cheerio = await import("cheerio");
+
+    const response = await axios.default.get(url, {
+      timeout: 30000,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; LuminaBooks/2.0; Educational Aggregator)",
+      },
+    });
+
+    const $ = cheerio.default.load(response.data);
+    const books: Array<{
+      title: string;
+      author: string;
+      year: string;
+      md5: string;
+      source: string;
+      sourceUrl: string;
+      formats: { pdf: string };
+    }> = [];
+
+    $("tr").each((_i: number, row: any) => {
+      const cells = $(row).find("td");
+      if (cells.length < 3) return;
+
+      const titleCell = cells.eq(0);
+      const title = titleCell.text().trim();
+
+      const href = titleCell.find("a").attr("href") || "";
+      const md5Match = href.match(/md5=([a-f0-9]{32})/);
+      const md5 = md5Match ? md5Match[1] : "";
+
+      const author = cells.eq(1).text().trim();
+      const year = cells.eq(2).text().trim();
+
+      if (title && md5) {
+        books.push({
+          title,
+          author: author || "Unknown",
+          year: year || "",
+          md5,
+          source: "libgen",
+          sourceUrl: `http://libgen.li/get.php?md5=${md5}`,
+          formats: {
+            pdf: `http://libgen.li/get.php?md5=${md5}`,
+          },
+        });
+      }
+    });
+
+    const limitedBooks = books.slice(0, limit);
+
+    return res.status(200).json({
+      success: true,
+      source: "libgen",
+      query: q,
+      total: limitedBooks.length,
+      books: limitedBooks,
+    });
+  } catch (error: any) {
+    console.error("LibGen search error:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Failed to search LibGen",
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+});
+
+
 export default function handler(req: VercelRequest, res: VercelResponse) {
   return app(req, res);
 }
