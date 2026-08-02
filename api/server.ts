@@ -45,10 +45,31 @@ app.use(
   })
 );
 
+
+// URL health check — returns live status and fallback suggestions
+app.get("/api/check-url", async (req: any, res: any) => {
+  const url = req.query.url as string | undefined;
+  if (!url) return res.status(400).json({ error: "url param required" });
+
+  try {
+    const axios = await import("axios");
+    const response = await axios.default.head(url, {
+      timeout: 8000,
+      maxRedirects: 5,
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; LuminaBooks/2.0)" },
+    });
+    return res.json({ ok: true, status: response.status, url });
+  } catch (error: any) {
+    const status = error?.response?.status ?? 0;
+    return res.json({ ok: false, status, url });
+  }
+});
+
 // LibGen search endpoint — scrapes Library Genesis for book metadata
 app.get("/api/libgen", async (req: any, res: any) => {
   const q = req.query.q as string | undefined;
-  const limit = parseInt(req.query.limit as string || "20", 10);
+  const limit = parseInt(req.query.limit as string || "50", 10);
+  const language = req.query.lang as string | undefined; // e.g. "Swahili"
 
   if (!q || q.length < 2) {
     return res.status(400).json({ error: 'Query parameter "q" is required (min 2 chars)' });
@@ -56,7 +77,8 @@ app.get("/api/libgen", async (req: any, res: any) => {
 
   try {
     const encodedQuery = encodeURIComponent(q);
-    const url = `http://libgen.li/index.php?req=${encodedQuery}&lg_topic=libgen&open=0&view=simple&res=100&phrase=1&column=def`;
+    const langParam = language ? `&lang=${encodeURIComponent(language)}` : "";
+    const url = `http://libgen.li/index.php?req=${encodedQuery}&lg_topic=libgen&open=0&view=simple&res=100&phrase=1&column=def${langParam}`;
 
     const axios = await import("axios");
     const cheerioModule = await import("cheerio");
@@ -118,11 +140,13 @@ app.get("/api/libgen", async (req: any, res: any) => {
       // Cell 7: Format
       const format = cells.eq(7).text().trim();
 
-      // Cell 8: MD5 download link — the Libgen badge link
-      const md5Link = cells.eq(8).find('a[href*="md5="]').first();
-      const md5Href = md5Link.attr("href") || "";
+      // Cell 8: MD5 download link — extract both Libgen and Anna's Archive links
+      const libgenLink = cells.eq(8).find('a[title="libgen"], a[href*="/get.php"]').first();
+      const annaLink = cells.eq(8).find('a[href*="annas-archive"]').first();
+      const md5Href = libgenLink.attr("href") || annaLink.attr("href") || "";
       const md5Match = md5Href.match(/md5=([a-f0-9]{32})/);
       const md5 = md5Match ? md5Match[1] : "";
+      const annaUrl = annaLink.attr("href") || "";
 
       if (title && md5 && title.length > 2) {
         books.push({
@@ -136,9 +160,16 @@ app.get("/api/libgen", async (req: any, res: any) => {
           filesize: filesize || "",
           md5,
           source: "libgen",
-          sourceUrl: `http://libgen.li/get.php?md5=${md5}`,
+          // Primary: Anna's Archive (most reliable); fallback to libgen mirrors
+          sourceUrl: annaUrl || `https://libgen.li/get.php?md5=${md5}`,
+          annaUrl: annaUrl || `https://en.annas-archive.gl/md5/${md5}`,
+          mirrors: [
+            annaUrl || `https://en.annas-archive.gl/md5/${md5}`,
+            `https://libgen.li/get.php?md5=${md5}`,
+            `https://libgen.rs/get.php?md5=${md5}`,
+          ],
           formats: {
-            pdf: `http://libgen.li/get.php?md5=${md5}`,
+            pdf: annaUrl || `https://en.annas-archive.gl/md5/${md5}`,
           },
         });
       }
