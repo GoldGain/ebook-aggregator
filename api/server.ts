@@ -91,7 +91,9 @@ app.get("/api/libgen", async (req: any, res: any) => {
       if (cells.length < 9) return;
 
       // Cell 0: Title — the <a> linking to edition.php has the book title
-      const titleLink = cells.eq(0).find('a[href*="edition.php"]').first();
+      // Get the last edition link (actual book title, after <br>) — skip edition-number links inside <b>
+      const editionLinks = cells.eq(0).find('a[href*="edition.php"]');
+      const titleLink = editionLinks.length > 1 ? editionLinks.last() : editionLinks.first();
       if (!titleLink.length) return;
       const title = titleLink.text().trim();
 
