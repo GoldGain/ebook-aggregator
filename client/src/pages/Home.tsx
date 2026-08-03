@@ -458,7 +458,7 @@ export default function Home() {
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <BookOpen className="w-5 h-5 text-primary" />
-                <h5 className="font-black text-primary tracking-widest">LUMINA BOOKS</h5>
+                <h5 className="font-black text-primary tracking-widest">ZAMIFU E-MATERIALS</h5>
               </div>
               <p className="text-sm text-muted-foreground leading-relaxed">
                 A world-class multi-source ebook aggregator. Free knowledge for everyone, everywhere.
