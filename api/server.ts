@@ -162,14 +162,14 @@ app.get("/api/libgen", async (req: any, res: any) => {
           source: "libgen",
           // Primary: Anna's Archive (most reliable); fallback to libgen mirrors
           sourceUrl: annaUrl || `https://libgen.li/get.php?md5=${md5}`,
-          annaUrl: annaUrl || `https://en.annas-archive.gl/md5/${md5}`,
+          annaUrl: annaUrl || `https://annas-archive.org/md5/${md5}`,
           mirrors: [
-            annaUrl || `https://en.annas-archive.gl/md5/${md5}`,
+            annaUrl || `https://annas-archive.org/md5/${md5}`,
             `https://libgen.li/get.php?md5=${md5}`,
             `https://libgen.rs/get.php?md5=${md5}`,
           ],
           formats: {
-            pdf: annaUrl || `https://en.annas-archive.gl/md5/${md5}`,
+            pdf: annaUrl || `https://annas-archive.org/md5/${md5}`,
           },
         });
       }
@@ -327,7 +327,7 @@ app.post("/api/download", async (req: any, res: any) => {
   return res.status(502).json({
     success: false,
     error: "All download mirrors failed",
-    fallback: `https://en.annas-archive.gl/md5/${md5}`,
+    fallback: `https://annas-archive.org/md5/${md5}`,
     message: "Please try the Mirrors button for manual download",
   });
 });
@@ -427,7 +427,7 @@ app.get("/api/search", async (req: any, res: any) => {
           libgenBooks.push({
             title, author: author || "Unknown", year: year || "",
             language: lang || "en", md5, source: "libgen",
-            sourceUrl: `https://en.annas-archive.gl/md5/${md5}`,
+            sourceUrl: `https://annas-archive.org/md5/${md5}`,
           });
         }
       });
@@ -436,10 +436,12 @@ app.get("/api/search", async (req: any, res: any) => {
     // 2. Fetch KICD/KNEC (lightweight — timeout fast)
     let kicdBooks: any[] = [];
     try {
-      const { fetchKicdResources, fetchKnecResources } = await Promise.all([
+      const [kicdModule, knecModule] = await Promise.all([
         import("../server/sources/kicd").catch(() => null),
         import("../server/sources/knec").catch(() => null),
       ]);
+      const fetchKicdResources = (kicdModule as any)?.fetchKicdResources;
+      const fetchKnecResources = (knecModule as any)?.fetchKnecResources;
       if (fetchKicdResources) {
         const results = await Promise.race([
           fetchKicdResources(20),
