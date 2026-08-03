@@ -9,6 +9,7 @@ import {
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useDebounce } from "@/hooks/useDebounce";
 import { LibGenResults } from "@/components/LibGenResults";
+import { KICDResults } from "@/components/KICDResults";
 
 const SOURCES = [
   { key: "", label: "All Sources" },
@@ -533,6 +534,18 @@ export default function Search() {
                   </span>
                 </div>
                 <LibGenResults query={query} />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* KICD/KNEC Results */}
+                    {query && query.length >= 2 && (
+                      <div className="mt-8 pt-6 border-t border-border">
+                        <div className="flex items-center gap-2 mb-4">
+                          <h3 className="font-bold text-sm">Kenya Educational Materials</h3>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/10 text-green-400">KICD + KNEC</span>
+                        </div>
+                        <KICDResults query={query} />
               </div>
             )}
 
