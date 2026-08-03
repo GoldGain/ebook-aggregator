@@ -163,14 +163,14 @@ app.get("/api/libgen", async (req: any, res: any) => {
           source: "libgen",
           // Primary: Anna's Archive (most reliable); fallback to libgen mirrors
           sourceUrl: annaUrl || `https://libgen.li/get.php?md5=${md5}`,
-          annaUrl: annaUrl || `https://annas-archive.se/md5/${md5}`,
+          annaUrl: annaUrl || `https://annas-archive.li/md5/${md5}`,
           mirrors: [
-            annaUrl || `https://annas-archive.se/md5/${md5}`,
+            annaUrl || `https://annas-archive.li/md5/${md5}`,
             `https://libgen.li/get.php?md5=${md5}`,
             `https://libgen.rs/get.php?md5=${md5}`,
           ],
           formats: {
-            pdf: annaUrl || `https://annas-archive.se/md5/${md5}`,
+            pdf: annaUrl || `https://annas-archive.li/md5/${md5}`,
           },
         });
       }
@@ -282,7 +282,7 @@ app.all("/api/download", async (req: any, res: any) => {
     directDownload: false,
     message: "Server-side download unavailable from datacenter IP. Use the links below to download directly.",
     mirrors: [
-      { label: "Anna's Archive", url: `https://annas-archive.se/md5/${md5}` },
+      { label: "Anna's Archive", url: `https://annas-archive.li/md5/${md5}` },
       { label: "LibGen.li", url: `https://libgen.li/ads.php?md5=${md5}` },
       { label: "LibGen.rs", url: `https://libgen.rs/get.php?md5=${md5}` },
     ],
@@ -387,7 +387,7 @@ app.get("/api/search", async (req: any, res: any) => {
           libgenBooks.push({
             title, author: author || "Unknown", year: year || "",
             language: lang || "en", md5, source: "libgen",
-            sourceUrl: `https://annas-archive.se/md5/${md5}`,
+            sourceUrl: `https://annas-archive.li/md5/${md5}`,
           });
         }
       });
