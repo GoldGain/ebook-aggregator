@@ -87,8 +87,28 @@ function MirrorsMenu({ book, onClose }: { book: LibGenBook; onClose: () => void 
 }
 
 function cleanTitle(book: LibGenBook) {
-  if (book.title && !book.title.includes('DOI:') && !book.title.includes('ISBN:')) {
-    return book.title;
+  let title = book.title || '';
+  // Strip leading numbers and dots (e.g. "1. Title" or "001 Title")
+  title = title.replace(/^\d+[\.\)\s]+/, '');
+  // Remove DOI prefixes
+  title = title.replace(/DOI:\s*\S+/gi, '');
+  // Remove ISBN numbers
+  title = title.replace(/ISBN[\s:-]*[\d\-Xx]+/gi, '');
+  // Remove common garbage patterns
+  title = title.replace(/\([^)]*(?:Springer|Elsevier|Wiley|Routledge|Palgrave|Oxford|Cambridge)[^)]*\)/gi, '');
+  title = title.replace(/\[[^\]]*(?:Springer|Elsevier|Wiley|Routledge)[^\]]*\]/gi, '');
+  // Collapse multiple spaces
+  title = title.replace(/\s+/g, ' ').trim();
+  // Remove trailing garbage after the last period that looks like a sentence end
+  if (title.length > 0) {
+    // If title is just garbage after cleanup, fall back
+    if (title.length < 3 || /^[\d\s\.\-:]+$/.test(title)) {
+      if (book.author) {
+        return `${book.author} - ${book.year || 'Book'}`;
+      }
+      return 'Book';
+    }
+    return title;
   }
   if (book.author) {
     return `${book.author} - ${book.year || 'Book'}`;
@@ -134,12 +154,10 @@ function LibGenBookCard({ book, onBookSelect }: { book: LibGenBook; onBookSelect
         }
       }
     } catch {
-      // Server blocked — fall through to direct mirror
+      // Server download failed
+      setDlError("Download failed. Please try again or use a mirror.");
     }
 
-    // Direct open on Anna's Archive (always reliable, user downloads from there)
-    const annaUrl = book.annaUrl || `https://annas-archive.li/md5/${book.md5}`;
-    window.open(annaUrl, "_blank", "noopener,noreferrer");
     setDownloading(false);
   };
 
