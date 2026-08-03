@@ -17,11 +17,11 @@ async function searchLibGen(query: string, limit: number, language?: string): Pr
   
   let html = '';
   const mirrors = [
-    `http://libgen.li/index.php?${params}`,
-    `http://libgen.rs/index.php?${params}`,
-    `http://libgen.is/index.php?${params}`,
-    `http://libgen.st/index.php?${params}`,
-    `http://libgen.gs/index.php?${params}`,
+    `https://libgen.li/index.php?${params}`,
+    `https://libgen.rs/index.php?${params}`,
+    `https://libgen.is/index.php?${params}`,
+    `https://libgen.st/index.php?${params}`,
+    `https://libgen.gs/index.php?${params}`,
   ];
 
   for (const url of mirrors) {
