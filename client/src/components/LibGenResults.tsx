@@ -49,9 +49,9 @@ function FormatBadge({ format }: { format: string }) {
 function MirrorsMenu({ book, onClose }: { book: LibGenBook; onClose: () => void }) {
   const mirrors = [
     book.annaUrl ? { label: "Anna's Archive", url: book.annaUrl, desc: "Most reliable" } : null,
-    { label: "LibGen.li",    url: `https://libgen.li/get.php?md5=${book.md5}`, desc: "Fast" },
-    { label: "LibGen.rs",    url: `https://libgen.rs/get.php?md5=${book.md5}`, desc: "Alternative" },
-    { label: "LibGen.rocks", url: `https://libgen.rocks/get.php?md5=${book.md5}`, desc: "Backup" },
+    { label: "LibGen.li",    url: `https://libgen.li/ads.php?md5=${book.md5}`, desc: "Fast" },
+    { label: "LibGen.rs",    url: `https://libgen.rs/ads.php?md5=${book.md5}`, desc: "Alternative" },
+    { label: "LibGen.rocks", url: `https://libgen.rocks/ads.php?md5=${book.md5}`, desc: "Backup" },
   ].filter(Boolean) as { label: string; url: string; desc: string }[];
 
   return (
@@ -107,6 +107,7 @@ function LibGenBookCard({ book, onBookSelect }: { book: LibGenBook; onBookSelect
     setDlError("");
 
     try {
+      // Try server-side direct download first (streams the PDF if it works)
       const resp = await fetch("/api/download", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -114,40 +115,31 @@ function LibGenBookCard({ book, onBookSelect }: { book: LibGenBook; onBookSelect
       });
 
       if (resp.ok) {
-        // Check content-type BEFORE reading the body so we can route correctly
         const contentType = resp.headers.get("content-type") || "";
-
-        if (contentType.includes("application/json")) {
-          // Server returned mirror links (datacenter IP blocked from direct download)
-          const data = await resp.json();
-          if (data.mirrors && data.mirrors.length > 0) {
-            // Open the first mirror — Anna's Archive is always index 0
-            window.open(data.mirrors[0].url, "_blank", "noopener,noreferrer");
+        if (!contentType.includes("application/json") && !contentType.includes("text/html")) {
+          // Server streamed a real binary PDF — save it
+          const blob = await resp.blob();
+          if (blob.size > 10000) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `${cleanTitle(book)}.${book.format?.toLowerCase() || "pdf"}`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
             setDownloading(false);
             return;
           }
-        } else if (!contentType.includes("text/html")) {
-          // Server managed a direct download — stream it to the user
-          const blob = await resp.blob();
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `${book.title}.${book.format?.toLowerCase() || "pdf"}`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-          setDownloading(false);
-          return;
         }
       }
     } catch {
-      // Network error — fall through to mirror fallback
+      // Server blocked — fall through to direct mirror
     }
 
-    // Final fallback: open Anna's Archive (always reliable)
-    const fallbackUrl = book.annaUrl || `https://annas-archive.se/md5/${book.md5}`;
-    window.open(fallbackUrl, "_blank", "noopener,noreferrer");
+    // Direct open on Anna's Archive (always reliable, user downloads from there)
+    const annaUrl = book.annaUrl || `https://annas-archive.li/md5/${book.md5}`;
+    window.open(annaUrl, "_blank", "noopener,noreferrer");
     setDownloading(false);
   };
 
