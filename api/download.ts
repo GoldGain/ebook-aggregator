@@ -3,9 +3,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 // LibGen / Anna's Archive download URLs to try, in order of reliability
 const DOWNLOAD_SOURCES = [
   // Direct downloads (most reliable)
-  (md5: string) => `https://library.lol/main/${md5}`,
-  (md5: string) => `https://download.library.lol/main/${md5}`,
-  // LibGen mirrors that follow redirects
+      // LibGen mirrors that follow redirects
   (md5: string) => `https://libgen.li/ads.php?md5=${md5}`,
   (md5: string) => `https://libgen.rocks/ads.php?md5=${md5}`,
   (md5: string) => `https://libgen.gs/ads.php?md5=${md5}`,
@@ -127,7 +125,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         error: 'No working download source found',
         md5,
         suggestion: 'Try searching on Anna\'s Archive directly',
-        annaUrl: `https://annas-archive.org/md5/${md5}`,
+        annaUrl: `https://annas-archive.se/md5/${md5}`,
       });
     }
 
