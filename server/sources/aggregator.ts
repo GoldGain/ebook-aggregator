@@ -519,7 +519,7 @@ async function aggregateKicd(): Promise<{ added: number; updated: number; errors
         updated++;
       } else {
         const formats: Record<string, string> = {};
-        if (rightsPolicy.allowDirectDownload && book.downloadUrl) formats.pdf = book.downloadUrl;
+        if (book.downloadUrl) formats.pdf = book.downloadUrl;
 
         const bookId = await createBook({
           title: book.title,
@@ -574,7 +574,7 @@ async function aggregateKnec(): Promise<{ added: number; updated: number; errors
         updated++;
       } else {
         const formats: Record<string, string> = {};
-        if (rightsPolicy.allowDirectDownload && book.downloadUrl) formats.pdf = book.downloadUrl;
+        if (book.downloadUrl) formats.pdf = book.downloadUrl;
 
         const bookId = await createBook({
           title: book.title,
