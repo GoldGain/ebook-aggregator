@@ -50,8 +50,8 @@ export async function fetchKicdResources(limit: number = 50): Promise<KicdBook[]
       const text = $el.text().trim();
 
       // Skip navigation links, "more" links, and the base URL itself
-      if (!href.includes('/sdm_downloads/') || 
-          href === KICD_BASE_URL || 
+      if (!href.includes('/sdm_downloads/') ||
+          href === KICD_BASE_URL ||
           href.endsWith('/sdm_downloads/') ||
           text.toLowerCase() === 'more' ||
           text.toLowerCase() === 'downloads' ||
@@ -74,11 +74,10 @@ export async function fetchKicdResources(limit: number = 50): Promise<KicdBook[]
         subjects: ["Kenya Education", "Curriculum", "CBC"],
         downloadUrl: fullUrl,
         coverUrl: "",
-        publishedDate: date,
+        publishedDate: new Date().toISOString(),
         educationalLevel: "primary",
-        sourceUrl: link || "",
+        sourceUrl: fullUrl,
       });
-    }
     });
 
     return resources.slice(0, limit);
