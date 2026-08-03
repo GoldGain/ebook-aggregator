@@ -207,7 +207,7 @@ export default function Search() {
         <div className="container flex items-center gap-4 h-16">
           <button onClick={() => navigate("/")} className="flex items-center gap-2 flex-shrink-0">
             <BookOpen className="w-6 h-6 text-primary" />
-            <span className="font-black text-lg neon-glow hidden sm:inline">LUMINA</span>
+            <span className="font-black text-lg neon-glow hidden sm:inline">ZAMIFU</span>
           </button>
           <form onSubmit={handleSearch} className="flex-1 relative">
             <div className="relative">
@@ -454,7 +454,7 @@ export default function Search() {
             {!isLoading && !query && !selectedSource && !selectedLevel && (
               <div className="text-center py-20">
                 <SearchIcon className="w-14 h-14 mx-auto mb-4 text-muted-foreground/30" />
-                <h3 className="text-xl font-bold mb-2">Search Lumina Books</h3>
+                <h3 className="text-xl font-bold mb-2">Search ZAMIFU E-MATERIALS</h3>
                 <p className="text-muted-foreground text-sm max-w-sm mx-auto mb-6">
                   Search across millions of free ebooks from 50+ open-access sources worldwide.
                 </p>
