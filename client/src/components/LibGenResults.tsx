@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Loader2, Download, BookOpen, ExternalLink, ChevronDown, Globe, FileText, Hash, Calendar } from "lucide-react";
+import { Loader2, Download, BookOpen, ExternalLink, ChevronDown, Globe, FileText, Hash } from "lucide-react";
 import { useEffect } from "react";
 
 interface LibGenBook {
@@ -49,10 +49,10 @@ function FormatBadge({ format }: { format: string }) {
 function MirrorsMenu({ book, onClose }: { book: LibGenBook; onClose: () => void }) {
   const mirrors = [
     book.annaUrl ? { label: "Anna's Archive", url: book.annaUrl } : null,
-    { label: "LibGen.li",      url: `https://libgen.li/get.php?md5=${book.md5}` },
-    { label: "LibGen.rs",      url: `https://libgen.rs/get.php?md5=${book.md5}` },
-    { label: "Library.lol",   url: `https://library.lol/main/${book.md5}` },
-    { label: "LibGen.rocks",   url: `https://libgen.rocks/get.php?md5=${book.md5}` },
+    { label: "LibGen.li",    url: `https://libgen.li/get.php?md5=${book.md5}` },
+    { label: "LibGen.rs",    url: `https://libgen.rs/get.php?md5=${book.md5}` },
+    { label: "Library.lol", url: `https://library.lol/main/${book.md5}` },
+    { label: "LibGen.rocks", url: `https://libgen.rocks/get.php?md5=${book.md5}` },
   ].filter(Boolean) as { label: string; url: string }[];
 
   return (
@@ -83,34 +83,55 @@ function MirrorsMenu({ book, onClose }: { book: LibGenBook; onClose: () => void 
 function LibGenBookCard({ book, onBookSelect }: { book: LibGenBook; onBookSelect?: (b: LibGenBook) => void }) {
   const [showMirrors, setShowMirrors] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [dlError, setDlError] = useState("");
 
   const handleDownload = async (e: React.MouseEvent) => {
     e.stopPropagation();
     setDownloading(true);
+    setDlError("");
+
     try {
-      // Try our server-side proxy first
       const resp = await fetch("/api/download", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ md5: book.md5, format: book.format.toLowerCase() || "pdf" }),
+        body: JSON.stringify({ md5: book.md5, format: book.format?.toLowerCase() || "pdf" }),
       });
+
       if (resp.ok) {
-        const blob = await resp.blob();
+        // Check content-type BEFORE reading the body so we can route correctly
         const contentType = resp.headers.get("content-type") || "";
-        if (!contentType.includes("text/html") && !contentType.includes("application/json")) {
+
+        if (contentType.includes("application/json")) {
+          // Server returned mirror links (datacenter IP blocked from direct download)
+          const data = await resp.json();
+          if (data.mirrors && data.mirrors.length > 0) {
+            // Open the first mirror — Anna's Archive is always index 0
+            window.open(data.mirrors[0].url, "_blank", "noopener,noreferrer");
+            setDownloading(false);
+            return;
+          }
+        } else if (!contentType.includes("text/html")) {
+          // Server managed a direct download — stream it to the user
+          const blob = await resp.blob();
           const url = URL.createObjectURL(blob);
           const a = document.createElement("a");
           a.href = url;
-          a.download = `${book.title}.${book.format.toLowerCase() || "pdf"}`;
+          a.download = `${book.title}.${book.format?.toLowerCase() || "pdf"}`;
+          document.body.appendChild(a);
           a.click();
+          document.body.removeChild(a);
           URL.revokeObjectURL(url);
           setDownloading(false);
           return;
         }
       }
-    } catch {}
-    // Fallback: open Anna's Archive or best mirror in new tab
-    window.open(book.annaUrl || book.sourceUrl, "_blank", "noopener,noreferrer");
+    } catch {
+      // Network error — fall through to mirror fallback
+    }
+
+    // Final fallback: open Anna's Archive (always reliable)
+    const fallbackUrl = book.annaUrl || `https://annas-archive.org/md5/${book.md5}`;
+    window.open(fallbackUrl, "_blank", "noopener,noreferrer");
     setDownloading(false);
   };
 
@@ -136,7 +157,7 @@ function LibGenBookCard({ book, onBookSelect }: { book: LibGenBook; onBookSelect
         </div>
       </div>
 
-      {/* Meta row: format badge + filesize + pages + language */}
+      {/* Meta row */}
       <div className="flex items-center gap-2 mt-2.5 flex-wrap">
         {book.format && <FormatBadge format={book.format} />}
         {book.filesize && (
@@ -156,7 +177,7 @@ function LibGenBookCard({ book, onBookSelect }: { book: LibGenBook; onBookSelect
         )}
       </div>
 
-      {/* Action row: Download + Mirrors */}
+      {/* Action row */}
       <div className="flex items-center gap-2 mt-3" onClick={(e) => e.stopPropagation()}>
         <button
           onClick={handleDownload}
@@ -168,7 +189,7 @@ function LibGenBookCard({ book, onBookSelect }: { book: LibGenBook; onBookSelect
           ) : (
             <Download className="w-3.5 h-3.5" />
           )}
-          Download {book.format || "PDF"}
+          {downloading ? "Opening..." : `Download ${book.format || "PDF"}`}
         </button>
 
         <div className="relative">
@@ -183,6 +204,10 @@ function LibGenBookCard({ book, onBookSelect }: { book: LibGenBook; onBookSelect
             <MirrorsMenu book={book} onClose={() => setShowMirrors(false)} />
           )}
         </div>
+
+        {dlError && (
+          <span className="text-[10px] text-destructive ml-1">{dlError}</span>
+        )}
       </div>
     </div>
   );
