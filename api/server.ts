@@ -195,6 +195,216 @@ app.get("/api/libgen", async (req: any, res: any) => {
 });
 
 
+// Download proxy — tries multiple mirrors, streams file to user
+app.post("/api/download", async (req: any, res: any) => {
+  const { md5, url: directUrl, format = "pdf" } = req.body || {};
+  let downloadUrl = directUrl;
+
+  if (!downloadUrl && md5) {
+    const mirrors = [
+      `https://en.annas-archive.gl/md5/${md5}`,
+      `https://annas-archive.org/md5/${md5}`,
+      `https://libgen.li/get.php?md5=${md5}`,
+      `https://libgen.rs/get.php?md5=${md5}`,
+      `https://libgen.is/get.php?md5=${md5}`,
+    ];
+
+    const axios = await import("axios");
+    for (const mirror of mirrors) {
+      try {
+        const head = await axios.default.head(mirror, {
+          timeout: 8000,
+          maxRedirects: 5,
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; LuminaBooks/2.0)" },
+        });
+        if (head.status < 400) {
+          downloadUrl = mirror;
+          break;
+        }
+      } catch (e) { continue; }
+    }
+  }
+
+  if (!downloadUrl) {
+    return res.status(404).json({ error: "No working download link found", success: false });
+  }
+
+  try {
+    const axios = await import("axios");
+    const response = await axios.default.get(downloadUrl, {
+      responseType: "arraybuffer",
+      timeout: 60000,
+      maxRedirects: 5,
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; LuminaBooks/2.0)" },
+    });
+
+    const contentType = response.headers["content-type"] || "application/octet-stream";
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Disposition", `attachment; filename="book.${format}"`);
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.send(Buffer.from(response.data));
+  } catch (error: any) {
+    console.error("Download proxy error:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Download failed",
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+});
+
+// OPTIONS preflight for download
+app.options("/api/download", (_req: any, res: any) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.status(204).end();
+});
+
+// KICD + KNEC materials search endpoint
+app.get("/api/kicd", async (req: any, res: any) => {
+  const q = (req.query.q as string || "").toLowerCase();
+  const limit = parseInt(req.query.limit as string || "50", 10);
+
+  try {
+    const { fetchKicdResources } = await import("../server/sources/kicd");
+    const { fetchKnecResources } = await import("../server/sources/knec");
+
+    const [kicdResults, knecResults] = await Promise.allSettled([
+      fetchKicdResources(limit),
+      fetchKnecResources(limit),
+    ]);
+
+    let allResources: any[] = [];
+    if (kicdResults.status === "fulfilled") allResources.push(...kicdResults.value);
+    if (knecResults.status === "fulfilled") allResources.push(...knecResults.value);
+
+    // Filter by query if provided
+    if (q && q.length >= 2) {
+      allResources = allResources.filter((r: any) =>
+        r.title.toLowerCase().includes(q) ||
+        r.description.toLowerCase().includes(q) ||
+        r.subjects.some((s: string) => s.toLowerCase().includes(q))
+      );
+    }
+
+    return res.status(200).json({
+      success: true,
+      source: "kicd_knec",
+      query: q || null,
+      total: allResources.length,
+      books: allResources.slice(0, limit),
+    });
+  } catch (error: any) {
+    console.error("KICD/KNEC search error:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Failed to fetch KICD/KNEC materials",
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+});
+
+// Unified search — combines LibGen, KICD/KNEC, and local DB
+app.get("/api/search", async (req: any, res: any) => {
+  const q = (req.query.q as string || "").trim();
+  const limit = parseInt(req.query.limit as string || "50", 10);
+
+  if (!q || q.length < 2) {
+    return res.status(400).json({ error: 'Query parameter "q" is required (min 2 chars)' });
+  }
+
+  try {
+    const axios = await import("axios");
+    const cheerioModule = await import("cheerio");
+    const cheerio = cheerioModule.default || cheerioModule;
+
+    // 1. Fetch LibGen results
+    let libgenBooks: any[] = [];
+    try {
+      const encodedQuery = encodeURIComponent(q);
+      const lgUrl = `http://libgen.li/index.php?req=${encodedQuery}&lg_topic=libgen&open=0&view=simple&res=50&phrase=1&column=def`;
+      const response = await axios.default.get(lgUrl, {
+        timeout: 20000,
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; LuminaBooks/2.0; Educational Aggregator)" },
+      });
+      const $ = cheerio.load(response.data);
+      $("#tablelibgen tr").each((_i: number, row: any) => {
+        const cells = $(row).find("td");
+        if (cells.length < 9) return;
+        const editionLinks = cells.eq(0).find('a[href*="edition.php"]');
+        const titleLink = editionLinks.length > 1 ? editionLinks.last() : editionLinks.first();
+        if (!titleLink.length) return;
+        const title = titleLink.text().trim();
+        const author = cells.eq(1).text().trim();
+        const year = cells.eq(3).text().trim();
+        const lang = cells.eq(4).text().trim();
+        const annaLink = cells.eq(8).find('a[href*="annas-archive"]').first();
+        const libgenLink = cells.eq(8).find('a[title="libgen"], a[href*="/get.php"]').first();
+        const md5Href = libgenLink.attr("href") || annaLink.attr("href") || "";
+        const md5Match = md5Href.match(/md5=([a-f0-9]{32})/);
+        const md5 = md5Match ? md5Match[1] : "";
+        if (title && md5 && title.length > 2) {
+          libgenBooks.push({
+            title, author: author || "Unknown", year: year || "",
+            language: lang || "en", md5, source: "libgen",
+            sourceUrl: `https://en.annas-archive.gl/md5/${md5}`,
+          });
+        }
+      });
+    } catch (e) { /* LibGen unavailable — continue with other sources */ }
+
+    // 2. Fetch KICD/KNEC (lightweight — timeout fast)
+    let kicdBooks: any[] = [];
+    try {
+      const { fetchKicdResources, fetchKnecResources } = await Promise.all([
+        import("../server/sources/kicd").catch(() => null),
+        import("../server/sources/knec").catch(() => null),
+      ]);
+      if (fetchKicdResources) {
+        const results = await Promise.race([
+          fetchKicdResources(20),
+          new Promise<any[]>((_, reject) => setTimeout(() => reject(new Error("timeout")), 8000)),
+        ]).catch(() => []);
+        kicdBooks.push(...results.filter((r: any) => r.title.toLowerCase().includes(q)));
+      }
+      if (fetchKnecResources) {
+        const results = await Promise.race([
+          fetchKnecResources(20),
+          new Promise<any[]>((_, reject) => setTimeout(() => reject(new Error("timeout")), 8000)),
+        ]).catch(() => []);
+        kicdBooks.push(...results.filter((r: any) => r.title.toLowerCase().includes(q)));
+      }
+    } catch (e) { /* KICD/KNEC unavailable */ }
+
+    // 3. Combine and deduplicate
+    const allBooks = [...libgenBooks, ...kicdBooks.map((b: any) => ({
+      ...b, source: b.author === "KICD" ? "kicd" : "knec",
+    }))];
+
+    return res.status(200).json({
+      success: true,
+      query: q,
+      total: allBooks.length,
+      sources: {
+        libgen: libgenBooks.length,
+        kicd_knec: kicdBooks.length,
+      },
+      books: allBooks.slice(0, limit),
+    });
+  } catch (error: any) {
+    console.error("Unified search error:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Unified search failed",
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+});
+
+
 export default function handler(req: VercelRequest, res: VercelResponse) {
   return app(req, res);
 }
