@@ -48,14 +48,9 @@ export function LibGenResults({ query, language }: { query: string; language?: s
             <p className="text-sm font-medium truncate">{book.title}</p>
             <p className="text-xs text-muted-foreground">{book.author} {book.year && ` · ${book.year}`} · {book.language} · {book.format?.toUpperCase()}</p>
             <div className="flex gap-2 mt-2">
-              {book.downloadUrl && (
-                <a href={book.downloadUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary rounded text-xs hover:bg-primary/20">
-                  <Download className="w-3 h-3" /> Download
+              <a href={`/api/download?md5=${book.md5}&format=${book.format || 'pdf'}`} className="flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary rounded text-xs hover:bg-primary/20">
+                  <Download className="w-3 h-3" /> Download PDF
                 </a>
-              )}
-              <a href={book.annaArchiveUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 px-2 py-1 bg-blue-500/10 text-blue-400 rounded text-xs hover:bg-blue-500/20">
-                <ExternalLink className="w-3 h-3" /> Anna's Archive
-              </a>
             </div>
           </div>
         </div>
