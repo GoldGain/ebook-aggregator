@@ -473,7 +473,7 @@ export default function Search() {
             )}
 
             {/* No results */}
-            {!isLoading && query && results && results.length === 0 && (
+            {!isLoading && query && query.length < 2 && results && results.length === 0 && (
               <div className="text-center py-20">
                 <BookOpen className="w-14 h-14 mx-auto mb-4 text-muted-foreground/30" />
                 <h3 className="text-xl font-bold mb-2">No results found</h3>
