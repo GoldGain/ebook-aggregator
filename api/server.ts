@@ -196,8 +196,23 @@ app.get("/api/libgen", async (req: any, res: any) => {
 
 
 // Download proxy — resolves actual file URL from LibGen mirrors and streams to user
-app.post("/api/download", async (req: any, res: any) => {
-  const { md5, url: directUrl, format = "pdf" } = req.body || {};
+// Supports both GET (query params) and POST (JSON body)
+app.all("/api/download", async (req: any, res: any) => {
+  // Parse inputs from GET query or POST body
+  let md5: string | undefined;
+  let directUrl: string | undefined;
+  let format = "pdf";
+
+  if (req.method === "GET") {
+    md5 = req.query.md5 as string | undefined;
+    directUrl = req.query.url as string | undefined;
+    format = (req.query.format as string) || "pdf";
+  } else if (req.method === "POST") {
+    const body = req.body || {};
+    md5 = body.md5;
+    directUrl = body.url;
+    format = body.format || "pdf";
+  }
 
   if (!md5 && !directUrl) {
     return res.status(400).json({ error: "md5 or url required", success: false });
@@ -207,28 +222,34 @@ app.post("/api/download", async (req: any, res: any) => {
   const cheerioModule = await import("cheerio");
   const cheerio = cheerioModule.default || cheerioModule;
 
-  const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
+  const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
-  // Helper: check if a URL serves a real file (not HTML)
   const isFileResponse = (ct: string) =>
-    !ct.includes("text/html") && !ct.includes("application/json");
+    !ct.includes("text/html") && !ct.includes("application/json") && ct.length > 0;
 
-  // Step 1: if direct URL provided and it's a file, stream it
+  const streamFile = (data: Buffer, contentType: string) => {
+    const ext = (format || "pdf").toLowerCase();
+    res.setHeader("Content-Type", contentType || "application/octet-stream");
+    res.setHeader("Content-Disposition", `attachment; filename="book.${ext}"`);
+    res.setHeader("Content-Length", data.length.toString());
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+    return res.send(data);
+  };
+
+  // Step 1: Direct URL provided
   if (directUrl) {
     try {
       const response = await axios.default.get(directUrl, {
         responseType: "arraybuffer",
-        timeout: 50000,
+        timeout: 40000,
         maxRedirects: 8,
-        headers: { "User-Agent": UA },
+        headers: { "User-Agent": UA, "Referer": "https://libgen.is/" },
+        validateStatus: (s: number) => s < 500,
       });
-      const ct = response.headers["content-type"] || "application/octet-stream";
-      if (isFileResponse(ct)) {
-        const ext = format.toLowerCase() || "pdf";
-        res.setHeader("Content-Type", ct);
-        res.setHeader("Content-Disposition", `attachment; filename="book.${ext}"`);
-        res.setHeader("Access-Control-Allow-Origin", "*");
-        return res.send(Buffer.from(response.data));
+      const ct = response.headers["content-type"] || "";
+      if (isFileResponse(ct) && response.data && response.data.length > 1000) {
+        return streamFile(Buffer.from(response.data), ct);
       }
     } catch { /* fall through */ }
   }
@@ -237,91 +258,122 @@ app.post("/api/download", async (req: any, res: any) => {
     return res.status(404).json({ error: "No working download link found", success: false });
   }
 
+  // Step 2: Scrape Anna's Archive for download links (most reliable proxy)
   let resolvedUrl: string | null = null;
+  try {
+    const annaResp = await axios.default.get(`https://annas-archive.org/md5/${md5}`, {
+      timeout: 15000,
+      maxRedirects: 5,
+      headers: { "User-Agent": UA, "Accept": "text/html,application/xhtml+xml" },
+    });
+    const $ = cheerio.load(annaResp.data);
 
-  // Step 2: Scrape library.lol/main/{md5} to get the actual download link
-  if (!resolvedUrl) {
-    try {
-      const pageResp = await axios.default.get(`https://library.lol/main/${md5}`, {
-        timeout: 12000,
-        maxRedirects: 5,
-        headers: { "User-Agent": UA, "Accept": "text/html,application/xhtml+xml,*/*" },
-      });
-      const $ = cheerio.load(pageResp.data);
-      // The download link is in #download h2 a
+    // Find all download links on Anna's Archive page
+    const downloadLinks: string[] = [];
+    $('a[href*="library.lol"], a[href*="libgen."], a[href*="cloudflare-ipfs.com"], a[href*="gateway.ipfs.io"], a[href*="download."]').each((_: number, el: any) => {
+      const href = $(el).attr("href");
+      if (href && (href.includes("/main/") || href.includes("/ipfs/") || href.includes("get.php") || href.includes("ads.php"))) {
+        downloadLinks.push(href);
+      }
+    });
+
+    // Try each Anna's Archive resolved link
+    for (const link of downloadLinks.slice(0, 5)) {
+      try {
+        const testResp = await axios.default.get(link, {
+          responseType: "arraybuffer",
+          timeout: 30000,
+          maxRedirects: 8,
+          headers: { "User-Agent": UA, "Referer": "https://annas-archive.org/" },
+          validateStatus: (s: number) => s < 500,
+        });
+        const ct = testResp.headers["content-type"] || "";
+        if (isFileResponse(ct) && testResp.data && testResp.data.length > 1000) {
+          return streamFile(Buffer.from(testResp.data), ct);
+        }
+      } catch { continue; }
+    }
+
+    // Save the first link for fallback
+    if (downloadLinks.length > 0) resolvedUrl = downloadLinks[0];
+  } catch { /* Anna's Archive unavailable */ }
+
+  // Step 3: Try library.lol directly
+  try {
+    const pageResp = await axios.default.get(`https://library.lol/main/${md5}`, {
+      timeout: 15000,
+      maxRedirects: 5,
+      headers: { "User-Agent": UA, "Accept": "text/html,application/xhtml+xml,*/*" },
+      validateStatus: (s: number) => s < 500,
+    });
+    const ct = pageResp.headers["content-type"] || "";
+    if (isFileResponse(ct) && pageResp.data && pageResp.data.length > 1000) {
+      return streamFile(Buffer.from(pageResp.data), ct);
+    }
+    // Try scraping the page for download links
+    if (typeof pageResp.data === "string" || pageResp.data instanceof Buffer) {
+      const html = pageResp.data.toString();
+      const $ = cheerio.load(html);
       const downloadHref = $("#download h2 a, #download a[href*='.pdf'], #download a[href*='.epub'], #download a").first().attr("href");
       if (downloadHref && downloadHref.startsWith("http")) {
         resolvedUrl = downloadHref;
       }
-    } catch { /* library.lol unavailable */ }
-  }
+    }
+  } catch { /* library.lol unavailable */ }
 
-  // Step 3: Try libgen.li/get.php — may redirect directly to file
-  if (!resolvedUrl) {
+  // Step 4: Try libgen.li/get.php (may redirect to binary)
+  try {
+    const testResp = await axios.default.get(`https://libgen.li/get.php?md5=${md5}`, {
+      responseType: "arraybuffer",
+      timeout: 20000,
+      maxRedirects: 8,
+      headers: { "User-Agent": UA, "Referer": "https://libgen.li/" },
+      validateStatus: (s: number) => s < 500,
+    });
+    const ct = testResp.headers["content-type"] || "";
+    if (isFileResponse(ct) && testResp.data && testResp.data.length > 1000) {
+      return streamFile(Buffer.from(testResp.data), ct);
+    }
+  } catch { /* try next */ }
+
+  // Step 5: Try alternative mirrors
+  const altMirrors = [
+    `https://download.library.lol/main/${md5}`,
+    `https://libgen.rocks/get.php?md5=${md5}`,
+    `https://libgen.rs/get.php?md5=${md5}`,
+    `https://libgen.is/get.php?md5=${md5}`,
+    `https://libgen.gs/get.php?md5=${md5}`,
+  ];
+  for (const m of altMirrors) {
     try {
-      const testResp = await axios.default.get(`https://libgen.li/get.php?md5=${md5}`, {
+      const testResp = await axios.default.get(m, {
         responseType: "arraybuffer",
         timeout: 15000,
         maxRedirects: 8,
-        headers: { "User-Agent": UA },
-        validateStatus: (s) => s < 500,
+        headers: { "User-Agent": UA, "Referer": "https://libgen.is/" },
+        validateStatus: (s: number) => s < 500,
       });
       const ct = testResp.headers["content-type"] || "";
-      if (isFileResponse(ct) && testResp.status < 400) {
-        const ext = format.toLowerCase() || "pdf";
-        res.setHeader("Content-Type", ct);
-        res.setHeader("Content-Disposition", `attachment; filename="book.${ext}"`);
-        res.setHeader("Access-Control-Allow-Origin", "*");
-        return res.send(Buffer.from(testResp.data));
+      if (isFileResponse(ct) && testResp.data && testResp.data.length > 1000) {
+        return streamFile(Buffer.from(testResp.data), ct);
       }
-    } catch { /* try next */ }
+    } catch { continue; }
   }
 
-  // Step 4: Try libgen.rocks
-  if (!resolvedUrl) {
-    const altMirrors = [
-      `https://libgen.rocks/get.php?md5=${md5}`,
-      `https://libgen.rs/get.php?md5=${md5}`,
-    ];
-    for (const m of altMirrors) {
-      try {
-        const testResp = await axios.default.get(m, {
-          responseType: "arraybuffer",
-          timeout: 12000,
-          maxRedirects: 8,
-          headers: { "User-Agent": UA },
-          validateStatus: (s) => s < 500,
-        });
-        const ct = testResp.headers["content-type"] || "";
-        if (isFileResponse(ct) && testResp.status < 400) {
-          const ext = format.toLowerCase() || "pdf";
-          res.setHeader("Content-Type", ct);
-          res.setHeader("Content-Disposition", `attachment; filename="book.${ext}"`);
-          res.setHeader("Access-Control-Allow-Origin", "*");
-          return res.send(Buffer.from(testResp.data));
-        }
-      } catch { continue; }
-    }
-  }
-
-  // Step 5: Stream from resolved URL (library.lol link)
+  // Step 6: Stream from resolved URL (Anna's Archive or library.lol link)
   if (resolvedUrl) {
     try {
       const response = await axios.default.get(resolvedUrl, {
         responseType: "arraybuffer",
         timeout: 50000,
         maxRedirects: 8,
-        headers: { "User-Agent": UA },
+        headers: { "User-Agent": UA, "Referer": "https://annas-archive.org/" },
       });
       const ct = response.headers["content-type"] || "application/octet-stream";
-      const ext = format.toLowerCase() || "pdf";
-      res.setHeader("Content-Type", ct);
-      res.setHeader("Content-Disposition", `attachment; filename="book.${ext}"`);
-      res.setHeader("Access-Control-Allow-Origin", "*");
-      return res.send(Buffer.from(response.data));
-    } catch (error: any) {
-      console.error("Download stream error:", error);
-    }
+      if (response.data && response.data.length > 1000) {
+        return streamFile(Buffer.from(response.data), ct);
+      }
+    } catch { /* exhausted */ }
   }
 
   return res.status(502).json({
@@ -335,7 +387,7 @@ app.post("/api/download", async (req: any, res: any) => {
 // OPTIONS preflight for download
 app.options("/api/download", (_req: any, res: any) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   res.status(204).end();
 });
