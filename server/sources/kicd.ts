@@ -74,12 +74,11 @@ export async function fetchKicdResources(limit: number = 50): Promise<KicdBook[]
         subjects: ["Kenya Education", "Curriculum", "CBC"],
         downloadUrl: fullUrl,
         coverUrl: "",
-          publishedDate: date,
-          educationalLevel: "primary",
-          sourceUrl: link || "",
-        });
-      }
-    });
+        publishedDate: date,
+        educationalLevel: "primary",
+        sourceUrl: link || "",
+      });
+    }
 
     return resources.slice(0, limit);
   } catch (error) {
