@@ -51,7 +51,6 @@ function MirrorsMenu({ book, onClose }: { book: LibGenBook; onClose: () => void 
     book.annaUrl ? { label: "Anna's Archive", url: book.annaUrl, desc: "Most reliable" } : null,
     { label: "LibGen.li",    url: `https://libgen.li/get.php?md5=${book.md5}`, desc: "Fast" },
     { label: "LibGen.rs",    url: `https://libgen.rs/get.php?md5=${book.md5}`, desc: "Alternative" },
-    { label: "Library.lol", url: `https://library.lol/main/${book.md5}`, desc: "Direct" },
     { label: "LibGen.rocks", url: `https://libgen.rocks/get.php?md5=${book.md5}`, desc: "Backup" },
   ].filter(Boolean) as { label: string; url: string; desc: string }[];
 
@@ -85,6 +84,16 @@ function MirrorsMenu({ book, onClose }: { book: LibGenBook; onClose: () => void 
       ))}
     </div>
   );
+}
+
+function cleanTitle(book: LibGenBook) {
+  if (book.title && !book.title.includes('DOI:') && !book.title.includes('ISBN:')) {
+    return book.title;
+  }
+  if (book.author) {
+    return `${book.author} - ${book.year || 'Book'}`;
+  }
+  return 'Book';
 }
 
 function LibGenBookCard({ book, onBookSelect }: { book: LibGenBook; onBookSelect?: (b: LibGenBook) => void }) {
@@ -137,7 +146,7 @@ function LibGenBookCard({ book, onBookSelect }: { book: LibGenBook; onBookSelect
     }
 
     // Final fallback: open Anna's Archive (always reliable)
-    const fallbackUrl = book.annaUrl || `https://annas-archive.org/md5/${book.md5}`;
+    const fallbackUrl = book.annaUrl || `https://annas-archive.se/md5/${book.md5}`;
     window.open(fallbackUrl, "_blank", "noopener,noreferrer");
     setDownloading(false);
   };
@@ -154,7 +163,7 @@ function LibGenBookCard({ book, onBookSelect }: { book: LibGenBook; onBookSelect
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-bold line-clamp-2 group-hover:text-primary transition leading-snug text-foreground">
-            {book.title}
+            {cleanTitle(book)}
           </p>
           <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
             <span className="font-medium">{book.author || "Unknown Author"}</span>
