@@ -78,7 +78,7 @@ app.get("/api/libgen", async (req: any, res: any) => {
   try {
     const encodedQuery = encodeURIComponent(q);
     const langParam = language ? `&lang=${encodeURIComponent(language)}` : "";
-    const url = `http://libgen.li/index.php?req=${encodedQuery}&lg_topic=libgen&open=0&view=simple&res=100&phrase=1&column=def${langParam}`;
+    const url = `https://libgen.li/index.php?req=${encodedQuery}&lg_topic=libgen&open=0&view=simple&res=100&phrase=1&column=def${langParam}`;
 
     const axios = await import("axios");
     const cheerioModule = await import("cheerio");
@@ -325,7 +325,7 @@ app.get("/api/search", async (req: any, res: any) => {
     let libgenBooks: any[] = [];
     try {
       const encodedQuery = encodeURIComponent(q);
-      const lgUrl = `http://libgen.li/index.php?req=${encodedQuery}&lg_topic=libgen&open=0&view=simple&res=50&phrase=1&column=def`;
+      const lgUrl = `https://libgen.li/index.php?req=${encodedQuery}&lg_topic=libgen&open=0&view=simple&res=50&phrase=1&column=def`;
       const response = await axios.default.get(lgUrl, {
         timeout: 20000,
         headers: { "User-Agent": "Mozilla/5.0 (compatible; LuminaBooks/2.0; Educational Aggregator)" },
