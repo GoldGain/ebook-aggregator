@@ -139,6 +139,7 @@ app.get("/api/libgen", async (req: any, res: any) => {
 
       // Cell 7: Format
       const format = cells.eq(7).text().trim();
+      if (format.toLowerCase() !== 'pdf') return;
 
       // Cell 8: MD5 download link — extract both Libgen and Anna's Archive links
       const libgenLink = cells.eq(8).find('a[title="libgen"], a[href*="/get.php"]').first();
@@ -383,7 +384,9 @@ app.get("/api/search", async (req: any, res: any) => {
         const md5Href = libgenLink.attr("href") || annaLink.attr("href") || "";
         const md5Match = md5Href.match(/md5=([a-f0-9]{32})/);
         const md5 = md5Match ? md5Match[1] : "";
-        if (title && md5 && title.length > 2) {
+        // Only include PDFs
+        const formatCell = cells.eq(7).text().trim().toLowerCase();
+        if (title && md5 && title.length > 2 && formatCell === 'pdf') {
           libgenBooks.push({
             title, author: author || "Unknown", year: year || "",
             language: lang || "en", md5, source: "libgen",

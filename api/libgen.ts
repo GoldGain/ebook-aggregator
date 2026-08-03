@@ -66,6 +66,7 @@ async function searchLibGen(query: string, limit: number, language?: string): Pr
 
     if (!title || !md5) return;
     if (language && language !== 'all' && lang.toLowerCase() !== language.toLowerCase()) return;
+    if (format.toLowerCase() !== 'pdf') return;
 
     books.push({
       title, author, publisher, year, language: lang, pages, size, format, md5, fileId,
@@ -117,6 +118,7 @@ async function searchAnnasArchive(query: string, limit: number): Promise<LibGenB
 
       const formatEl = parent.find('span:contains("pdf"), span:contains("epub"), span:contains("mobi")').first();
       const format = formatEl.text().trim().toLowerCase() || 'pdf';
+      if (format !== 'pdf') return;
 
       if (title && title.length > 1) {
         books.push({

@@ -8,6 +8,196 @@ var __export = (target, all) => {
     __defProp(target, name, { get: all[name], enumerable: true });
 };
 
+// server/sources/kicd.ts
+var kicd_exports = {};
+__export(kicd_exports, {
+  fetchKicdResources: () => fetchKicdResources,
+  searchKicdResources: () => searchKicdResources
+});
+import axios3 from "axios";
+import * as cheerio from "cheerio";
+async function fetchKicdResources(limit = 50) {
+  try {
+    const response = await axios3.get(KICD_BASE_URL, {
+      timeout: 2e4,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; EbookAggregator/1.0)",
+        "Accept": "text/html,application/xhtml+xml"
+      }
+    });
+    if (response.status !== 200) return [];
+    const $ = cheerio.load(response.data);
+    const resources = [];
+    const seen = /* @__PURE__ */ new Set();
+    $('a[href*="/sdm_downloads/"]').each((_idx, el) => {
+      const $el = $(el);
+      const href = $el.attr("href") || "";
+      const text2 = $el.text().trim();
+      if (!href.includes("/sdm_downloads/") || href === KICD_BASE_URL || href.endsWith("/sdm_downloads/") || text2.toLowerCase() === "more" || text2.toLowerCase() === "downloads" || text2.length < 5) {
+        return;
+      }
+      if (seen.has(href)) return;
+      seen.add(href);
+      const fullUrl = href.startsWith("http") ? href : `https://kicd.ac.ke${href.startsWith("/") ? "" : "/"}${href}`;
+      resources.push({
+        id: `kicd-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        title: text2.substring(0, 255),
+        author: "KICD",
+        description: `KICD educational resource: ${text2}`,
+        language: "en",
+        subjects: ["Kenya Education", "Curriculum", "CBC"],
+        downloadUrl: fullUrl,
+        coverUrl: "",
+        publishedDate: (/* @__PURE__ */ new Date()).toISOString(),
+        educationalLevel: "primary",
+        sourceUrl: fullUrl
+      });
+    });
+    return resources.slice(0, limit);
+  } catch (error) {
+    console.error("Failed to fetch KICD resources:", error);
+    return [];
+  }
+}
+async function searchKicdResources(category) {
+  try {
+    const searchUrl = `${KICD_BASE_URL}?s=${encodeURIComponent(category)}`;
+    const response = await axios3.get(searchUrl, {
+      timeout: 2e4,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; EbookAggregator/1.0)"
+      }
+    });
+    if (response.status !== 200) return [];
+    const $ = cheerio.load(response.data);
+    const resources = [];
+    $("tr, .download-item, article").each((_idx, el) => {
+      const $el = $(el);
+      const title = $el.find("td:first-child, h3, .title").first().text().trim();
+      const link = $el.find('a[href*=".pdf"], a[href*=".epub"]').first().attr("href") || "";
+      if (title && title.length > 3) {
+        resources.push({
+          id: `kicd-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          title,
+          author: "KICD",
+          description: `KICD resource: ${title}`,
+          language: "en",
+          subjects: [category, "Kenya Education"],
+          downloadUrl: link,
+          coverUrl: "",
+          publishedDate: "",
+          educationalLevel: "primary",
+          sourceUrl: link
+        });
+      }
+    });
+    return resources;
+  } catch (error) {
+    console.error("Failed to search KICD resources:", error);
+    return [];
+  }
+}
+var KICD_BASE_URL;
+var init_kicd = __esm({
+  "server/sources/kicd.ts"() {
+    KICD_BASE_URL = "https://kicd.ac.ke/sdm_downloads/";
+  }
+});
+
+// server/sources/knec.ts
+var knec_exports = {};
+__export(knec_exports, {
+  fetchKnecResources: () => fetchKnecResources,
+  searchKnecResources: () => searchKnecResources
+});
+import axios4 from "axios";
+import * as cheerio2 from "cheerio";
+async function fetchKnecResources(limit = 50) {
+  try {
+    const https = await import("https");
+    const agent = new https.Agent({ rejectUnauthorized: false });
+    const response = await axios4.get(KNEC_BASE_URL, {
+      timeout: 2e4,
+      httpsAgent: agent,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; EbookAggregator/1.0)",
+        "Accept": "text/html,application/xhtml+xml"
+      }
+    });
+    if (response.status !== 200) return [];
+    const $ = cheerio2.load(response.data);
+    const resources = [];
+    $('a[href*=".pdf"], a[href*=".doc"], a.download, .resource-item, li a').each((_idx, el) => {
+      const $el = $(el);
+      const title = $el.text().trim();
+      const link = $el.attr("href") || "";
+      if (title && title.length > 5 && !title.includes("login") && !title.includes("home")) {
+        resources.push({
+          id: `knec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          title: title.substring(0, 255),
+          author: "KNEC",
+          description: `KNEC educational resource: ${title.substring(0, 200)}`,
+          language: "en",
+          subjects: ["Kenya Examinations", "Past Papers", "CBC Assessment"],
+          downloadUrl: link.startsWith("http") ? link : `${KNEC_BASE_URL}${link}`,
+          coverUrl: "",
+          publishedDate: "",
+          educationalLevel: "primary",
+          sourceUrl: link
+        });
+      }
+    });
+    return resources.slice(0, limit);
+  } catch (error) {
+    console.error("Failed to fetch KNEC resources:", error);
+    return [];
+  }
+}
+async function searchKnecResources(query) {
+  try {
+    const searchUrl = `${KNEC_BASE_URL}?s=${encodeURIComponent(query)}`;
+    const response = await axios4.get(searchUrl, {
+      timeout: 2e4,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; EbookAggregator/1.0)"
+      }
+    });
+    if (response.status !== 200) return [];
+    const $ = cheerio2.load(response.data);
+    const resources = [];
+    $("article a, .result a, li a").each((_idx, el) => {
+      const $el = $(el);
+      const title = $el.text().trim();
+      const link = $el.attr("href") || "";
+      if (title && title.length > 5) {
+        resources.push({
+          id: `knec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          title: title.substring(0, 255),
+          author: "KNEC",
+          description: `KNEC resource: ${title.substring(0, 200)}`,
+          language: "en",
+          subjects: [query, "KNEC"],
+          downloadUrl: link,
+          coverUrl: "",
+          publishedDate: "",
+          educationalLevel: "primary",
+          sourceUrl: link
+        });
+      }
+    });
+    return resources;
+  } catch (error) {
+    console.error("Failed to search KNEC resources:", error);
+    return [];
+  }
+}
+var KNEC_BASE_URL;
+var init_knec = __esm({
+  "server/sources/knec.ts"() {
+    KNEC_BASE_URL = "https://cba.knec.ac.ke/";
+  }
+});
+
 // server/sources/ajol.ts
 var ajol_exports = {};
 __export(ajol_exports, {
@@ -1133,7 +1323,14 @@ async function importGutenbergBook(urlOrId) {
     language: gutenbergBook.language,
     coverUrl: gutenbergBook.coverImage,
     subjects: JSON.stringify(gutenbergBook.subjects),
-    formats: JSON.stringify(gutenbergBook.formats)
+    formats: JSON.stringify(gutenbergBook.formats),
+    source: "gutenberg",
+    sourceUrl: `https://www.gutenberg.org/ebooks/${gutenbergId}`,
+    rightsStatus: "public_domain",
+    licenseName: "Project Gutenberg public-domain collection",
+    licenseUrl: "https://www.gutenberg.org/policy/license.html",
+    directDownloadAllowed: true,
+    provenanceCheckedAt: /* @__PURE__ */ new Date()
   });
   return result;
 }
@@ -1234,92 +1431,9 @@ function parseOpenTextbook(data) {
   };
 }
 
-// server/sources/kicd.ts
-import axios3 from "axios";
-import * as cheerio from "cheerio";
-var KICD_BASE_URL = "https://kicd.ac.ke/sdm_downloads/";
-async function fetchKicdResources(limit = 50) {
-  try {
-    const response = await axios3.get(KICD_BASE_URL, {
-      timeout: 2e4,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; EbookAggregator/1.0)",
-        "Accept": "text/html,application/xhtml+xml"
-      }
-    });
-    if (response.status !== 200) return [];
-    const $ = cheerio.load(response.data);
-    const resources = [];
-    $(".download-listing, .sdm_download, tr").each((_idx, el) => {
-      const $el = $(el);
-      const title = $el.find(".sdm_download_title, td:first-child, h3, h4").first().text().trim();
-      const link = $el.find('a[href*=".pdf"], a[href*=".epub"], a.download').first().attr("href") || "";
-      const date = $el.find(".sdm_date, td:last-child, .date").first().text().trim();
-      if (title && title.length > 3) {
-        resources.push({
-          id: `kicd-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          title,
-          author: "KICD",
-          description: `Educational resource from Kenya Institute of Curriculum Development: ${title}`,
-          language: "en",
-          subjects: ["Kenya Education", "Curriculum", "CBC"],
-          downloadUrl: link.startsWith("http") ? link : `${KICD_BASE_URL}${link}`,
-          coverUrl: "",
-          publishedDate: date,
-          educationalLevel: "primary",
-          sourceUrl: link || ""
-        });
-      }
-    });
-    return resources.slice(0, limit);
-  } catch (error) {
-    console.error("Failed to fetch KICD resources:", error);
-    return [];
-  }
-}
-
-// server/sources/knec.ts
-import axios4 from "axios";
-import * as cheerio2 from "cheerio";
-var KNEC_BASE_URL = "https://cba.knec.ac.ke/";
-async function fetchKnecResources(limit = 50) {
-  try {
-    const response = await axios4.get(KNEC_BASE_URL, {
-      timeout: 2e4,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; EbookAggregator/1.0)",
-        "Accept": "text/html,application/xhtml+xml"
-      }
-    });
-    if (response.status !== 200) return [];
-    const $ = cheerio2.load(response.data);
-    const resources = [];
-    $('a[href*=".pdf"], a[href*=".doc"], a.download, .resource-item, li a').each((_idx, el) => {
-      const $el = $(el);
-      const title = $el.text().trim();
-      const link = $el.attr("href") || "";
-      if (title && title.length > 5 && !title.includes("login") && !title.includes("home")) {
-        resources.push({
-          id: `knec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          title: title.substring(0, 255),
-          author: "KNEC",
-          description: `KNEC educational resource: ${title.substring(0, 200)}`,
-          language: "en",
-          subjects: ["Kenya Examinations", "Past Papers", "CBC Assessment"],
-          downloadUrl: link.startsWith("http") ? link : `${KNEC_BASE_URL}${link}`,
-          coverUrl: "",
-          publishedDate: "",
-          educationalLevel: "primary",
-          sourceUrl: link
-        });
-      }
-    });
-    return resources.slice(0, limit);
-  } catch (error) {
-    console.error("Failed to fetch KNEC resources:", error);
-    return [];
-  }
-}
+// server/sources/aggregator.ts
+init_kicd();
+init_knec();
 
 // server/sources/multi-source.ts
 import axios5 from "axios";
@@ -2040,6 +2154,55 @@ var APPROVED_SOURCE_POLICIES = {
     licenseName: "OpenLearn free course material from The Open University",
     licenseUrl: "https://www.open.edu/openlearn/about-openlearn/frequently-asked-questions-on-openlearn",
     allowDirectDownload: false
+  },
+  // Kenyan sources - government educational materials
+  kicd: {
+    rightsStatus: "open_access",
+    licenseName: "Kenya Institute of Curriculum Development - public educational resource",
+    licenseUrl: "https://kicd.ac.ke",
+    allowDirectDownload: true
+  },
+  knec: {
+    rightsStatus: "open_access",
+    licenseName: "Kenya National Examinations Council - public examination resource",
+    licenseUrl: "https://cba.knec.ac.ke",
+    allowDirectDownload: true
+  },
+  easy_elimu: {
+    rightsStatus: "open_access",
+    licenseName: "Easy Elimu - Kenyan educational resource",
+    licenseUrl: "https://www.easyelimu.com",
+    allowDirectDownload: false
+  },
+  atika_school: {
+    rightsStatus: "open_access",
+    licenseName: "Atika School - Kenyan educational resource",
+    licenseUrl: "https://www.atikaschool.org",
+    allowDirectDownload: false
+  },
+  kenyaplex: {
+    rightsStatus: "open_access",
+    licenseName: "KenyaPlex - Kenyan educational resource",
+    licenseUrl: "https://www.kenyaplex.com",
+    allowDirectDownload: false
+  },
+  schools_net: {
+    rightsStatus: "open_access",
+    licenseName: "Schools Net Kenya - Kenyan educational resource",
+    licenseUrl: "https://www.schoolsnetkenya.com",
+    allowDirectDownload: false
+  },
+  cbc_resources: {
+    rightsStatus: "open_access",
+    licenseName: "CBC Resources Kenya - Competency Based Curriculum",
+    licenseUrl: "https://cbcresources.co.ke",
+    allowDirectDownload: false
+  },
+  teachers_updates: {
+    rightsStatus: "open_access",
+    licenseName: "Teachers Updates Kenya - educational resource",
+    licenseUrl: "https://teachersupdates.net",
+    allowDirectDownload: false
   }
 };
 var SCHEDULED_SOURCE_SLUGS = [
@@ -2054,7 +2217,9 @@ var SCHEDULED_SOURCE_SLUGS = [
   "doaj",
   "saylor",
   "mit_ocw",
-  "ck12"
+  "ck12",
+  "kicd",
+  "knec"
 ];
 function getSourceRightsPolicy(sourceSlug) {
   return APPROVED_SOURCE_POLICIES[sourceSlug] ?? null;
@@ -2088,8 +2253,8 @@ var DEFAULT_SOURCES = [
   { name: "OER Commons", slug: "oer_commons", enabled: false },
   { name: "OpenLearn", slug: "openlearn", enabled: false },
   // Kenyan web-scraping sources - disabled in scheduled run
-  { name: "KICD", slug: "kicd", enabled: false },
-  { name: "KNEC", slug: "knec", enabled: false },
+  { name: "KICD", slug: "kicd", enabled: true },
+  { name: "KNEC", slug: "knec", enabled: true },
   { name: "AJOL", slug: "ajol", enabled: false },
   { name: "Easy Elimu", slug: "easy_elimu", enabled: false },
   { name: "Atika School", slug: "atika_school", enabled: false },
@@ -2455,6 +2620,8 @@ async function aggregateOpenTextbook() {
   return { added, updated, errors };
 }
 async function aggregateKicd() {
+  const rightsPolicy = getSourceRightsPolicy("kicd");
+  if (!rightsPolicy) throw new Error("Missing KICD rights policy");
   const books2 = await fetchKicdResources(30);
   let added = 0;
   let updated = 0;
@@ -2466,7 +2633,7 @@ async function aggregateKicd() {
         updated++;
       } else {
         const formats = {};
-        if (book.downloadUrl) formats.pdf = book.downloadUrl;
+        if (rightsPolicy.allowDirectDownload && book.downloadUrl) formats.pdf = book.downloadUrl;
         const bookId = await createBook({
           title: book.title,
           author: book.author,
@@ -2478,7 +2645,12 @@ async function aggregateKicd() {
           source: "kicd",
           sourceUrl: book.sourceUrl,
           publishedDate: book.publishedDate,
-          educationalLevel: book.educationalLevel
+          educationalLevel: book.educationalLevel,
+          rightsStatus: rightsPolicy.rightsStatus,
+          licenseName: rightsPolicy.licenseName,
+          licenseUrl: rightsPolicy.licenseUrl || "",
+          directDownloadAllowed: rightsPolicy.allowDirectDownload,
+          provenanceCheckedAt: /* @__PURE__ */ new Date()
         });
         if (book.subjects && bookId) {
           for (const subject of book.subjects.slice(0, 5)) {
@@ -2497,6 +2669,8 @@ async function aggregateKicd() {
   return { added, updated, errors };
 }
 async function aggregateKnec() {
+  const rightsPolicy = getSourceRightsPolicy("knec");
+  if (!rightsPolicy) throw new Error("Missing KNEC rights policy");
   const books2 = await fetchKnecResources(30);
   let added = 0;
   let updated = 0;
@@ -2508,7 +2682,7 @@ async function aggregateKnec() {
         updated++;
       } else {
         const formats = {};
-        if (book.downloadUrl) formats.pdf = book.downloadUrl;
+        if (rightsPolicy.allowDirectDownload && book.downloadUrl) formats.pdf = book.downloadUrl;
         const bookId = await createBook({
           title: book.title,
           author: book.author,
@@ -2519,7 +2693,12 @@ async function aggregateKnec() {
           formats: JSON.stringify(formats),
           source: "knec",
           sourceUrl: book.sourceUrl,
-          educationalLevel: book.educationalLevel
+          educationalLevel: book.educationalLevel,
+          rightsStatus: rightsPolicy.rightsStatus,
+          licenseName: rightsPolicy.licenseName,
+          licenseUrl: rightsPolicy.licenseUrl || "",
+          directDownloadAllowed: rightsPolicy.allowDirectDownload,
+          provenanceCheckedAt: /* @__PURE__ */ new Date()
         });
         if (book.subjects && bookId) {
           for (const subject of book.subjects.slice(0, 5)) {
@@ -2779,7 +2958,7 @@ var appRouter = router({
         gutenbergId: z2.number().int().optional(),
         genreId: z2.number().int().optional(),
         educationalLevel: z2.enum(["primary", "middle_school", "high_school", "college", "university", "professional", "general"]).optional(),
-        source: z2.enum(["gutenberg", "kicd", "knec", "doab", "open_textbook", "ajol", "unesco", "worldbank", "google_books", "other"]).optional(),
+        source: z2.enum(["gutenberg", "kicd", "knec", "doab", "open_textbook", "internet_archive", "open_library", "openstax", "libretexts", "wikibooks", "wikisource", "doaj", "pubmed", "ssrn", "saylor", "oer_commons", "mit_ocw", "ck12", "openlearn", "ajol", "easy_elimu", "atika_school", "kenyaplex", "schools_net", "cbc_resources", "teachers_updates", "merlot", "unesco", "worldbank", "google_books", "other"]).optional(),
         sourceUrl: z2.string().optional(),
         isbn: z2.string().optional(),
         pages: z2.number().int().optional(),
@@ -3150,6 +3329,326 @@ app.use(
     createContext
   })
 );
+app.get("/api/check-url", async (req, res) => {
+  const url = req.query.url;
+  if (!url) return res.status(400).json({ error: "url param required" });
+  try {
+    const axios7 = await import("axios");
+    const response = await axios7.default.head(url, {
+      timeout: 8e3,
+      maxRedirects: 5,
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; LuminaBooks/2.0)" }
+    });
+    return res.json({ ok: true, status: response.status, url });
+  } catch (error) {
+    const status = error?.response?.status ?? 0;
+    return res.json({ ok: false, status, url });
+  }
+});
+app.get("/api/libgen", async (req, res) => {
+  const q = req.query.q;
+  const limit = parseInt(req.query.limit || "50", 10);
+  const language = req.query.lang;
+  if (!q || q.length < 2) {
+    return res.status(400).json({ error: 'Query parameter "q" is required (min 2 chars)' });
+  }
+  try {
+    const encodedQuery = encodeURIComponent(q);
+    const langParam = language ? `&lang=${encodeURIComponent(language)}` : "";
+    const url = `https://libgen.li/index.php?req=${encodedQuery}&lg_topic=libgen&open=0&view=simple&res=100&phrase=1&column=def${langParam}`;
+    const axios7 = await import("axios");
+    const cheerioModule = await import("cheerio");
+    const cheerio5 = cheerioModule.default || cheerioModule;
+    const response = await axios7.default.get(url, {
+      timeout: 3e4,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; LuminaBooks/2.0; Educational Aggregator)"
+      }
+    });
+    const $ = cheerio5.load(response.data);
+    const books2 = [];
+    $("#tablelibgen tr").each((_i, row) => {
+      const cells = $(row).find("td");
+      if (cells.length < 9) return;
+      const editionLinks = cells.eq(0).find('a[href*="edition.php"]');
+      const titleLink = editionLinks.length > 1 ? editionLinks.last() : editionLinks.first();
+      if (!titleLink.length) return;
+      const title = titleLink.text().trim();
+      const author = cells.eq(1).text().trim();
+      const publisher = cells.eq(2).text().trim();
+      const year = cells.eq(3).text().trim();
+      const language2 = cells.eq(4).text().trim();
+      const pages = cells.eq(5).text().trim();
+      const filesize = cells.eq(6).text().trim();
+      const format = cells.eq(7).text().trim();
+      if (format.toLowerCase() !== "pdf") return;
+      const libgenLink = cells.eq(8).find('a[title="libgen"], a[href*="/get.php"]').first();
+      const annaLink = cells.eq(8).find('a[href*="annas-archive"]').first();
+      const md5Href = libgenLink.attr("href") || annaLink.attr("href") || "";
+      const md5Match = md5Href.match(/md5=([a-f0-9]{32})/);
+      const md5 = md5Match ? md5Match[1] : "";
+      const annaUrl = annaLink.attr("href") || "";
+      if (title && md5 && title.length > 2) {
+        books2.push({
+          title,
+          author: author || "Unknown",
+          year: year || "",
+          publisher: publisher || "",
+          language: language2 || "",
+          pages: pages || "",
+          format: format || "",
+          filesize: filesize || "",
+          md5,
+          source: "libgen",
+          // Primary: Anna's Archive (most reliable); fallback to libgen mirrors
+          sourceUrl: annaUrl || `https://libgen.li/get.php?md5=${md5}`,
+          annaUrl: annaUrl || `https://annas-archive.org/md5/${md5}`,
+          mirrors: [
+            annaUrl || `https://annas-archive.org/md5/${md5}`,
+            `https://libgen.li/get.php?md5=${md5}`,
+            `https://libgen.rs/get.php?md5=${md5}`
+          ],
+          formats: {
+            pdf: annaUrl || `https://annas-archive.org/md5/${md5}`
+          }
+        });
+      }
+    });
+    const limitedBooks = books2.slice(0, limit);
+    return res.status(200).json({
+      success: true,
+      source: "libgen",
+      query: q,
+      total: limitedBooks.length,
+      books: limitedBooks
+    });
+  } catch (error) {
+    console.error("LibGen search error:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Failed to search LibGen",
+      message: error instanceof Error ? error.message : "Unknown error"
+    });
+  }
+});
+app.all("/api/download", async (req, res) => {
+  let md5;
+  let format = "pdf";
+  if (req.method === "GET") {
+    md5 = req.query.md5;
+    format = req.query.format || "pdf";
+  } else if (req.method === "POST") {
+    const body = req.body || {};
+    md5 = body.md5;
+    format = body.format || "pdf";
+  }
+  if (!md5 || typeof md5 !== "string" || md5.length !== 32) {
+    return res.status(400).json({ error: "Valid 32-character md5 required", success: false });
+  }
+  const axios7 = await import("axios");
+  const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+  const QUICK_TIMEOUT = 8e3;
+  const sendFile = (data, ct) => {
+    const ext = (format || "pdf").toLowerCase();
+    res.setHeader("Content-Type", ct || "application/octet-stream");
+    res.setHeader("Content-Disposition", `attachment; filename="book.${ext}"`);
+    res.setHeader("Content-Length", data.length.toString());
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    return res.send(data);
+  };
+  const tryDownload = async (url, referer) => {
+    try {
+      const r = await axios7.default.get(url, {
+        responseType: "arraybuffer",
+        timeout: QUICK_TIMEOUT,
+        maxRedirects: 5,
+        headers: { "User-Agent": UA, "Referer": referer || "https://libgen.li/", "Accept": "*/*" },
+        validateStatus: (s) => s < 400
+      });
+      const ct = r.headers["content-type"] || "";
+      if (ct && !ct.includes("text/html") && !ct.includes("application/json") && r.data && r.data.length > 1e3) {
+        sendFile(Buffer.from(r.data), ct);
+        return true;
+      }
+    } catch {
+    }
+    return false;
+  };
+  try {
+    const adsResp = await axios7.default.get(`https://libgen.li/ads.php?md5=${md5}`, {
+      timeout: QUICK_TIMEOUT,
+      maxRedirects: 5,
+      headers: { "User-Agent": UA }
+    });
+    const html = typeof adsResp.data === "string" ? adsResp.data : adsResp.data.toString();
+    const keyMatch = html.match(new RegExp("get.php?md5=" + md5 + "&key=([A-Za-z0-9]+)"));
+    if (keyMatch) {
+      const key = keyMatch[1];
+      if (await tryDownload(`https://libgen.li/get.php?md5=${md5}&key=${key}`, `https://libgen.li/ads.php?md5=${md5}`)) {
+        return;
+      }
+    }
+  } catch {
+  }
+  const directUrls = [
+    `https://library.lol/main/${md5}`,
+    `https://download.library.lol/main/${md5}`,
+    `https://libgen.rocks/get.php?md5=${md5}`,
+    `https://libgen.rs/get.php?md5=${md5}`
+  ];
+  const results = await Promise.allSettled(
+    directUrls.map((url) => tryDownload(url))
+  );
+  const anySuccess = results.some((r) => r.status === "fulfilled" && r.value);
+  if (anySuccess) return;
+  return res.status(200).json({
+    success: true,
+    directDownload: false,
+    message: "Server-side download unavailable from datacenter IP. Use the links below to download directly.",
+    mirrors: [
+      { label: "Anna's Archive", url: `https://annas-archive.org/md5/${md5}` },
+      { label: "LibGen.li", url: `https://libgen.li/ads.php?md5=${md5}` },
+      { label: "LibGen.rs", url: `https://libgen.rs/get.php?md5=${md5}` },
+      { label: "Library.lol", url: `https://library.lol/main/${md5}` }
+    ]
+  });
+});
+app.options("/api/download", (_req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.status(204).end();
+});
+app.get("/api/kicd", async (req, res) => {
+  const q = (req.query.q || "").toLowerCase();
+  const limit = parseInt(req.query.limit || "50", 10);
+  try {
+    const { fetchKicdResources: fetchKicdResources2 } = await Promise.resolve().then(() => (init_kicd(), kicd_exports));
+    const { fetchKnecResources: fetchKnecResources2 } = await Promise.resolve().then(() => (init_knec(), knec_exports));
+    const [kicdResults, knecResults] = await Promise.allSettled([
+      fetchKicdResources2(limit),
+      fetchKnecResources2(limit)
+    ]);
+    let allResources = [];
+    if (kicdResults.status === "fulfilled") allResources.push(...kicdResults.value);
+    if (knecResults.status === "fulfilled") allResources.push(...knecResults.value);
+    if (q && q.length >= 2) {
+      allResources = allResources.filter(
+        (r) => r.title.toLowerCase().includes(q) || r.description.toLowerCase().includes(q) || r.subjects.some((s) => s.toLowerCase().includes(q))
+      );
+    }
+    return res.status(200).json({
+      success: true,
+      source: "kicd_knec",
+      query: q || null,
+      total: allResources.length,
+      books: allResources.slice(0, limit)
+    });
+  } catch (error) {
+    console.error("KICD/KNEC search error:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Failed to fetch KICD/KNEC materials",
+      message: error instanceof Error ? error.message : "Unknown error"
+    });
+  }
+});
+app.get("/api/search", async (req, res) => {
+  const q = (req.query.q || "").trim();
+  const limit = parseInt(req.query.limit || "50", 10);
+  if (!q || q.length < 2) {
+    return res.status(400).json({ error: 'Query parameter "q" is required (min 2 chars)' });
+  }
+  try {
+    const axios7 = await import("axios");
+    const cheerioModule = await import("cheerio");
+    const cheerio5 = cheerioModule.default || cheerioModule;
+    let libgenBooks = [];
+    try {
+      const encodedQuery = encodeURIComponent(q);
+      const lgUrl = `https://libgen.li/index.php?req=${encodedQuery}&lg_topic=libgen&open=0&view=simple&res=50&phrase=1&column=def`;
+      const response = await axios7.default.get(lgUrl, {
+        timeout: 2e4,
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; LuminaBooks/2.0; Educational Aggregator)" }
+      });
+      const $ = cheerio5.load(response.data);
+      $("#tablelibgen tr").each((_i, row) => {
+        const cells = $(row).find("td");
+        if (cells.length < 9) return;
+        const editionLinks = cells.eq(0).find('a[href*="edition.php"]');
+        const titleLink = editionLinks.length > 1 ? editionLinks.last() : editionLinks.first();
+        if (!titleLink.length) return;
+        const title = titleLink.text().trim();
+        const author = cells.eq(1).text().trim();
+        const year = cells.eq(3).text().trim();
+        const lang = cells.eq(4).text().trim();
+        const annaLink = cells.eq(8).find('a[href*="annas-archive"]').first();
+        const libgenLink = cells.eq(8).find('a[title="libgen"], a[href*="/get.php"]').first();
+        const md5Href = libgenLink.attr("href") || annaLink.attr("href") || "";
+        const md5Match = md5Href.match(/md5=([a-f0-9]{32})/);
+        const md5 = md5Match ? md5Match[1] : "";
+        const formatCell = cells.eq(7).text().trim().toLowerCase();
+        if (title && md5 && title.length > 2 && formatCell === "pdf") {
+          libgenBooks.push({
+            title,
+            author: author || "Unknown",
+            year: year || "",
+            language: lang || "en",
+            md5,
+            source: "libgen",
+            sourceUrl: `https://annas-archive.org/md5/${md5}`
+          });
+        }
+      });
+    } catch (e) {
+    }
+    let kicdBooks = [];
+    try {
+      const [kicdModule, knecModule] = await Promise.all([
+        Promise.resolve().then(() => (init_kicd(), kicd_exports)).catch(() => null),
+        Promise.resolve().then(() => (init_knec(), knec_exports)).catch(() => null)
+      ]);
+      const fetchKicdResources2 = kicdModule?.fetchKicdResources;
+      const fetchKnecResources2 = knecModule?.fetchKnecResources;
+      if (fetchKicdResources2) {
+        const results = await Promise.race([
+          fetchKicdResources2(20),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 8e3))
+        ]).catch(() => []);
+        kicdBooks.push(...results.filter((r) => r.title.toLowerCase().includes(q)));
+      }
+      if (fetchKnecResources2) {
+        const results = await Promise.race([
+          fetchKnecResources2(20),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 8e3))
+        ]).catch(() => []);
+        kicdBooks.push(...results.filter((r) => r.title.toLowerCase().includes(q)));
+      }
+    } catch (e) {
+    }
+    const allBooks = [...libgenBooks, ...kicdBooks.map((b) => ({
+      ...b,
+      source: b.author === "KICD" ? "kicd" : "knec"
+    }))];
+    return res.status(200).json({
+      success: true,
+      query: q,
+      total: allBooks.length,
+      sources: {
+        libgen: libgenBooks.length,
+        kicd_knec: kicdBooks.length
+      },
+      books: allBooks.slice(0, limit)
+    });
+  } catch (error) {
+    console.error("Unified search error:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Unified search failed",
+      message: error instanceof Error ? error.message : "Unknown error"
+    });
+  }
+});
 function handler(req, res) {
   return app(req, res);
 }
