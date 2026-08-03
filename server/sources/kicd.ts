@@ -28,21 +28,20 @@ export interface KicdBook {
  */
 export async function fetchKicdResources(limit: number = 50): Promise<KicdBook[]> {
   try {
-    let response = null;
-  for (const url of KICD_BASE_URLS) {
-    try {
-      const resp = await axios.get(url, {
-      timeout: 20000,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; ZAMIFU-E-MATERIALS/1.0)',
-        'Accept': 'text/html,application/xhtml+xml',
-      },
-    });
-
-    if (resp.status === 200) { response = resp; break; }
-    } catch { continue; }
-  }
-  if (!response) return [];
+    let response: any = null;
+    for (const url of KICD_BASE_URLS) {
+      try {
+        const resp = await axios.get(url, {
+          timeout: 20000,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; ZAMIFU-E-MATERIALS/1.0)',
+            'Accept': 'text/html,application/xhtml+xml',
+          },
+        });
+        if (resp.status === 200) { response = resp; break; }
+      } catch { continue; }
+    }
+    if (!response) return [];
 
     const $ = cheerio.load(response.data);
     const resources: KicdBook[] = [];
@@ -59,7 +58,7 @@ export async function fetchKicdResources(limit: number = 50): Promise<KicdBook[]
 
       // Skip navigation links, "more" links, and the base URL itself
       if (!href ||
-          href === KICD_BASE_URL ||
+          href === KICD_BASE_URLS[0] ||
           href.endsWith('/sdm_downloads/') ||
           text.toLowerCase() === 'more' ||
           text.toLowerCase() === 'downloads' ||
