@@ -195,34 +195,27 @@ app.get("/api/libgen", async (req: any, res: any) => {
 });
 
 
-// Download proxy — streams PDF/EPUB files from LibGen mirrors
+// Download proxy — fast-fail with aggressive timeouts + fallback URLs
 app.all("/api/download", async (req: any, res: any) => {
   let md5: string | undefined;
-  let directUrl: string | undefined;
   let format = "pdf";
 
   if (req.method === "GET") {
     md5 = req.query.md5 as string | undefined;
-    directUrl = req.query.url as string | undefined;
     format = (req.query.format as string) || "pdf";
   } else if (req.method === "POST") {
     const body = req.body || {};
     md5 = body.md5;
-    directUrl = body.url;
     format = body.format || "pdf";
   }
 
-  if (!md5 && !directUrl) {
-    return res.status(400).json({ error: "md5 or url required", success: false });
+  if (!md5 || typeof md5 !== "string" || md5.length !== 32) {
+    return res.status(400).json({ error: "Valid 32-character md5 required", success: false });
   }
 
   const axios = await import("axios");
-  const cheerioModule = await import("cheerio");
-  const cheerio = cheerioModule.default || cheerioModule;
-
   const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
-
-  const isFile = (ct: string) => !ct.includes("text/html") && !ct.includes("application/json") && ct.length > 0;
+  const QUICK_TIMEOUT = 8000; // 8 seconds max per attempt
 
   const sendFile = (data: Buffer, ct: string) => {
     const ext = (format || "pdf").toLowerCase();
@@ -230,117 +223,75 @@ app.all("/api/download", async (req: any, res: any) => {
     res.setHeader("Content-Disposition", `attachment; filename="book.${ext}"`);
     res.setHeader("Content-Length", data.length.toString());
     res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
     return res.send(data);
   };
 
-  // Step 1: Direct URL if provided
-  if (directUrl) {
+  const tryDownload = async (url: string, referer?: string): Promise<boolean> => {
     try {
-      const r = await axios.default.get(directUrl, {
-        responseType: "arraybuffer", timeout: 30000, maxRedirects: 8,
-        headers: { "User-Agent": UA },
-        validateStatus: (s: number) => s < 500,
+      const r = await axios.default.get(url, {
+        responseType: "arraybuffer",
+        timeout: QUICK_TIMEOUT,
+        maxRedirects: 5,
+        headers: { "User-Agent": UA, "Referer": referer || "https://libgen.li/", "Accept": "*/*" },
+        validateStatus: (s: number) => s < 400,
       });
       const ct = r.headers["content-type"] || "";
-      if (isFile(ct) && r.data && r.data.length > 1000) return sendFile(Buffer.from(r.data), ct);
+      if (ct && !ct.includes("text/html") && !ct.includes("application/json") && r.data && r.data.length > 1000) {
+        sendFile(Buffer.from(r.data), ct);
+        return true;
+      }
     } catch {}
-  }
+    return false;
+  };
 
-  if (!md5) {
-    return res.status(404).json({ error: "No working download link found", success: false });
-  }
-
-  // Step 2: libgen.li key extraction (works from datacenter IPs)
+  // Quick attempt: try to get key from libgen.li, then download
   try {
     const adsResp = await axios.default.get(`https://libgen.li/ads.php?md5=${md5}`, {
-      timeout: 12000, maxRedirects: 5,
+      timeout: QUICK_TIMEOUT,
+      maxRedirects: 5,
       headers: { "User-Agent": UA },
     });
     const html = typeof adsResp.data === "string" ? adsResp.data : adsResp.data.toString();
-    const keyMatch = html.match(/get\.php\?md5=([a-f0-9]{32})&key=([A-Za-z0-9]+)/);
+    const keyMatch = html.match(new RegExp('get\.php\?md5=' + md5 + '&key=([A-Za-z0-9]+)'));
     if (keyMatch) {
-      const key = keyMatch[2];
-      const dlUrl = `https://libgen.li/get.php?md5=${md5}&key=${key}`;
-      const fileResp = await axios.default.get(dlUrl, {
-        responseType: "arraybuffer", timeout: 45000, maxRedirects: 8,
-        headers: { "User-Agent": UA, "Referer": `https://libgen.li/ads.php?md5=${md5}` },
-        validateStatus: (s: number) => s < 500,
-      });
-      const ct = fileResp.headers["content-type"] || "";
-      if (isFile(ct) && fileResp.data && fileResp.data.length > 1000) {
-        return sendFile(Buffer.from(fileResp.data), ct);
+      const key = keyMatch[1];
+      if (await tryDownload(`https://libgen.li/get.php?md5=${md5}&key=${key}`, `https://libgen.li/ads.php?md5=${md5}`)) {
+        return;
       }
     }
   } catch {}
 
-  // Step 3: Try Anna's Archive for download links
-  try {
-    const annaResp = await axios.default.get(`https://annas-archive.org/md5/${md5}`, {
-      timeout: 12000, maxRedirects: 5,
-      headers: { "User-Agent": UA, "Accept": "text/html,application/xhtml+xml" },
-    });
-    const $ = cheerio.load(annaResp.data);
-    const links: string[] = [];
-    $("a[href]").each((_: number, el: any) => {
-      const href = $(el).attr("href") || "";
-      if (href.includes("/main/") || href.includes("get.php") || href.includes("ads.php") || href.includes("/ipfs/")) {
-        links.push(href.startsWith("http") ? href : `https:${href}`);
-      }
-    });
-    for (const link of links.slice(0, 5)) {
-      try {
-        const r = await axios.default.get(link, {
-          responseType: "arraybuffer", timeout: 25000, maxRedirects: 8,
-          headers: { "User-Agent": UA, "Referer": "https://annas-archive.org/" },
-          validateStatus: (s: number) => s < 500,
-        });
-        const ct = r.headers["content-type"] || "";
-        if (isFile(ct) && r.data && r.data.length > 1000) return sendFile(Buffer.from(r.data), ct);
-      } catch { continue; }
-    }
-  } catch {}
-
-  // Step 4: Try library.lol directly
-  try {
-    const r = await axios.default.get(`https://library.lol/main/${md5}`, {
-      responseType: "arraybuffer", timeout: 20000, maxRedirects: 8,
-      headers: { "User-Agent": UA },
-      validateStatus: (s: number) => s < 500,
-    });
-    const ct = r.headers["content-type"] || "";
-    if (isFile(ct) && r.data && r.data.length > 1000) return sendFile(Buffer.from(r.data), ct);
-  } catch {}
-
-  // Step 5: Try libgen mirrors
-  const mirrors = [
+  // Quick direct download attempts (race the fastest)
+  const directUrls = [
+    `https://library.lol/main/${md5}`,
+    `https://download.library.lol/main/${md5}`,
     `https://libgen.rocks/get.php?md5=${md5}`,
     `https://libgen.rs/get.php?md5=${md5}`,
-    `https://libgen.is/get.php?md5=${md5}`,
-    `https://libgen.gs/get.php?md5=${md5}`,
-    `https://download.library.lol/main/${md5}`,
   ];
-  for (const m of mirrors) {
-    try {
-      const r = await axios.default.get(m, {
-        responseType: "arraybuffer", timeout: 15000, maxRedirects: 8,
-        headers: { "User-Agent": UA, "Referer": "https://libgen.is/" },
-        validateStatus: (s: number) => s < 500,
-      });
-      const ct = r.headers["content-type"] || "";
-      if (isFile(ct) && r.data && r.data.length > 1000) return sendFile(Buffer.from(r.data), ct);
-    } catch { continue; }
-  }
 
-  return res.status(502).json({
-    success: false,
-    error: "All download mirrors failed",
-    fallback: `https://annas-archive.org/md5/${md5}`,
-    message: "Please try the Mirrors button for manual download",
+  const results = await Promise.allSettled(
+    directUrls.map(url => tryDownload(url))
+  );
+
+  // If any succeeded, the response was already sent
+  const anySuccess = results.some(r => r.status === "fulfilled" && r.value);
+  if (anySuccess) return;
+
+  // All failed — return clear fallback
+  return res.status(200).json({
+    success: true,
+    directDownload: false,
+    message: "Server-side download unavailable from datacenter IP. Use the links below to download directly.",
+    mirrors: [
+      { label: "Anna's Archive", url: `https://annas-archive.org/md5/${md5}` },
+      { label: "LibGen.li", url: `https://libgen.li/ads.php?md5=${md5}` },
+      { label: "LibGen.rs", url: `https://libgen.rs/get.php?md5=${md5}` },
+      { label: "Library.lol", url: `https://library.lol/main/${md5}` },
+    ],
   });
 });
 
-// OPTIONS preflight for download
+// OPTIONS preflight
 app.options("/api/download", (_req: any, res: any) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
