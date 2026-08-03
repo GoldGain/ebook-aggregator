@@ -7,7 +7,7 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
 
-const KICD_BASE_URL = "https://kicd.ac.ke/sdm_downloads/";
+const KICD_BASE_URLS = ["https://kicd.ac.ke/sdm_downloads/","https://kicd.ac.ke/downloads/","https://kicd.ac.ke/curriculum-downloads/"];
 
 export interface KicdBook {
   id: string;
@@ -28,7 +28,10 @@ export interface KicdBook {
  */
 export async function fetchKicdResources(limit: number = 50): Promise<KicdBook[]> {
   try {
-    const response = await axios.get(KICD_BASE_URL, {
+    let response = null;
+  for (const url of KICD_BASE_URLS) {
+    try {
+      const resp = await axios.get(url, {
       timeout: 20000,
       headers: {
         'User-Agent': 'Mozilla/5.0 (compatible; ZAMIFU-E-MATERIALS/1.0)',
@@ -36,7 +39,10 @@ export async function fetchKicdResources(limit: number = 50): Promise<KicdBook[]
       },
     });
 
-    if (response.status !== 200) return [];
+    if (resp.status === 200) { response = resp; break; }
+    } catch { continue; }
+  }
+  if (!response) return [];
 
     const $ = cheerio.load(response.data);
     const resources: KicdBook[] = [];
@@ -44,7 +50,7 @@ export async function fetchKicdResources(limit: number = 50): Promise<KicdBook[]
 
     // The KICD SDM page is a WordPress listing with links to individual download pages
     // Parse all links that point to /sdm_downloads/* sub-pages and direct PDF/EPUB links
-    const allLinks = $('a[href*="/sdm_downloads/"], a[href*=".pdf"], a[href*=".epub"]');
+    const allLinks = $('a[href*="/sdm_downloads/"], a[href*="/downloads/"], a[href*=".pdf"], a[href*=".epub"], a[href*=".docx"], a[href*=".pptx"]');
     
     allLinks.each((_idx, el) => {
       const $el = $(el);
@@ -112,7 +118,10 @@ export async function searchKicdResources(category: string): Promise<KicdBook[]>
       },
     });
 
-    if (response.status !== 200) return [];
+    if (resp.status === 200) { response = resp; break; }
+    } catch { continue; }
+  }
+  if (!response) return [];
 
     const $ = cheerio.load(response.data);
     const resources: KicdBook[] = [];
