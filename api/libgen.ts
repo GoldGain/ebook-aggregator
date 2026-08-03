@@ -71,12 +71,12 @@ async function searchLibGen(query: string, limit: number, language?: string): Pr
     books.push({
       title, author, publisher, year, language: lang, pages, size, format, md5, fileId,
       downloadUrl: fileId ? `https://libgen.li/file.php?id=${fileId}` : '',
-      annaArchiveUrl: `https://annas-archive.se/md5/${md5}`,
+      annaArchiveUrl: `https://annas-archive.li/md5/${md5}`,
       libgenPwUrl: `https://libgen.pw/book/${md5}`,
       filesize: size,
       source: 'libgen',
-      sourceUrl: `https://annas-archive.se/md5/${md5}`,
-      annaUrl: `https://annas-archive.se/md5/${md5}`,
+      sourceUrl: `https://annas-archive.li/md5/${md5}`,
+      annaUrl: `https://annas-archive.li/md5/${md5}`,
     });
   });
 
@@ -86,7 +86,7 @@ async function searchLibGen(query: string, limit: number, language?: string): Pr
 async function searchAnnasArchive(query: string, limit: number): Promise<LibGenBook[]> {
   try {
     const response = await fetch(
-      `https://annas-archive.se/search?q=${encodeURIComponent(query)}`,
+      `https://annas-archive.li/search?q=${encodeURIComponent(query)}`,
       {
         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
         signal: AbortSignal.timeout(15000),
@@ -132,13 +132,13 @@ async function searchAnnasArchive(query: string, limit: number): Promise<LibGenB
           format,
           md5,
           fileId: '',
-          downloadUrl: `https://annas-archive.se/md5/${md5}`,
-          annaArchiveUrl: `https://annas-archive.se/md5/${md5}`,
+          downloadUrl: `https://annas-archive.li/md5/${md5}`,
+          annaArchiveUrl: `https://annas-archive.li/md5/${md5}`,
           libgenPwUrl: '',
           filesize: size,
           source: 'annas_archive',
-          sourceUrl: `https://annas-archive.se/md5/${md5}`,
-          annaUrl: `https://annas-archive.se/md5/${md5}`,
+          sourceUrl: `https://annas-archive.li/md5/${md5}`,
+          annaUrl: `https://annas-archive.li/md5/${md5}`,
         });
       }
     });
