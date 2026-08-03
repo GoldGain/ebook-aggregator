@@ -79,6 +79,7 @@ export async function fetchKicdResources(limit: number = 50): Promise<KicdBook[]
         sourceUrl: link || "",
       });
     }
+    });
 
     return resources.slice(0, limit);
   } catch (error) {
