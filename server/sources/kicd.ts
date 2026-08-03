@@ -40,24 +40,40 @@ export async function fetchKicdResources(limit: number = 50): Promise<KicdBook[]
 
     const $ = cheerio.load(response.data);
     const resources: KicdBook[] = [];
+    const seen = new Set<string>();
 
-    // Parse the download listings
-    $('.download-listing, .sdm_download, tr').each((_idx, el) => {
+    // The KICD SDM page is a WordPress listing with links to individual download pages
+    // Parse all links that point to /sdm_downloads/* sub-pages
+    $('a[href*="/sdm_downloads/"]').each((_idx, el) => {
       const $el = $(el);
-      const title = $el.find('.sdm_download_title, td:first-child, h3, h4').first().text().trim();
-      const link = $el.find('a[href*=".pdf"], a[href*=".epub"], a.download').first().attr('href') || '';
-      const date = $el.find('.sdm_date, td:last-child, .date').first().text().trim();
+      const href = $el.attr('href') || '';
+      const text = $el.text().trim();
 
-      if (title && title.length > 3) {
-        resources.push({
-          id: `kicd-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          title,
-          author: "KICD",
-          description: `Educational resource from Kenya Institute of Curriculum Development: ${title}`,
-          language: "en",
-          subjects: ["Kenya Education", "Curriculum", "CBC"],
-          downloadUrl: link.startsWith('http') ? link : `${KICD_BASE_URL}${link}`,
-          coverUrl: "",
+      // Skip navigation links, "more" links, and the base URL itself
+      if (!href.includes('/sdm_downloads/') || 
+          href === KICD_BASE_URL || 
+          href.endsWith('/sdm_downloads/') ||
+          text.toLowerCase() === 'more' ||
+          text.toLowerCase() === 'downloads' ||
+          text.length < 5) {
+        return;
+      }
+
+      // Deduplicate by href
+      if (seen.has(href)) return;
+      seen.add(href);
+
+      const fullUrl = href.startsWith('http') ? href : `https://kicd.ac.ke${href.startsWith('/') ? '' : '/'}${href}`;
+
+      resources.push({
+        id: `kicd-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        title: text.substring(0, 255),
+        author: "KICD",
+        description: `KICD educational resource: ${text}`,
+        language: "en",
+        subjects: ["Kenya Education", "Curriculum", "CBC"],
+        downloadUrl: fullUrl,
+        coverUrl: "",
           publishedDate: date,
           educationalLevel: "primary",
           sourceUrl: link || "",
