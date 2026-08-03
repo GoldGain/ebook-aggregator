@@ -16,7 +16,7 @@ interface AnnaBook {
 async function searchAnnasArchive(query: string, limit: number): Promise<AnnaBook[]> {
   try {
     const response = await fetch(
-      `https://annas-archive.org/search?q=${encodeURIComponent(query)}`,
+      `https://annas-archive.se/search?q=${encodeURIComponent(query)}`,
       {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
@@ -71,7 +71,7 @@ async function searchAnnasArchive(query: string, limit: number): Promise<AnnaBoo
         format,
         size,
         source: 'annas_archive',
-        sourceUrl: `https://annas-archive.org/md5/${md5}`,
+        sourceUrl: `https://annas-archive.se/md5/${md5}`,
         downloadUrl: `/api/download?md5=${md5}&format=${format}`,
       });
     });
@@ -84,7 +84,7 @@ async function searchAnnasArchive(query: string, limit: number): Promise<AnnaBoo
 
 async function getBookDetails(md5: string): Promise<any> {
   try {
-    const response = await fetch(`https://annas-archive.org/md5/${md5}`, {
+    const response = await fetch(`https://annas-archive.se/md5/${md5}`, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       },
@@ -98,7 +98,7 @@ async function getBookDetails(md5: string): Promise<any> {
 
     const title = $('h1').first().text().trim() || $('title').text().trim();
     const downloadLinks: string[] = [];
-    $('a[href*="library.lol"], a[href*="libgen."], a[href*="ipfs.io"], a[href*="cloudflare-ipfs"]').each((_, el) => {
+    $('a[href*="libgen."], a[href*="ipfs.io"], a[href*="cloudflare-ipfs"]').each((_, el) => {
       const href = $(el).attr('href');
       if (href) downloadLinks.push(href);
     });
