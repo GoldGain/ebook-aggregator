@@ -258,8 +258,50 @@ app.all("/api/download", async (req: any, res: any) => {
     return res.status(404).json({ error: "No working download link found", success: false });
   }
 
-  // Step 2: Scrape Anna's Archive for download links (most reliable proxy)
+  // Step 2: Get download key from libgen.li (works from datacenter IPs)
   let resolvedUrl: string | null = null;
+  if (md5) {
+    try {
+      // get.php redirects to ads.php which contains the download key
+      const adsResp = await axios.default.get(`https://libgen.li/ads.php?md5=${md5}`, {
+        timeout: 12000,
+        maxRedirects: 5,
+        headers: { "User-Agent": UA, "Accept": "text/html,application/xhtml+xml" },
+      });
+      const adsHtml = typeof adsResp.data === "string" ? adsResp.data : adsResp.data.toString();
+      // Extract key from: get.php?md5=XXX&key=YYY
+      const keyMatch = adsHtml.match(/get\.php\?md5=([a-f0-9]{32})&key=([A-Za-z0-9]+)/);
+      if (keyMatch) {
+        const downloadKey = keyMatch[2];
+        const downloadUrl = `https://libgen.li/get.php?md5=${md5}&key=${downloadKey}`;
+        // Try to download the file directly
+        const fileResp = await axios.default.get(downloadUrl, {
+          responseType: "arraybuffer",
+          timeout: 40000,
+          maxRedirects: 8,
+          headers: { "User-Agent": UA, "Referer": `https://libgen.li/ads.php?md5=${md5}` },
+          validateStatus: (s: number) => s < 500,
+        });
+        const ct = fileResp.headers["content-type"] || "";
+        if (isFileResponse(ct) && fileResp.data && fileResp.data.length > 1000) {
+          return streamFile(Buffer.from(fileResp.data), ct);
+        }
+        // Save for later if it returned HTML
+        if (fileResp.data && fileResp.data.length < 100000) {
+          resolvedUrl = downloadUrl;
+        }
+      } else {
+        // Try to find any download link on the page
+        const linkMatch = adsHtml.match(/href=["']([^"']*(?:download|main/)[^"']*)["']/i);
+        if (linkMatch) {
+          resolvedUrl = linkMatch[1].startsWith("http") ? linkMatch[1] : `https://libgen.li${linkMatch[1]}`;
+        }
+      }
+    } catch { /* libgen.li key extraction failed */ }
+  }
+
+  // Step 3: Scrape Anna's Archive for download links (most reliable proxy)
+  // Step 2: Scrape Anna's Archive for download links (most reliable proxy) (most reliable proxy)
   try {
     const annaResp = await axios.default.get(`https://annas-archive.org/md5/${md5}`, {
       timeout: 15000,
