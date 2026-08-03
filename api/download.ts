@@ -120,12 +120,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const result = await tryDownload(md5, format);
 
     if (!result) {
-      return res.status(404).json({
-        success: false,
-        error: 'No working download source found',
-        md5,
-        suggestion: 'Try searching on Anna\'s Archive directly',
-        annaUrl: `https://annas-archive.se/md5/${md5}`,
+      // All server-side sources blocked - return mirrors list for browser-side download
+      return res.status(200).json({
+        success: true,
+        directDownload: false,
+        message: 'Server-side download blocked. Opening Anna\'s Archive.',
+        mirrors: [
+          { label: "Anna's Archive", url: `https://annas-archive.li/md5/${md5}` },
+          { label: "LibGen.li", url: `https://libgen.li/ads.php?md5=${md5}` },
+          { label: "LibGen.rocks", url: `https://libgen.rocks/ads.php?md5=${md5}` },
+        ],
+        annaUrl: `https://annas-archive.li/md5/${md5}`,
       });
     }
 
