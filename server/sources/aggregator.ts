@@ -79,8 +79,8 @@ const DEFAULT_SOURCES: SourceConfig[] = [
   { name: "OER Commons", slug: "oer_commons", enabled: false },
   { name: "OpenLearn", slug: "openlearn", enabled: false },
   // Kenyan web-scraping sources - disabled in scheduled run
-  { name: "KICD", slug: "kicd", enabled: false },
-  { name: "KNEC", slug: "knec", enabled: false },
+  { name: "KICD", slug: "kicd", enabled: true },
+  { name: "KNEC", slug: "knec", enabled: true },
   { name: "AJOL", slug: "ajol", enabled: false },
   { name: "Easy Elimu", slug: "easy_elimu", enabled: false },
   { name: "Atika School", slug: "atika_school", enabled: false },
