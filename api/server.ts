@@ -195,64 +195,141 @@ app.get("/api/libgen", async (req: any, res: any) => {
 });
 
 
-// Download proxy — tries multiple mirrors, streams file to user
+// Download proxy — resolves actual file URL from LibGen mirrors and streams to user
 app.post("/api/download", async (req: any, res: any) => {
   const { md5, url: directUrl, format = "pdf" } = req.body || {};
-  let downloadUrl = directUrl;
 
-  if (!downloadUrl && md5) {
-    const mirrors = [
-      `https://en.annas-archive.gl/md5/${md5}`,
-      `https://annas-archive.org/md5/${md5}`,
-      `https://libgen.li/get.php?md5=${md5}`,
-      `https://libgen.rs/get.php?md5=${md5}`,
-      `https://libgen.is/get.php?md5=${md5}`,
-    ];
-
-    const axios = await import("axios");
-    for (const mirror of mirrors) {
-      try {
-        const head = await axios.default.head(mirror, {
-          timeout: 8000,
-          maxRedirects: 5,
-          headers: { "User-Agent": "Mozilla/5.0 (compatible; LuminaBooks/2.0)" },
-        });
-        if (head.status < 400) {
-          downloadUrl = mirror;
-          break;
-        }
-      } catch (e) { continue; }
-    }
+  if (!md5 && !directUrl) {
+    return res.status(400).json({ error: "md5 or url required", success: false });
   }
 
-  if (!downloadUrl) {
+  const axios = await import("axios");
+  const cheerioModule = await import("cheerio");
+  const cheerio = cheerioModule.default || cheerioModule;
+
+  const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
+
+  // Helper: check if a URL serves a real file (not HTML)
+  const isFileResponse = (ct: string) =>
+    !ct.includes("text/html") && !ct.includes("application/json");
+
+  // Step 1: if direct URL provided and it's a file, stream it
+  if (directUrl) {
+    try {
+      const response = await axios.default.get(directUrl, {
+        responseType: "arraybuffer",
+        timeout: 50000,
+        maxRedirects: 8,
+        headers: { "User-Agent": UA },
+      });
+      const ct = response.headers["content-type"] || "application/octet-stream";
+      if (isFileResponse(ct)) {
+        const ext = format.toLowerCase() || "pdf";
+        res.setHeader("Content-Type", ct);
+        res.setHeader("Content-Disposition", `attachment; filename="book.${ext}"`);
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        return res.send(Buffer.from(response.data));
+      }
+    } catch { /* fall through */ }
+  }
+
+  if (!md5) {
     return res.status(404).json({ error: "No working download link found", success: false });
   }
 
-  try {
-    const axios = await import("axios");
-    const response = await axios.default.get(downloadUrl, {
-      responseType: "arraybuffer",
-      timeout: 60000,
-      maxRedirects: 5,
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; LuminaBooks/2.0)" },
-    });
+  let resolvedUrl: string | null = null;
 
-    const contentType = response.headers["content-type"] || "application/octet-stream";
-    res.setHeader("Content-Type", contentType);
-    res.setHeader("Content-Disposition", `attachment; filename="book.${format}"`);
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-    res.send(Buffer.from(response.data));
-  } catch (error: any) {
-    console.error("Download proxy error:", error);
-    return res.status(500).json({
-      success: false,
-      error: "Download failed",
-      message: error instanceof Error ? error.message : "Unknown error",
-    });
+  // Step 2: Scrape library.lol/main/{md5} to get the actual download link
+  if (!resolvedUrl) {
+    try {
+      const pageResp = await axios.default.get(`https://library.lol/main/${md5}`, {
+        timeout: 12000,
+        maxRedirects: 5,
+        headers: { "User-Agent": UA, "Accept": "text/html,application/xhtml+xml,*/*" },
+      });
+      const $ = cheerio.load(pageResp.data);
+      // The download link is in #download h2 a
+      const downloadHref = $("#download h2 a, #download a[href*='.pdf'], #download a[href*='.epub'], #download a").first().attr("href");
+      if (downloadHref && downloadHref.startsWith("http")) {
+        resolvedUrl = downloadHref;
+      }
+    } catch { /* library.lol unavailable */ }
   }
+
+  // Step 3: Try libgen.li/get.php — may redirect directly to file
+  if (!resolvedUrl) {
+    try {
+      const testResp = await axios.default.get(`https://libgen.li/get.php?md5=${md5}`, {
+        responseType: "arraybuffer",
+        timeout: 15000,
+        maxRedirects: 8,
+        headers: { "User-Agent": UA },
+        validateStatus: (s) => s < 500,
+      });
+      const ct = testResp.headers["content-type"] || "";
+      if (isFileResponse(ct) && testResp.status < 400) {
+        const ext = format.toLowerCase() || "pdf";
+        res.setHeader("Content-Type", ct);
+        res.setHeader("Content-Disposition", `attachment; filename="book.${ext}"`);
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        return res.send(Buffer.from(testResp.data));
+      }
+    } catch { /* try next */ }
+  }
+
+  // Step 4: Try libgen.rocks
+  if (!resolvedUrl) {
+    const altMirrors = [
+      `https://libgen.rocks/get.php?md5=${md5}`,
+      `https://libgen.rs/get.php?md5=${md5}`,
+    ];
+    for (const m of altMirrors) {
+      try {
+        const testResp = await axios.default.get(m, {
+          responseType: "arraybuffer",
+          timeout: 12000,
+          maxRedirects: 8,
+          headers: { "User-Agent": UA },
+          validateStatus: (s) => s < 500,
+        });
+        const ct = testResp.headers["content-type"] || "";
+        if (isFileResponse(ct) && testResp.status < 400) {
+          const ext = format.toLowerCase() || "pdf";
+          res.setHeader("Content-Type", ct);
+          res.setHeader("Content-Disposition", `attachment; filename="book.${ext}"`);
+          res.setHeader("Access-Control-Allow-Origin", "*");
+          return res.send(Buffer.from(testResp.data));
+        }
+      } catch { continue; }
+    }
+  }
+
+  // Step 5: Stream from resolved URL (library.lol link)
+  if (resolvedUrl) {
+    try {
+      const response = await axios.default.get(resolvedUrl, {
+        responseType: "arraybuffer",
+        timeout: 50000,
+        maxRedirects: 8,
+        headers: { "User-Agent": UA },
+      });
+      const ct = response.headers["content-type"] || "application/octet-stream";
+      const ext = format.toLowerCase() || "pdf";
+      res.setHeader("Content-Type", ct);
+      res.setHeader("Content-Disposition", `attachment; filename="book.${ext}"`);
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      return res.send(Buffer.from(response.data));
+    } catch (error: any) {
+      console.error("Download stream error:", error);
+    }
+  }
+
+  return res.status(502).json({
+    success: false,
+    error: "All download mirrors failed",
+    fallback: `https://en.annas-archive.gl/md5/${md5}`,
+    message: "Please try the Mirrors button for manual download",
+  });
 });
 
 // OPTIONS preflight for download
