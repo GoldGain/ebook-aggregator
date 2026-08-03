@@ -56,7 +56,7 @@ app.get("/api/check-url", async (req: any, res: any) => {
     const response = await axios.default.head(url, {
       timeout: 8000,
       maxRedirects: 5,
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; LuminaBooks/2.0)" },
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; ZAMIFU-E-MATERIALS/2.0)" },
     });
     return res.json({ ok: true, status: response.status, url });
   } catch (error: any) {
@@ -87,7 +87,7 @@ app.get("/api/libgen", async (req: any, res: any) => {
     const response = await axios.default.get(url, {
       timeout: 30000,
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; LuminaBooks/2.0; Educational Aggregator)",
+        "User-Agent": "Mozilla/5.0 (compatible; ZAMIFU-E-MATERIALS/2.0; Educational Aggregator)",
       },
     });
 
@@ -245,7 +245,19 @@ app.all("/api/download", async (req: any, res: any) => {
     return false;
   };
 
-  // Quick attempt: try to get key from libgen.li, then download
+  // Attempt 1: Try Anna's Archive (most reliable, no key needed)
+  const annaUrls = [
+    `https://annas-archive.li/md5/${md5}`,
+    `https://annas-archive.org/md5/${md5}`,
+  ];
+
+  for (const annaUrl of annaUrls) {
+    if (await tryDownload(annaUrl, annaUrl)) {
+      return;
+    }
+  }
+
+  // Attempt 2: Try to get key from libgen.li, then download
   try {
     const adsResp = await axios.default.get(`https://libgen.li/ads.php?md5=${md5}`, {
       timeout: QUICK_TIMEOUT,
@@ -262,10 +274,11 @@ app.all("/api/download", async (req: any, res: any) => {
     }
   } catch {}
 
-  // Quick direct download attempts (race the fastest)
+  // Attempt 3: Try direct download from multiple libgen mirrors
   const directUrls = [
     `https://libgen.rocks/get.php?md5=${md5}`,
     `https://libgen.rs/get.php?md5=${md5}`,
+    `https://libgen.li/get.php?md5=${md5}`,
   ];
 
   const results = await Promise.allSettled(
@@ -276,11 +289,11 @@ app.all("/api/download", async (req: any, res: any) => {
   const anySuccess = results.some(r => r.status === "fulfilled" && r.value);
   if (anySuccess) return;
 
-  // All failed — return clear fallback
+  // All failed — return fallback with mirrors
   return res.status(200).json({
     success: true,
     directDownload: false,
-    message: "Server-side download unavailable from datacenter IP. Use the links below to download directly.",
+    message: "Direct download unavailable. Please use one of the mirrors below.",
     mirrors: [
       { label: "Anna's Archive", url: `https://annas-archive.li/md5/${md5}` },
       { label: "LibGen.li", url: `https://libgen.li/ads.php?md5=${md5}` },
@@ -363,7 +376,7 @@ app.get("/api/search", async (req: any, res: any) => {
       const lgUrl = `https://libgen.li/index.php?req=${encodedQuery}&lg_topic=libgen&open=0&view=simple&res=50&phrase=1&column=def`;
       const response = await axios.default.get(lgUrl, {
         timeout: 20000,
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; LuminaBooks/2.0; Educational Aggregator)" },
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; ZAMIFU-E-MATERIALS/2.0; Educational Aggregator)" },
       });
       const $ = cheerio.load(response.data);
       $("#tablelibgen tr").each((_i: number, row: any) => {

@@ -31,7 +31,7 @@ export async function fetchKicdResources(limit: number = 50): Promise<KicdBook[]
     const response = await axios.get(KICD_BASE_URL, {
       timeout: 20000,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; EbookAggregator/1.0)',
+        'User-Agent': 'Mozilla/5.0 (compatible; ZAMIFU-E-MATERIALS/1.0)',
         'Accept': 'text/html,application/xhtml+xml',
       },
     });
@@ -43,19 +43,21 @@ export async function fetchKicdResources(limit: number = 50): Promise<KicdBook[]
     const seen = new Set<string>();
 
     // The KICD SDM page is a WordPress listing with links to individual download pages
-    // Parse all links that point to /sdm_downloads/* sub-pages
-    $('a[href*="/sdm_downloads/"]').each((_idx, el) => {
+    // Parse all links that point to /sdm_downloads/* sub-pages and direct PDF/EPUB links
+    const allLinks = $('a[href*="/sdm_downloads/"], a[href*=".pdf"], a[href*=".epub"]');
+    
+    allLinks.each((_idx, el) => {
       const $el = $(el);
       const href = $el.attr('href') || '';
       const text = $el.text().trim();
 
       // Skip navigation links, "more" links, and the base URL itself
-      if (!href.includes('/sdm_downloads/') ||
+      if (!href ||
           href === KICD_BASE_URL ||
           href.endsWith('/sdm_downloads/') ||
           text.toLowerCase() === 'more' ||
           text.toLowerCase() === 'downloads' ||
-          text.length < 5) {
+          text.length < 3) {
         return;
       }
 
@@ -64,6 +66,16 @@ export async function fetchKicdResources(limit: number = 50): Promise<KicdBook[]
       seen.add(href);
 
       const fullUrl = href.startsWith('http') ? href : `https://kicd.ac.ke${href.startsWith('/') ? '' : '/'}${href}`;
+      
+      // Determine educational level from URL or text
+      let educationalLevel = "primary";
+      if (href.toLowerCase().includes('secondary') || text.toLowerCase().includes('secondary')) {
+        educationalLevel = "high_school";
+      } else if (href.toLowerCase().includes('university') || text.toLowerCase().includes('university')) {
+        educationalLevel = "university";
+      } else if (href.toLowerCase().includes('college') || text.toLowerCase().includes('college')) {
+        educationalLevel = "college";
+      }
 
       resources.push({
         id: `kicd-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -75,7 +87,7 @@ export async function fetchKicdResources(limit: number = 50): Promise<KicdBook[]
         downloadUrl: fullUrl,
         coverUrl: "",
         publishedDate: new Date().toISOString(),
-        educationalLevel: "primary",
+        educationalLevel,
         sourceUrl: fullUrl,
       });
     });

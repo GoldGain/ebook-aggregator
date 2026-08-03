@@ -67,7 +67,7 @@ const FEATURES = [
 ];
 
 const TESTIMONIALS = [
-  { name: "Amina K.", role: "University Student", text: "Lumina Books saved me hundreds of dollars on textbooks. I found everything I needed for my engineering degree.", avatar: "AK" },
+  { name: "Amina K.", role: "University Student", text: "ZAMIFU E-MATERIALS saved me hundreds of dollars on textbooks. I found everything I needed for my engineering degree.", avatar: "AK" },
   { name: "Mr. Odhiambo", role: "Secondary School Teacher", text: "The KICD and KNEC resources are exactly what my students need. This platform is a game-changer for Kenyan education.", avatar: "MO" },
   { name: "Dr. Njeri W.", role: "Researcher", text: "Having DOAJ, PubMed, and AJOL all in one place has transformed my research workflow.", avatar: "NW" },
 ];
@@ -140,7 +140,7 @@ export default function Home() {
         <div className="container flex items-center justify-between h-16">
           <button onClick={() => navigate("/")} className="flex items-center gap-2">
             <BookOpen className="w-7 h-7 text-primary" />
-            <span className="text-xl font-black tracking-widest neon-glow">LUMINA</span>
+            <span className="text-xl font-black tracking-widest neon-glow">ZAMIFU</span>
           </button>
           <div className="hidden md:flex items-center gap-1">
             <Button variant="ghost" size="sm" onClick={() => navigate("/catalog")} className="text-muted-foreground hover:text-primary">Catalog</Button>
@@ -496,7 +496,7 @@ export default function Home() {
             </div>
           </div>
           <div className="border-t border-border pt-6 flex flex-col md:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
-            <p>&copy; 2026 Lumina Books. All content is free and open-access.</p>
+            <p>&copy; 2026 ZAMIFU E-MATERIALS. All content is free and open-access.</p>
             <p>Built with ♥ for African learners and the global open-knowledge community.</p>
           </div>
         </div>
