@@ -28,8 +28,11 @@ export interface KnecBook {
  */
 export async function fetchKnecResources(limit: number = 50): Promise<KnecBook[]> {
   try {
+    const https = await import('https');
+    const agent = new https.Agent({ rejectUnauthorized: false });
     const response = await axios.get(KNEC_BASE_URL, {
       timeout: 20000,
+      httpsAgent: agent,
       headers: {
         'User-Agent': 'Mozilla/5.0 (compatible; EbookAggregator/1.0)',
         'Accept': 'text/html,application/xhtml+xml',
