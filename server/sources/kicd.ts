@@ -109,7 +109,7 @@ export async function fetchKicdResources(limit: number = 50): Promise<KicdBook[]
  */
 export async function searchKicdResources(category: string): Promise<KicdBook[]> {
   try {
-    const searchUrl = `${KICD_BASE_URL}?s=${encodeURIComponent(category)}`;
+    const searchUrl = `${KICD_BASE_URLS[0]}?s=${encodeURIComponent(category)}`;
     const response = await axios.get(searchUrl, {
       timeout: 20000,
       headers: {
@@ -117,10 +117,7 @@ export async function searchKicdResources(category: string): Promise<KicdBook[]>
       },
     });
 
-    if (resp.status === 200) { response = resp; break; }
-    } catch { continue; }
-  }
-  if (!response) return [];
+    if (response.status !== 200) return [];
 
     const $ = cheerio.load(response.data);
     const resources: KicdBook[] = [];
