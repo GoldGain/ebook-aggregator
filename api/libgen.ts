@@ -187,13 +187,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const totalSources = (libgenBooks.status === 'fulfilled' ? 1 : 0) + (annaBooks.status === 'fulfilled' ? 1 : 0);
 
+    const pdfOnlyBooks = allBooks.filter(b => b.format?.toLowerCase() === 'pdf');
     return res.status(200).json({
       success: true,
       source: `libgen${totalSources > 1 ? '+annas_archive' : ''}`,
       query: q,
-      total: allBooks.length,
+      total: pdfOnlyBooks.length,
       page: Number(page),
-      books: allBooks.slice(0, numLimit),
+      books: pdfOnlyBooks.slice(0, numLimit),
       sourcesSearched: totalSources,
     });
   } catch (error: any) {

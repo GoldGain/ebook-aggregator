@@ -149,7 +149,7 @@ export function KICDResults({ query }: KICDResultsProps) {
                 className="flex items-center gap-1 px-3 py-1.5 bg-primary/10 text-primary rounded-md text-xs hover:bg-primary/20 transition"
               >
                 <Download className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Download</span>
+                <span className="hidden sm:inline">Download PDF</span>
               </a>
             ) : (
               <Button

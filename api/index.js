@@ -892,6 +892,7 @@ async function searchBooks(query, limit = 20, offset = 0) {
       const rawResult = await db.execute(
         sql`SELECT * FROM books
             WHERE search_vector @@ to_tsquery('english', ${tsQuery})
+              AND formats LIKE '%"pdf":%'
             ORDER BY ts_rank(search_vector, to_tsquery('english', ${tsQuery})) DESC,
                      "downloadCount" DESC NULLS LAST
             LIMIT ${limit} OFFSET ${offset}`
@@ -905,11 +906,14 @@ async function searchBooks(query, limit = 20, offset = 0) {
   }
   const searchTerm = `%${query}%`;
   return db.select().from(books).where(
-    or(
-      like(books.title, searchTerm),
-      like(books.author, searchTerm),
-      like(books.subjects, searchTerm),
-      like(books.description, searchTerm)
+    and(
+      or(
+        like(books.title, searchTerm),
+        like(books.author, searchTerm),
+        like(books.subjects, searchTerm),
+        like(books.description, searchTerm)
+      ),
+      like(books.formats, '%"pdf":%')
     )
   ).orderBy(desc(books.downloadCount)).limit(limit).offset(offset);
 }
@@ -934,6 +938,7 @@ async function listBooks(options) {
       )
     );
   }
+  conditions.push(like(books.formats, '%"pdf":%'));
   let orderBy = desc(books.importedAt);
   if (options.sort === "downloads") orderBy = desc(books.downloadCount);
   else if (options.sort === "title") orderBy = asc(books.title);
@@ -1455,7 +1460,7 @@ async function fetchInternetArchiveBooks(limit = 50) {
       language: Array.isArray(d.language) ? d.language[0] : d.language || "en",
       subjects: Array.isArray(d.subject) ? d.subject.slice(0, 5) : [],
       pdfUrl: `https://archive.org/download/${d.identifier}/${d.identifier}.pdf`,
-      epubUrl: `https://archive.org/download/${d.identifier}/${d.identifier}.epub`,
+      // Use the official download link format which sometimes handles auth better
       coverUrl: `https://archive.org/services/img/${d.identifier}`,
       publishedDate: d.date || "",
       publisher: d.publisher || "Internet Archive",
@@ -2431,7 +2436,6 @@ async function aggregateGenericSource(fetchFn, sourceSlug, defaultLevel) {
       } else {
         const formats = {};
         if (rightsPolicy.allowDirectDownload && book.pdfUrl) formats.pdf = book.pdfUrl;
-        if (rightsPolicy.allowDirectDownload && book.epubUrl) formats.epub = book.epubUrl;
         const bookId = await createBook({
           title: book.title.substring(0, 255),
           author: (book.author || "Unknown").substring(0, 255),
@@ -2491,7 +2495,7 @@ async function aggregateGutenberg() {
           language: book.language,
           coverUrl: book.coverImage,
           subjects: JSON.stringify(book.subjects),
-          formats: JSON.stringify(book.formats),
+          formats: JSON.stringify(book.formats ? { pdf: book.formats.pdf || book.formats["application/pdf"] } : {}),
           source: "gutenberg",
           sourceUrl: `https://www.gutenberg.org/ebooks/${book.id}`,
           rightsStatus: rightsPolicy.rightsStatus,
@@ -2531,7 +2535,6 @@ async function aggregateDoab() {
       } else {
         const formats = {};
         if (book.pdfUrl) formats.pdf = book.pdfUrl;
-        if (book.epubUrl) formats.epub = book.epubUrl;
         const bookId = await createBook({
           title: book.title,
           author: book.author,

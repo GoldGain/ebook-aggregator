@@ -362,33 +362,12 @@ export default function BookDetail() {
             {/* Download Options */}
             <div className="mb-8">
               <h2 className="text-2xl font-bold mb-4 text-primary">{canDownload ? "Download" : "Access"}</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {canDownload && formats.epub && (
-                  <Button onClick={() => handleDownload("epub", formats.epub)} className="btn-neon gap-2 h-auto py-3 flex-col">
-                    <Download className="w-5 h-5" />
-                    <span>EPUB Format</span>
-                    <span className="text-xs opacity-75">E-reader</span>
-                  </Button>
-                )}
+              <div className="grid grid-cols-1 gap-4 max-w-sm">
                 {canDownload && formats.pdf && (
-                  <Button onClick={() => handleDownload("pdf", formats.pdf)} className="btn-neon gap-2 h-auto py-3 flex-col">
-                    <Download className="w-5 h-5" />
-                    <span>PDF Format</span>
-                    <span className="text-xs opacity-75">Print-friendly</span>
-                  </Button>
-                )}
-                {canDownload && formats.txt && (
-                  <Button onClick={() => handleDownload("txt", formats.txt)} className="btn-neon gap-2 h-auto py-3 flex-col">
-                    <Download className="w-5 h-5" />
-                    <span>Plain Text</span>
-                    <span className="text-xs opacity-75">Text file</span>
-                  </Button>
-                )}
-                {canDownload && formats.html && (
-                  <Button onClick={() => handleDownload("html", formats.html)} className="btn-neon gap-2 h-auto py-3 flex-col">
-                    <Download className="w-5 h-5" />
-                    <span>HTML Format</span>
-                    <span className="text-xs opacity-75">Web version</span>
+                  <Button onClick={() => handleDownload("pdf", formats.pdf)} className="btn-neon gap-2 h-auto py-4 flex-col">
+                    <Download className="w-6 h-6" />
+                    <span className="text-lg font-bold">Download PDF</span>
+                    <span className="text-xs opacity-75">Full high-quality document</span>
                   </Button>
                 )}
               </div>

@@ -295,7 +295,6 @@ async function aggregateGenericSource(
       } else {
         const formats: Record<string, string> = {};
         if (rightsPolicy.allowDirectDownload && book.pdfUrl) formats.pdf = book.pdfUrl;
-        if (rightsPolicy.allowDirectDownload && book.epubUrl) formats.epub = book.epubUrl;
 
         const bookId = await createBook({
           title: book.title.substring(0, 255),
@@ -362,7 +361,7 @@ async function aggregateGutenberg(): Promise<{ added: number; updated: number; e
           language: book.language,
           coverUrl: book.coverImage,
           subjects: JSON.stringify(book.subjects),
-          formats: JSON.stringify(book.formats),
+          formats: JSON.stringify(book.formats ? { pdf: (book.formats as any).pdf || (book.formats as any)["application/pdf"] } : {}),
           source: "gutenberg",
           sourceUrl: `https://www.gutenberg.org/ebooks/${book.id}`,
           rightsStatus: rightsPolicy.rightsStatus,
@@ -407,7 +406,6 @@ async function aggregateDoab(): Promise<{ added: number; updated: number; errors
       } else {
         const formats: Record<string, string> = {};
         if (book.pdfUrl) formats.pdf = book.pdfUrl;
-        if (book.epubUrl) formats.epub = book.epubUrl;
 
         const bookId = await createBook({
           title: book.title,

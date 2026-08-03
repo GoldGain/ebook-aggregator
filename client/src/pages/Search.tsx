@@ -95,7 +95,10 @@ function BookCard({ book, onClick }: { book: any; onClick: () => void }) {
         {book.description && (
           <p className="text-[11px] text-muted-foreground/70 line-clamp-2 mb-2">{book.description}</p>
         )}
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap gap-1 items-center">
+          <span className="px-1.5 py-0.5 bg-red-500/20 text-red-400 border border-red-500/30 rounded text-[10px] font-bold uppercase tracking-wider">
+            PDF
+          </span>
           {book.language && (
             <span className="px-1.5 py-0.5 bg-accent/10 text-accent rounded text-[10px]">
               {book.language.toUpperCase()}
@@ -104,11 +107,6 @@ function BookCard({ book, onClick }: { book: any; onClick: () => void }) {
           {book.source && (
             <span className="px-1.5 py-0.5 bg-primary/10 text-primary rounded text-[10px]">
               {book.source.replace(/_/g, " ")}
-            </span>
-          )}
-          {book.educationalLevel && (
-            <span className="px-1.5 py-0.5 bg-secondary/10 text-secondary rounded text-[10px]">
-              {book.educationalLevel.replace(/_/g, " ")}
             </span>
           )}
           {book.downloadCount > 0 && (

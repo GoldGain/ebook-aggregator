@@ -197,6 +197,7 @@ export async function searchBooks(query: string, limit: number = 20, offset: num
       const rawResult = await db.execute(
         sql`SELECT * FROM books
             WHERE search_vector @@ to_tsquery('english', ${tsQuery})
+              AND formats LIKE '%"pdf":%'
             ORDER BY ts_rank(search_vector, to_tsquery('english', ${tsQuery})) DESC,
                      "downloadCount" DESC NULLS LAST
             LIMIT ${limit} OFFSET ${offset}`
@@ -217,11 +218,14 @@ export async function searchBooks(query: string, limit: number = 20, offset: num
     .select()
     .from(books)
     .where(
-      or(
-        like(books.title, searchTerm),
-        like(books.author, searchTerm),
-        like(books.subjects, searchTerm),
-        like(books.description, searchTerm),
+      and(
+        or(
+          like(books.title, searchTerm),
+          like(books.author, searchTerm),
+          like(books.subjects, searchTerm),
+          like(books.description, searchTerm),
+        ),
+        like(books.formats, '%"pdf":%')
       )
     )
     .orderBy(desc(books.downloadCount))
@@ -260,6 +264,9 @@ export async function listBooks(options: {
       )
     );
   }
+
+  // Always filter for PDF
+  conditions.push(like(books.formats, '%"pdf":%'));
 
   let orderBy = desc(books.importedAt);
   if (options.sort === "downloads") orderBy = desc(books.downloadCount);

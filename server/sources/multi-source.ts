@@ -18,7 +18,6 @@ export interface SourceBook {
   language: string;
   subjects: string[];
   pdfUrl?: string;
-  epubUrl?: string;
   coverUrl?: string;
   publishedDate?: string;
   educationalLevel?: string;
@@ -41,7 +40,7 @@ export async function fetchInternetArchiveBooks(limit = 50): Promise<SourceBook[
       language: Array.isArray(d.language) ? d.language[0] : (d.language || "en"),
       subjects: Array.isArray(d.subject) ? d.subject.slice(0, 5) : [],
       pdfUrl: `https://archive.org/download/${d.identifier}/${d.identifier}.pdf`,
-      epubUrl: `https://archive.org/download/${d.identifier}/${d.identifier}.epub`,
+      // Use the official download link format which sometimes handles auth better
       coverUrl: `https://archive.org/services/img/${d.identifier}`,
       publishedDate: d.date || "",
       publisher: d.publisher || "Internet Archive",
