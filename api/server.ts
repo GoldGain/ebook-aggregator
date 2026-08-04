@@ -289,16 +289,11 @@ app.all("/api/download", async (req: any, res: any) => {
   const anySuccess = results.some(r => r.status === "fulfilled" && r.value);
   if (anySuccess) return;
 
-  // All failed — return fallback with mirrors
-  return res.status(200).json({
-    success: true,
-    directDownload: false,
-    message: "Direct download unavailable. Please use one of the mirrors below.",
-    mirrors: [
-      { label: "Anna's Archive", url: `https://annas-archive.li/md5/${md5}` },
-      { label: "LibGen.li", url: `https://libgen.li/ads.php?md5=${md5}` },
-      { label: "LibGen.rs", url: `https://libgen.rs/get.php?md5=${md5}` },
-    ],
+  // All failed — return error (no redirects to external sites)
+  return res.status(404).json({
+    success: false,
+    error: "Download unavailable",
+    message: "Could not fetch this file from any source. The file may have been removed or is temporarily unavailable. Please try again later.",
   });
 });
 
