@@ -102,7 +102,11 @@ function cleanTitle(book: LibGenBook) {
   // Remove trailing garbage after the last period that looks like a sentence end
   if (title.length > 0) {
     // If title is just garbage after cleanup, fall back
-    if (title.length < 3 || /^[\d\s\.\-:]+$/.test(title)) {
+    // Handle DOI-style entries
+    if (/^DOI:\s/i.test(title) || /^10\.\d{4}\//i.test(title)) {
+      return book.author ? `${book.author} - Article` : 'Article';
+    }
+    if (title.length < 3 || /^[\d\s\.\-:;,]+$/.test(title)) {
       if (book.author) {
         return `${book.author} - ${book.year || 'Book'}`;
       }
@@ -154,8 +158,8 @@ function LibGenBookCard({ book, onBookSelect }: { book: LibGenBook; onBookSelect
         }
       }
     } catch {
-      // Server download failed
-      setDlError("Download failed. Please try again or use a mirror.");
+      // Server proxy failed — let user know to use mirrors
+      setDlError("Server download unavailable. Click Mirrors ↗ to try a direct source.");
     }
 
     setDownloading(false);
