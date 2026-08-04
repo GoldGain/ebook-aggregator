@@ -149,7 +149,11 @@ app.get("/api/libgen", async (req: any, res: any) => {
       const md5 = md5Match ? md5Match[1] : "";
       const annaUrl = annaLink.attr("href") || "";
 
-      if (title && md5 && title.length > 2) {
+      // Skip garbage titles (ISBNs, DOIs, pure numbers)
+      if (!title || !md5) return;
+      if (/^[\d\s;:.,-]+$/.test(title) || /^DOI:\s/i.test(title) || /^10\.\d{4}\//i.test(title)) return;
+      if (title.length < 3) return;
+      if (true) {
         books.push({
           title,
           author: author || "Unknown",
@@ -245,17 +249,29 @@ app.all("/api/download", async (req: any, res: any) => {
     return false;
   };
 
-  // Attempt 1: Try Anna's Archive (most reliable, no key needed)
-  const annaUrls = [
-    `https://annas-archive.li/md5/${md5}`,
-    `https://annas-archive.org/md5/${md5}`,
-  ];
-
-  for (const annaUrl of annaUrls) {
-    if (await tryDownload(annaUrl, annaUrl)) {
-      return;
+  // Attempt 1: Scrape library.lol for a direct (non-401) download link
+  try {
+    const lolResp = await axios.default.get(`https://library.lol/main/${md5}`, {
+      timeout: QUICK_TIMEOUT,
+      maxRedirects: 3,
+      headers: { "User-Agent": UA, "Referer": "https://library.lol/", "Accept": "text/html" },
+    });
+    const lolHtml = typeof lolResp.data === "string" ? lolResp.data : lolResp.data.toString();
+    // Parse the actual download link inside id="download"
+    const dlMatch = lolHtml.match(/id=["']download["'][\s\S]*?<a[^>]+href=["']([^"']+)["']/i);
+    if (dlMatch && dlMatch[1] && !dlMatch[1].includes("library.lol")) {
+      if (await tryDownload(dlMatch[1], "https://library.lol/")) {
+        return;
+      }
     }
-  }
+    // Also try any libgen mirror link on the page
+    const libMatch = lolHtml.match(/href=["'](https?:\/\/(?:libgen\.[a-z]+|books\.ms)[^\"']*\.(?:pdf|epub|djvu|fb2)[^"']*)["']/i);
+    if (libMatch && libMatch[1]) {
+      if (await tryDownload(libMatch[1], "https://library.lol/")) {
+        return;
+      }
+    }
+  } catch {}
 
   // Attempt 2: Try to get key from libgen.li, then download
   try {
