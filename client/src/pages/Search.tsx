@@ -472,17 +472,14 @@ export default function Search() {
               </div>
             )}
 
-            {/* No results */}
+            {/* No local results — show subtle inline note, LibGen results appear below */}
             {!isLoading && results && results.length === 0 && query && query.length >= 2 && (
-              <div className="text-center py-20">
-                <BookOpen className="w-14 h-14 mx-auto mb-4 text-muted-foreground/30" />
-                <h3 className="text-xl font-bold mb-2">No results found</h3>
-                <p className="text-muted-foreground text-sm mb-6">
-                  No books matched "<strong>{query}</strong>". Try different keywords or remove filters.
-                </p>
+              <div className="text-center py-4 text-sm text-muted-foreground/70">
+                No local results for "<strong className="text-foreground">{query}</strong>"
                 {hasFilters && (
-                  <Button variant="outline" size="sm" onClick={clearFilters}>Clear Filters</Button>
+                  <> — <button onClick={clearFilters} className="underline hover:text-primary transition">clear filters</button></>
                 )}
+                {" "}— see LibGen results below.
               </div>
             )}
 
