@@ -131,16 +131,36 @@ export default function BookDetail() {
       }
       return;
     }
-    // Non-md5 records (KICD, KNEC, etc.) — open the source PDF directly
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = '';
-    link.rel = 'noopener noreferrer';
-    link.target = '_blank';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    toast.success("Opening download...");
+    // Non-md5 records (KICD, KNEC, Kenyan exam papers) — route through our
+    // serverless download proxy which fetches the source PDF server-side
+    setDownloadState("preparing");
+    toast.info("Preparing your download...");
+    try {
+      const resp = await fetch(`/api/download?url=${encodeURIComponent(url)}`, {
+        headers: { Accept: "application/pdf,application/octet-stream,*/*" },
+      });
+      if (resp.headers.get("content-type")?.includes("application/") || resp.headers.get("content-disposition")) {
+        setDownloadState("downloading");
+        const blob = await resp.blob();
+        const safe = (book?.title || "document").replace(/[^A-Za-z0-9 ]+/g, " ").trim().slice(0, 60) || "document";
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = `${safe}.${format === "pdf" ? "pdf" : format}`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
+        toast.success("Download started!");
+      } else {
+        toast.warning("Download unavailable — the file may have been moved. Opening the source directly...");
+        window.open(url, "_blank", "noopener,noreferrer");
+      }
+    } catch {
+      window.open(url, "_blank", "noopener,noreferrer");
+    } finally {
+      setDownloadState("idle");
+    }
   };
 
   const handleMarkAsRead = () => {

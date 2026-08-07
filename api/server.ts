@@ -214,6 +214,47 @@ app.all("/api/download", async (req: any, res: any) => {
     format = body.format || "pdf";
   }
 
+  // ── Direct URL mode: books with a real PDF URL (e.g. Kenyan exam papers) ──
+  if (req.method === "GET") {
+    const directUrl = req.query.url as string | undefined;
+    if (directUrl && /^https?:\/\//i.test(directUrl)) {
+      try {
+        const axios = await import("axios");
+        const r = await axios.default.get(directUrl, {
+          responseType: "arraybuffer",
+          timeout: 30000,
+          maxRedirects: 8,
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            Accept: "*/*",
+          },
+          validateStatus: (s: number) => s < 500,
+        });
+        const buf = Buffer.from(r.data);
+        const ct = r.headers["content-type"] || "";
+        if (/text\/html|text\/xml/.test(ct) && buf.length < 50000) {
+          return res.status(502).json({ error: "Source returned an HTML page instead of a PDF. The file may have been moved or removed.", success: false });
+        }
+        if (buf.length > 1000) {
+          const magic = buf.slice(0, 4).toString("hex");
+          const isPdf = magic === "25504446" || magic === "41542654" || magic === "0000001c" || /pdf/i.test(ct);
+          if (isPdf || buf.length > 100000) {
+            const ext = /application\/epub|epub|\.epub/i.test(ct + directUrl) ? "epub" : "pdf";
+            res.setHeader("Content-Type", isPdf ? "application/pdf" : ct || "application/octet-stream");
+            res.setHeader("Content-Disposition", `attachment; filename="document.${ext}"`);
+            res.setHeader("Content-Length", buf.length.toString());
+            res.setHeader("Access-Control-Allow-Origin", "*");
+            res.setHeader("Access-Control-Expose-Headers", "Content-Disposition, Content-Length");
+            return res.send(buf);
+          }
+        }
+        return res.status(502).json({ error: "Source did not return a valid document.", success: false });
+      } catch (e) {
+        return res.status(502).json({ error: "Failed to fetch from source", message: e instanceof Error ? e.message : "Unknown error", success: false });
+      }
+    }
+  }
+
   if (!md5 || typeof md5 !== "string" || md5.length !== 32) {
     return res.status(400).json({ error: "Valid 32-character md5 required", success: false });
   }
