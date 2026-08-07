@@ -98,11 +98,7 @@ function BookCard({ book, onClick }: { book: any; onClick: () => void }) {
             {book.language.toUpperCase()}
           </span>
         )}
-        {book.source && (
-          <span className="px-1.5 py-0.5 bg-primary/10 text-primary rounded text-[10px] truncate max-w-[80px]">
-            {book.source.replace(/_/g, " ")}
-          </span>
-        )}
+        {/* Source hidden */}
         {book.downloadCount > 0 && (
           <span className="px-1.5 py-0.5 bg-secondary/10 text-secondary rounded text-[10px]">
             {book.downloadCount} ↓
@@ -249,8 +245,8 @@ export default function Home() {
         <div className="container">
           <div className="flex items-center justify-between mb-8">
             <div className="accent-line-left">
-              <h2 className="text-3xl font-black">OUR SOURCES</h2>
-              <p className="text-sm text-muted-foreground mt-1">50+ open-access repositories worldwide</p>
+              <h2 className="text-3xl font-black">COLLECTIONS & CURRICULUM</h2>
+              <p className="text-sm text-muted-foreground mt-1">Curated libraries, past papers, and curriculum guides</p>
             </div>
             <Button variant="ghost" size="sm" onClick={() => navigate("/catalog")} className="gap-1 text-muted-foreground hover:text-primary">
               Browse All <ArrowRight className="w-3.5 h-3.5" />

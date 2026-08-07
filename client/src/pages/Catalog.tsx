@@ -279,7 +279,7 @@ export default function Catalog() {
                     <p className="text-sm text-muted-foreground mb-3 line-clamp-1">{book.author || "Unknown Author"}</p>
                     <div className="flex gap-2 flex-wrap">
                       {book.language && <span className="text-xs px-2 py-1 bg-accent/10 text-accent rounded">{book.language.toUpperCase()}</span>}
-                      {book.source && <span className="text-xs px-2 py-1 bg-primary/10 text-primary rounded">{book.source}</span>}
+                      {/* Source hidden */}
                       {book.educationalLevel && <span className="text-xs px-2 py-1 bg-secondary/10 text-secondary rounded">{book.educationalLevel.replace("_", " ")}</span>}
                     </div>
                   </div>
@@ -302,7 +302,7 @@ export default function Catalog() {
                       {book.description && <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{book.description}</p>}
                       <div className="flex gap-2 flex-wrap">
                         {book.language && <span className="text-xs px-2 py-1 bg-accent/10 text-accent rounded">{book.language.toUpperCase()}</span>}
-                        {book.source && <span className="text-xs px-2 py-1 bg-primary/10 text-primary rounded">{book.source}</span>}
+                        {/* Source hidden */}
                         {book.educationalLevel && <span className="text-xs px-2 py-1 bg-secondary/10 text-secondary rounded">{book.educationalLevel.replace("_", " ")}</span>}
                         {book.downloadCount ? <span className="text-xs px-2 py-1 bg-primary/10 text-primary rounded">{book.downloadCount} downloads</span> : null}
                       </div>

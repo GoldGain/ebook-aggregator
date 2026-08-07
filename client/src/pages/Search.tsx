@@ -104,11 +104,7 @@ function BookCard({ book, onClick }: { book: any; onClick: () => void }) {
               {book.language.toUpperCase()}
             </span>
           )}
-          {book.source && (
-            <span className="px-1.5 py-0.5 bg-primary/10 text-primary rounded text-[10px]">
-              {book.source.replace(/_/g, " ")}
-            </span>
-          )}
+          {/* Source hidden */}
           {book.downloadCount > 0 && (
             <span className="px-1.5 py-0.5 bg-muted/30 text-muted-foreground rounded text-[10px]">
               {book.downloadCount} ↓

@@ -317,14 +317,7 @@ export default function BookDetail() {
 
             {/* Book Info Card */}
             <div className="mt-8 space-y-4 card-neon p-4">
-              {book.source && (
-                <div>
-                  <p className="text-sm text-muted-foreground">Source</p>
-                  <span className={`inline-block mt-1 px-2 py-1 rounded text-xs font-medium ${SOURCE_COLORS[book.source] || "bg-accent/10 text-accent"}`}>
-                    {book.source}
-                  </span>
-                </div>
-              )}
+              {/* Source hidden */}
               {book.language && (
                 <div className="flex items-center gap-2">
                   <Globe className="w-4 h-4 text-muted-foreground" />
@@ -456,15 +449,7 @@ export default function BookDetail() {
               </div>
             </div>
 
-            {/* Source URL */}
-            {book.sourceUrl && (
-              <div className="mb-8">
-                <a href={book.sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-sm text-accent hover:text-primary transition">
-                  <ExternalLink className="w-4 h-4" />
-                  View on {book.source || "source"}
-                </a>
-              </div>
-            )}
+            {/* Source URL hidden */}
 
             {/* Metadata */}
             <div className="card-neon p-6">
