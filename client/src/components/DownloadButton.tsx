@@ -125,7 +125,6 @@ export function DownloadButton({ md5, title, format = "pdf" }: DownloadButtonPro
                 </a>
               ))}
             </div>
-          )}div>
           )}
         </div>
       )}

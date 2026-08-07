@@ -12,6 +12,7 @@ export default function BookDetail() {
   const { user } = useAuth();
   const [isSaved, setIsSaved] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [downloadState, setDownloadState] = useState<"idle" | "preparing" | "downloading">("idle");
 
   const bookId = parseInt(id || "0", 10);
 
@@ -86,11 +87,51 @@ export default function BookDetail() {
     }
   };
 
-  const handleDownload = (format: string, url: string) => {
+  // Extract md5 from known formats (anna's archive / libgen URLs)
+  const extractMd5 = (url: string): string | null => {
+    const match = /md5=([a-f0-9]{32})/i.exec(url) || /\/md5\/([a-f0-9]{32})/i.exec(url);
+    return match ? match[1] : null;
+  };
+
+  const handleDownload = async (format: string, url: string) => {
     if (user) {
       recordDownloadMutation.mutate({ bookId, format: format as any });
     }
-    // Create a temporary anchor element to trigger a proper download
+    const md5 = extractMd5(url);
+    if (md5) {
+      // Route through our serverless download proxy — streams the binary file
+      // directly to the browser (no redirects, no 401 from blocked mirrors).
+      setDownloadState("preparing");
+      toast.info("Preparing your download...");
+      try {
+        const resp = await fetch(`/api/download?md5=${md5}&format=${encodeURIComponent(format)}`, {
+          headers: { Accept: "application/pdf,application/octet-stream,*/*" },
+        });
+        if (resp.headers.get("content-type")?.startsWith("application/") || resp.headers.get("content-disposition")) {
+          setDownloadState("downloading");
+          const blob = await resp.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = blobUrl;
+          link.download = `book.${format}`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
+          toast.success("Download started!");
+        } else {
+          // Proxy couldn't fetch — fall back to opening the source directly
+          toast.warning("Server is busy, opening the source directly...");
+          window.open(url, "_blank", "noopener,noreferrer");
+        }
+      } catch {
+        window.open(url, "_blank", "noopener,noreferrer");
+      } finally {
+        setDownloadState("idle");
+      }
+      return;
+    }
+    // Non-md5 records (KICD, KNEC, etc.) — open the source PDF directly
     const link = document.createElement('a');
     link.href = url;
     link.download = '';
@@ -99,6 +140,7 @@ export default function BookDetail() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    toast.success("Opening download...");
   };
 
   const handleMarkAsRead = () => {
@@ -132,7 +174,7 @@ export default function BookDetail() {
       <div className="min-h-screen bg-background text-foreground">
         <nav className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
           <div className="container flex items-center justify-between h-16">
-            <button onClick={() => navigate("/")} className="text-2xl font-bold neon-glow hover:opacity-80 transition">LUMINA</button>
+            <button onClick={() => navigate("/")} className="text-2xl font-bold neon-glow hover:opacity-80 transition">ZAMIFU</button>
           </div>
         </nav>
         <div className="container py-12">
@@ -175,7 +217,7 @@ export default function BookDetail() {
         <div className="container flex items-center justify-between h-16">
           <button onClick={() => navigate("/")} className="flex items-center gap-2">
             <BookOpen className="w-6 h-6 text-primary" />
-            <span className="font-black text-lg neon-glow hidden sm:inline">LUMINA</span>
+            <span className="font-black text-lg neon-glow hidden sm:inline">ZAMIFU</span>
           </button>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" onClick={() => navigate("/catalog")} className="text-muted-foreground hover:text-primary">Catalog</Button>
@@ -239,7 +281,7 @@ export default function BookDetail() {
               <div className="flex gap-2">
                 <Button variant="outline" className="flex-1 gap-2" onClick={() => {
                   if (navigator.share) {
-                    navigator.share({ title: book.title, text: `Check out "${book.title}" by ${book.author} on Lumina Books`, url: window.location.href });
+                    navigator.share({ title: book.title, text: `Check out "${book.title}" by ${book.author} on ZAMIFU E-Materials`, url: window.location.href });
                   } else {
                     handleCopyLink();
                   }
@@ -364,10 +406,16 @@ export default function BookDetail() {
               <h2 className="text-2xl font-bold mb-4 text-primary">{canDownload ? "Download" : "Access"}</h2>
               <div className="grid grid-cols-1 gap-4 max-w-sm">
                 {canDownload && formats.pdf && (
-                  <Button onClick={() => handleDownload("pdf", formats.pdf)} className="btn-neon gap-2 h-auto py-4 flex-col">
-                    <Download className="w-6 h-6" />
+                  <Button onClick={() => handleDownload("pdf", formats.pdf)} disabled={downloadState !== "idle"} className="btn-neon gap-2 h-auto py-4 flex-col">
+                    {downloadState !== "idle" ? (
+                      <Loader2 className="w-6 h-6 animate-spin" />
+                    ) : (
+                      <Download className="w-6 h-6" />
+                    )}
                     <span className="text-lg font-bold">Download PDF</span>
-                    <span className="text-xs opacity-75">Full high-quality document</span>
+                    <span className="text-xs opacity-75">
+                      {downloadState === "preparing" ? "Preparing..." : downloadState === "downloading" ? "Downloading..." : "Full high-quality document"}
+                    </span>
                   </Button>
                 )}
               </div>

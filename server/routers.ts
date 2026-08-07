@@ -172,6 +172,7 @@ export const appRouter = router({
           source: z.string().optional(),
           search: z.string().optional(),
           sort: z.enum(["newest", "downloads", "title", "author"]).default("newest"),
+          pdfOnly: z.boolean().default(false),
         })
       )
       .query(async ({ input }) => {

@@ -18,27 +18,47 @@ import axios3 from "axios";
 import * as cheerio from "cheerio";
 async function fetchKicdResources(limit = 50) {
   try {
-    const response = await axios3.get(KICD_BASE_URL, {
-      timeout: 2e4,
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; EbookAggregator/1.0)",
-        "Accept": "text/html,application/xhtml+xml"
+    let response = null;
+    for (const url of KICD_BASE_URLS) {
+      try {
+        const resp = await axios3.get(url, {
+          timeout: 2e4,
+          headers: {
+            "User-Agent": "Mozilla/5.0 (compatible; ZAMIFU-E-MATERIALS/1.0)",
+            "Accept": "text/html,application/xhtml+xml"
+          }
+        });
+        if (resp.status === 200) {
+          response = resp;
+          break;
+        }
+      } catch {
+        continue;
       }
-    });
-    if (response.status !== 200) return [];
+    }
+    if (!response) return [];
     const $ = cheerio.load(response.data);
     const resources = [];
     const seen = /* @__PURE__ */ new Set();
-    $('a[href*="/sdm_downloads/"]').each((_idx, el) => {
+    const allLinks = $('a[href*="/sdm_downloads/"], a[href*="/downloads/"], a[href*=".pdf"], a[href*=".epub"], a[href*=".docx"], a[href*=".pptx"]');
+    allLinks.each((_idx, el) => {
       const $el = $(el);
       const href = $el.attr("href") || "";
       const text2 = $el.text().trim();
-      if (!href.includes("/sdm_downloads/") || href === KICD_BASE_URL || href.endsWith("/sdm_downloads/") || text2.toLowerCase() === "more" || text2.toLowerCase() === "downloads" || text2.length < 5) {
+      if (!href || href === KICD_BASE_URLS[0] || href.endsWith("/sdm_downloads/") || text2.toLowerCase() === "more" || text2.toLowerCase() === "downloads" || text2.length < 3) {
         return;
       }
       if (seen.has(href)) return;
       seen.add(href);
       const fullUrl = href.startsWith("http") ? href : `https://kicd.ac.ke${href.startsWith("/") ? "" : "/"}${href}`;
+      let educationalLevel = "primary";
+      if (href.toLowerCase().includes("secondary") || text2.toLowerCase().includes("secondary")) {
+        educationalLevel = "high_school";
+      } else if (href.toLowerCase().includes("university") || text2.toLowerCase().includes("university")) {
+        educationalLevel = "university";
+      } else if (href.toLowerCase().includes("college") || text2.toLowerCase().includes("college")) {
+        educationalLevel = "college";
+      }
       resources.push({
         id: `kicd-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         title: text2.substring(0, 255),
@@ -49,7 +69,7 @@ async function fetchKicdResources(limit = 50) {
         downloadUrl: fullUrl,
         coverUrl: "",
         publishedDate: (/* @__PURE__ */ new Date()).toISOString(),
-        educationalLevel: "primary",
+        educationalLevel,
         sourceUrl: fullUrl
       });
     });
@@ -61,7 +81,7 @@ async function fetchKicdResources(limit = 50) {
 }
 async function searchKicdResources(category) {
   try {
-    const searchUrl = `${KICD_BASE_URL}?s=${encodeURIComponent(category)}`;
+    const searchUrl = `${KICD_BASE_URLS[0]}?s=${encodeURIComponent(category)}`;
     const response = await axios3.get(searchUrl, {
       timeout: 2e4,
       headers: {
@@ -97,10 +117,10 @@ async function searchKicdResources(category) {
     return [];
   }
 }
-var KICD_BASE_URL;
+var KICD_BASE_URLS;
 var init_kicd = __esm({
   "server/sources/kicd.ts"() {
-    KICD_BASE_URL = "https://kicd.ac.ke/sdm_downloads/";
+    KICD_BASE_URLS = ["https://kicd.ac.ke/sdm_downloads/", "https://kicd.ac.ke/downloads/", "https://kicd.ac.ke/curriculum-downloads/"];
   }
 });
 
@@ -550,7 +570,7 @@ async function verifySupabaseToken(accessToken) {
 import { z as z2 } from "zod";
 
 // server/db.ts
-import { and, eq, like, or, desc, asc, sql, count } from "drizzle-orm";
+import { and, eq, like, ilike, or, desc, asc, sql, count } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
@@ -892,7 +912,6 @@ async function searchBooks(query, limit = 20, offset = 0) {
       const rawResult = await db.execute(
         sql`SELECT * FROM books
             WHERE search_vector @@ to_tsquery('english', ${tsQuery})
-              AND formats LIKE '%"pdf":%'
             ORDER BY ts_rank(search_vector, to_tsquery('english', ${tsQuery})) DESC,
                      "downloadCount" DESC NULLS LAST
             LIMIT ${limit} OFFSET ${offset}`
@@ -906,14 +925,11 @@ async function searchBooks(query, limit = 20, offset = 0) {
   }
   const searchTerm = `%${query}%`;
   return db.select().from(books).where(
-    and(
-      or(
-        like(books.title, searchTerm),
-        like(books.author, searchTerm),
-        like(books.subjects, searchTerm),
-        like(books.description, searchTerm)
-      ),
-      like(books.formats, '%"pdf":%')
+    or(
+      like(books.title, searchTerm),
+      like(books.author, searchTerm),
+      like(books.subjects, searchTerm),
+      like(books.description, searchTerm)
     )
   ).orderBy(desc(books.downloadCount)).limit(limit).offset(offset);
 }
@@ -925,20 +941,24 @@ async function listBooks(options) {
     const genre = await getGenreBySlug(options.genre);
     if (genre) conditions.push(eq(books.genreId, genre.id));
   }
-  if (options.language) conditions.push(eq(books.language, options.language));
+  if (options.language) {
+    conditions.push(ilike(books.language, options.language));
+  }
   if (options.educationalLevel) conditions.push(eq(books.educationalLevel, options.educationalLevel));
   if (options.source) conditions.push(eq(books.source, options.source));
   if (options.search) {
     conditions.push(
       or(
-        like(books.title, `%${options.search}%`),
-        like(books.author, `%${options.search}%`),
-        like(books.subjects, `%${options.search}%`),
-        like(books.description, `%${options.search}%`)
+        ilike(books.title, `%${options.search}%`),
+        ilike(books.author, `%${options.search}%`),
+        ilike(books.subjects, `%${options.search}%`),
+        ilike(books.description, `%${options.search}%`)
       )
     );
   }
-  conditions.push(like(books.formats, '%"pdf":%'));
+  if (options.pdfOnly) {
+    conditions.push(like(books.formats, '%"pdf":%'));
+  }
   let orderBy = desc(books.importedAt);
   if (options.sort === "downloads") orderBy = desc(books.downloadCount);
   else if (options.sort === "title") orderBy = asc(books.title);
@@ -2636,7 +2656,7 @@ async function aggregateKicd() {
         updated++;
       } else {
         const formats = {};
-        if (rightsPolicy.allowDirectDownload && book.downloadUrl) formats.pdf = book.downloadUrl;
+        if (book.downloadUrl) formats.pdf = book.downloadUrl;
         const bookId = await createBook({
           title: book.title,
           author: book.author,
@@ -2685,7 +2705,7 @@ async function aggregateKnec() {
         updated++;
       } else {
         const formats = {};
-        if (rightsPolicy.allowDirectDownload && book.downloadUrl) formats.pdf = book.downloadUrl;
+        if (book.downloadUrl) formats.pdf = book.downloadUrl;
         const bookId = await createBook({
           title: book.title,
           author: book.author,
@@ -2824,7 +2844,8 @@ var appRouter = router({
         educationalLevel: z2.string().optional(),
         source: z2.string().optional(),
         search: z2.string().optional(),
-        sort: z2.enum(["newest", "downloads", "title", "author"]).default("newest")
+        sort: z2.enum(["newest", "downloads", "title", "author"]).default("newest"),
+        pdfOnly: z2.boolean().default(false)
       })
     ).query(async ({ input }) => {
       return listBooks(input);
@@ -3340,7 +3361,7 @@ app.get("/api/check-url", async (req, res) => {
     const response = await axios7.default.head(url, {
       timeout: 8e3,
       maxRedirects: 5,
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; LuminaBooks/2.0)" }
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; ZAMIFU-E-MATERIALS/2.0)" }
     });
     return res.json({ ok: true, status: response.status, url });
   } catch (error) {
@@ -3365,7 +3386,7 @@ app.get("/api/libgen", async (req, res) => {
     const response = await axios7.default.get(url, {
       timeout: 3e4,
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; LuminaBooks/2.0; Educational Aggregator)"
+        "User-Agent": "Mozilla/5.0 (compatible; ZAMIFU-E-MATERIALS/2.0; Educational Aggregator)"
       }
     });
     const $ = cheerio5.load(response.data);
@@ -3391,7 +3412,10 @@ app.get("/api/libgen", async (req, res) => {
       const md5Match = md5Href.match(/md5=([a-f0-9]{32})/);
       const md5 = md5Match ? md5Match[1] : "";
       const annaUrl = annaLink.attr("href") || "";
-      if (title && md5 && title.length > 2) {
+      if (!title || !md5) return;
+      if (/^[\d\s;:.,-]+$/.test(title) || /^DOI:\s/i.test(title) || /^10\.\d{4}\//i.test(title)) return;
+      if (title.length < 3) return;
+      if (true) {
         books2.push({
           title,
           author: author || "Unknown",
@@ -3405,14 +3429,14 @@ app.get("/api/libgen", async (req, res) => {
           source: "libgen",
           // Primary: Anna's Archive (most reliable); fallback to libgen mirrors
           sourceUrl: annaUrl || `https://libgen.li/get.php?md5=${md5}`,
-          annaUrl: annaUrl || `https://annas-archive.org/md5/${md5}`,
+          annaUrl: annaUrl || `https://annas-archive.li/md5/${md5}`,
           mirrors: [
-            annaUrl || `https://annas-archive.org/md5/${md5}`,
+            annaUrl || `https://annas-archive.li/md5/${md5}`,
             `https://libgen.li/get.php?md5=${md5}`,
             `https://libgen.rs/get.php?md5=${md5}`
           ],
           formats: {
-            pdf: annaUrl || `https://annas-archive.org/md5/${md5}`
+            pdf: annaUrl || `https://annas-archive.li/md5/${md5}`
           }
         });
       }
@@ -3448,72 +3472,109 @@ app.all("/api/download", async (req, res) => {
   if (!md5 || typeof md5 !== "string" || md5.length !== 32) {
     return res.status(400).json({ error: "Valid 32-character md5 required", success: false });
   }
+  const annaJsonUrl = `https://annas-archive.li/md5/${md5}.json`;
+  const annaHtmlUrl = `https://annas-archive.li/md5/${md5}`;
   const axios7 = await import("axios");
   const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
-  const QUICK_TIMEOUT = 8e3;
+  const TIMEOUT = 2e4;
+  const isBinaryCt = (ct) => /application\/pdf|application\/octet-stream|application\/epub|djvu|binary/i.test(ct || "");
   const sendFile = (data, ct) => {
     const ext = (format || "pdf").toLowerCase();
-    res.setHeader("Content-Type", ct || "application/octet-stream");
+    res.setHeader("Content-Type", ct || "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="book.${ext}"`);
     res.setHeader("Content-Length", data.length.toString());
     res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Expose-Headers", "Content-Disposition, Content-Length");
     return res.send(data);
   };
   const tryDownload = async (url, referer) => {
     try {
       const r = await axios7.default.get(url, {
         responseType: "arraybuffer",
-        timeout: QUICK_TIMEOUT,
-        maxRedirects: 5,
-        headers: { "User-Agent": UA, "Referer": referer || "https://libgen.li/", "Accept": "*/*" },
-        validateStatus: (s) => s < 400
+        timeout: TIMEOUT,
+        maxRedirects: 8,
+        headers: { "User-Agent": UA, "Referer": referer || "https://annas-archive.li/", "Accept": "*/*" },
+        validateStatus: (s) => s < 500
+        // try to keep working even on 4xx edge cases
       });
       const ct = r.headers["content-type"] || "";
-      if (ct && !ct.includes("text/html") && !ct.includes("application/json") && r.data && r.data.length > 1e3) {
-        sendFile(Buffer.from(r.data), ct);
-        return true;
+      if (/text\/html|application\/json/.test(ct) && r.data && r.data.length < 5e4) return false;
+      const buf = Buffer.from(r.data);
+      if (buf.length > 1e3) {
+        const magic = buf.slice(0, 4).toString("hex");
+        if (magic === "25504446" || magic === "504b0304" || magic === "41542654" || magic === "d0cf11e0" || magic === "0000001c") {
+          sendFile(buf, isBinaryCt(ct) ? ct : "application/pdf");
+          return true;
+        }
+        if (buf.length > 1e5 && !/text\/html/.test(ct)) {
+          sendFile(buf, ct || "application/pdf");
+          return true;
+        }
       }
     } catch {
     }
     return false;
   };
   try {
+    const jsonResp = await axios7.default.get(annaJsonUrl, {
+      timeout: 1e4,
+      maxRedirects: 5,
+      headers: { "User-Agent": UA, "Referer": annaHtmlUrl, Accept: "application/json" }
+    });
+    if (jsonResp.data && jsonResp.data?.mirrors?.length) {
+      const mirrors = jsonResp.data.mirrors;
+      const results2 = await Promise.allSettled(mirrors.map((m) => {
+        const url = typeof m === "string" ? m : m?.url;
+        return url ? tryDownload(url, annaHtmlUrl) : Promise.resolve(false);
+      }));
+      if (results2.some((r) => r.status === "fulfilled" && r.value)) return;
+    }
+  } catch {
+  }
+  try {
+    const lolResp = await axios7.default.get(`https://library.lol/main/${md5}`, {
+      timeout: TIMEOUT,
+      maxRedirects: 3,
+      headers: { "User-Agent": UA, "Referer": "https://library.lol/", "Accept": "text/html" }
+    });
+    const lolHtml = typeof lolResp.data === "string" ? lolResp.data : lolResp.data.toString();
+    const dlMatch = lolHtml.match(/id=["']download["'][\s\S]*?<a[^>]+href=["']([^"']+)["']/i);
+    if (dlMatch && dlMatch[1] && !dlMatch[1].includes("library.lol")) {
+      if (await tryDownload(dlMatch[1], "https://library.lol/")) return;
+    }
+    const libMatch = lolHtml.match(/href=["'](https?:\/\/(?:libgen\.[a-z]+|books\.ms)[^\"']*\.(?:pdf|epub|djvu|fb2)[^"']*)["']/i);
+    if (libMatch && libMatch[1]) {
+      if (await tryDownload(libMatch[1], "https://library.lol/")) return;
+    }
+  } catch {
+  }
+  try {
     const adsResp = await axios7.default.get(`https://libgen.li/ads.php?md5=${md5}`, {
-      timeout: QUICK_TIMEOUT,
+      timeout: TIMEOUT,
       maxRedirects: 5,
       headers: { "User-Agent": UA }
     });
     const html = typeof adsResp.data === "string" ? adsResp.data : adsResp.data.toString();
-    const keyMatch = html.match(new RegExp("get.php?md5=" + md5 + "&key=([A-Za-z0-9]+)"));
+    const keyMatch = html.match(new RegExp("get\\.php\\?md5=" + md5 + "&key=([A-Za-z0-9]+)"));
     if (keyMatch) {
       const key = keyMatch[1];
-      if (await tryDownload(`https://libgen.li/get.php?md5=${md5}&key=${key}`, `https://libgen.li/ads.php?md5=${md5}`)) {
-        return;
-      }
+      if (await tryDownload(`https://libgen.li/get.php?md5=${md5}&key=${key}`, `https://libgen.li/ads.php?md5=${md5}`)) return;
     }
   } catch {
   }
   const directUrls = [
-    `https://library.lol/main/${md5}`,
-    `https://download.library.lol/main/${md5}`,
     `https://libgen.rocks/get.php?md5=${md5}`,
-    `https://libgen.rs/get.php?md5=${md5}`
+    `https://libgen.is/get.php?md5=${md5}`,
+    `https://libgen.gs/get.php?md5=${md5}`,
+    `https://libgen.li/get.php?md5=${md5}`
   ];
-  const results = await Promise.allSettled(
-    directUrls.map((url) => tryDownload(url))
-  );
+  const results = await Promise.allSettled(directUrls.map((url) => tryDownload(url)));
   const anySuccess = results.some((r) => r.status === "fulfilled" && r.value);
   if (anySuccess) return;
   return res.status(200).json({
-    success: true,
-    directDownload: false,
-    message: "Server-side download unavailable from datacenter IP. Use the links below to download directly.",
-    mirrors: [
-      { label: "Anna's Archive", url: `https://annas-archive.org/md5/${md5}` },
-      { label: "LibGen.li", url: `https://libgen.li/ads.php?md5=${md5}` },
-      { label: "LibGen.rs", url: `https://libgen.rs/get.php?md5=${md5}` },
-      { label: "Library.lol", url: `https://library.lol/main/${md5}` }
-    ]
+    success: false,
+    error: "Download unavailable",
+    message: "Could not fetch this file from any source. The file may have been removed or is temporarily unavailable. Please try again later."
   });
 });
 app.options("/api/download", (_req, res) => {
@@ -3572,7 +3633,7 @@ app.get("/api/search", async (req, res) => {
       const lgUrl = `https://libgen.li/index.php?req=${encodedQuery}&lg_topic=libgen&open=0&view=simple&res=50&phrase=1&column=def`;
       const response = await axios7.default.get(lgUrl, {
         timeout: 2e4,
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; LuminaBooks/2.0; Educational Aggregator)" }
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; ZAMIFU-E-MATERIALS/2.0; Educational Aggregator)" }
       });
       const $ = cheerio5.load(response.data);
       $("#tablelibgen tr").each((_i, row) => {
@@ -3599,7 +3660,7 @@ app.get("/api/search", async (req, res) => {
             language: lang || "en",
             md5,
             source: "libgen",
-            sourceUrl: `https://annas-archive.org/md5/${md5}`
+            sourceUrl: `https://annas-archive.li/md5/${md5}`
           });
         }
       });

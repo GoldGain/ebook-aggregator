@@ -1,4 +1,4 @@
-import { and, eq, like, or, desc, asc, sql, count } from "drizzle-orm";
+import { and, eq, like, ilike, or, desc, asc, sql, count } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import {
@@ -197,7 +197,6 @@ export async function searchBooks(query: string, limit: number = 20, offset: num
       const rawResult = await db.execute(
         sql`SELECT * FROM books
             WHERE search_vector @@ to_tsquery('english', ${tsQuery})
-              AND formats LIKE '%"pdf":%'
             ORDER BY ts_rank(search_vector, to_tsquery('english', ${tsQuery})) DESC,
                      "downloadCount" DESC NULLS LAST
             LIMIT ${limit} OFFSET ${offset}`
@@ -218,14 +217,11 @@ export async function searchBooks(query: string, limit: number = 20, offset: num
     .select()
     .from(books)
     .where(
-      and(
-        or(
-          like(books.title, searchTerm),
-          like(books.author, searchTerm),
-          like(books.subjects, searchTerm),
-          like(books.description, searchTerm),
-        ),
-        like(books.formats, '%"pdf":%')
+      or(
+        like(books.title, searchTerm),
+        like(books.author, searchTerm),
+        like(books.subjects, searchTerm),
+        like(books.description, searchTerm),
       )
     )
     .orderBy(desc(books.downloadCount))
@@ -242,6 +238,7 @@ export async function listBooks(options: {
   source?: string;
   search?: string;
   sort?: "newest" | "downloads" | "title" | "author";
+  pdfOnly?: boolean;
 }): Promise<Book[]> {
   const db = await getDb();
   if (!db) return [];
@@ -251,22 +248,30 @@ export async function listBooks(options: {
     const genre = await getGenreBySlug(options.genre);
     if (genre) conditions.push(eq(books.genreId, genre.id));
   }
-  if (options.language) conditions.push(eq(books.language, options.language));
+  if (options.language) {
+    // Case-insensitive language match — stored values may differ in casing.
+    conditions.push(ilike(books.language, options.language));
+  }
   if (options.educationalLevel) conditions.push(eq(books.educationalLevel, options.educationalLevel as any));
   if (options.source) conditions.push(eq(books.source, options.source as any));
   if (options.search) {
     conditions.push(
       or(
-        like(books.title, `%${options.search}%`),
-        like(books.author, `%${options.search}%`),
-        like(books.subjects, `%${options.search}%`),
-        like(books.description, `%${options.search}%`),
+        ilike(books.title, `%${options.search}%`),
+        ilike(books.author, `%${options.search}%`),
+        ilike(books.subjects, `%${options.search}%`),
+        ilike(books.description, `%${options.search}%`),
       )
     );
   }
 
-  // Always filter for PDF
-  conditions.push(like(books.formats, '%"pdf":%'));
+  // Optionally restrict to records with a downloadable PDF format.
+  // When pdfOnly is false (default) we return all matching records so that
+  // HTML-linked KICD/CBC materials and external exam papers are not hidden
+  // behind the PDF requirement.
+  if (options.pdfOnly) {
+    conditions.push(like(books.formats, '%"pdf":%'));
+  }
 
   let orderBy = desc(books.importedAt);
   if (options.sort === "downloads") orderBy = desc(books.downloadCount);

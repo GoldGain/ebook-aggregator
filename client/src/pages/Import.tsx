@@ -45,7 +45,7 @@ export default function Import() {
               onClick={() => navigate("/")}
               className="text-2xl font-bold neon-glow hover:opacity-80 transition"
             >
-              LUMINA
+              ZAMIFU
             </button>
           </div>
         </nav>
@@ -77,7 +77,7 @@ export default function Import() {
             onClick={() => navigate("/")}
             className="text-2xl font-bold neon-glow hover:opacity-80 transition"
           >
-            LUMINA
+            ZAMIFU
           </button>
           <div className="flex items-center gap-4">
             <Button
