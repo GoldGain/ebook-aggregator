@@ -192,7 +192,14 @@ export async function searchBooks(query: string, limit: number = 20, offset: num
 
   // Use PostgreSQL full-text search with tsvector for ranked results
   try {
-    const tsQuery = query.trim().split(/\s+/).filter(Boolean).map(w => `${w.replace(/[^a-zA-Z0-9]/g, '')}:*`).join(" & ");
+    // Only use words long enough to be real tokens; the 'english' config drops
+    // some tokens and can produce invalid queries, so use the simpler 'simple'
+    // configuration which never discards tokens.
+    const words = query
+      .trim()
+      .split(/\s+/)
+      .filter(w => /[a-zA-Z0-9]/.test(w) && w.replace(/[^a-zA-Z0-9]/g, "").length >= 3);
+    const tsQuery = words.map(w => `${w.replace(/[^a-zA-Z0-9]/g, "")}:*`).join(" & ");
     if (tsQuery) {
       const rawResult = await db.execute(
         sql`SELECT * FROM books
