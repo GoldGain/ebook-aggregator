@@ -7,7 +7,7 @@ import { Loader2, Grid3x3, List, BookOpen, ChevronLeft, ChevronRight, Filter, Se
 
 export default function Catalog() {
   const [, navigate] = useLocation();
-  const [search] = useSearch();
+  const search = useSearch();
 
   // Derive filters reactively from the URL so navigation links (Home cards,
   // level/source/language filters) always take effect — even when navigating

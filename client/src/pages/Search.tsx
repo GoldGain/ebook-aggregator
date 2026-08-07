@@ -134,7 +134,7 @@ function BookCard({ book, query, onClick }: { book: any; query: string; onClick?
 
 export default function Search() {
   const [, navigate] = useLocation();
-  const [searchStr] = useSearch();
+  const searchStr = useSearch();
   const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
   const [selectedSource, setSelectedSource] = useState<string>("");
