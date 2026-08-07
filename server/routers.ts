@@ -232,7 +232,7 @@ export const appRouter = router({
     search: publicProcedure
       .input(
         z.object({
-          query: z.string().min(1).max(200),
+          query: z.string().max(200).default(""),
           limit: z.number().int().min(1).max(100).default(20),
           offset: z.number().int().min(0).default(0),
           source: z.string().optional(),
@@ -248,7 +248,7 @@ export const appRouter = router({
           return listBooks({
             limit: input.limit,
             offset: input.offset,
-            search: input.query,
+            search: input.query || undefined,
             source: input.source,
             educationalLevel: input.educationalLevel,
             genre: input.genre,
@@ -256,7 +256,7 @@ export const appRouter = router({
             sort: input.sort,
           });
         }
-        return searchBooks(input.query, input.limit, input.offset);
+        return input.query ? searchBooks(input.query, input.limit, input.offset) : [];
       }),
 
     autocomplete: publicProcedure

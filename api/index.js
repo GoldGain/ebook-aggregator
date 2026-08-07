@@ -8,6 +8,835 @@ var __export = (target, all) => {
     __defProp(target, name, { get: all[name], enumerable: true });
 };
 
+// server/_core/env.ts
+var ENV;
+var init_env = __esm({
+  "server/_core/env.ts"() {
+    ENV = {
+      appId: process.env.VITE_APP_ID ?? "",
+      cookieSecret: process.env.JWT_SECRET ?? "",
+      databaseUrl: process.env.DATABASE_URL ?? "",
+      oAuthServerUrl: process.env.OAUTH_SERVER_URL ?? "",
+      ownerOpenId: process.env.OWNER_OPEN_ID ?? "",
+      isProduction: process.env.NODE_ENV === "production",
+      forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
+      forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
+      supabaseUrl: process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "",
+      supabaseAnonKey: process.env.SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY ?? "",
+      supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? ""
+    };
+  }
+});
+
+// drizzle/schema.ts
+import { boolean, integer, pgEnum, pgTable, text, timestamp, varchar, index, uniqueIndex, serial } from "drizzle-orm/pg-core";
+var roleEnum, users, genres, subjects, educationalLevelEnum, rightsStatusEnum, sourceEnum, books, bookSubjects, bookshelves, downloadHistory, readingProgress, recommendations, aggregatorStatusEnum, aggregatorLogs, isActiveEnum, aggregatorSources;
+var init_schema = __esm({
+  "drizzle/schema.ts"() {
+    roleEnum = pgEnum("role", ["user", "admin"]);
+    users = pgTable("users", {
+      id: serial("id").primaryKey(),
+      /** Manus OAuth identifier (openId) returned from the OAuth callback. Unique per user. */
+      openId: varchar("openId", { length: 64 }).notNull().unique(),
+      name: text("name"),
+      email: varchar("email", { length: 320 }),
+      loginMethod: varchar("loginMethod", { length: 64 }),
+      role: roleEnum("role").default("user").notNull(),
+      createdAt: timestamp("createdAt").defaultNow().notNull(),
+      updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+      lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull()
+    });
+    genres = pgTable("genres", {
+      id: serial("id").primaryKey(),
+      name: varchar("name", { length: 128 }).notNull().unique(),
+      slug: varchar("slug", { length: 128 }).notNull().unique(),
+      description: text("description"),
+      createdAt: timestamp("createdAt").defaultNow().notNull()
+    });
+    subjects = pgTable("subjects", {
+      id: serial("id").primaryKey(),
+      name: varchar("name", { length: 255 }).notNull().unique(),
+      slug: varchar("slug", { length: 255 }).notNull().unique(),
+      createdAt: timestamp("createdAt").defaultNow().notNull()
+    }, (table) => ({
+      nameIdx: index("subjects_name_idx").on(table.name)
+    }));
+    educationalLevelEnum = pgEnum("educationalLevel", [
+      "primary",
+      "middle_school",
+      "high_school",
+      "college",
+      "university",
+      "professional",
+      "general"
+    ]);
+    rightsStatusEnum = pgEnum("rightsStatus", [
+      "public_domain",
+      "open_access",
+      "metadata_only",
+      "unknown"
+    ]);
+    sourceEnum = pgEnum("source", [
+      "gutenberg",
+      "kicd",
+      "knec",
+      "doab",
+      "open_textbook",
+      "ajol",
+      "unesco",
+      "worldbank",
+      "google_books",
+      "internet_archive",
+      "open_library",
+      "oer_commons",
+      "mit_ocw",
+      "openstax",
+      "libretexts",
+      "wikibooks",
+      "wikisource",
+      "doaj",
+      "pubmed",
+      "ssrn",
+      "saylor",
+      "merlot",
+      "openlearn",
+      "kenyaplex",
+      "easy_elimu",
+      "atika_school",
+      "schools_net",
+      "teacher_co_ke",
+      "cbc_resources",
+      "teachers_updates",
+      "ck12",
+      "oasis",
+      "other"
+    ]);
+    books = pgTable("books", {
+      id: serial("id").primaryKey(),
+      gutenbergId: integer("gutenbergId").unique(),
+      // Project Gutenberg ID
+      title: varchar("title", { length: 255 }).notNull(),
+      author: varchar("author", { length: 255 }),
+      description: text("description"),
+      language: varchar("language", { length: 10 }).default("en").notNull(),
+      // ISO 639-1 code
+      coverUrl: text("coverUrl"),
+      // URL to book cover image
+      subjects: text("subjects"),
+      // JSON array of subjects
+      formats: text("formats"),
+      // JSON object with format URLs (epub, pdf, txt, html)
+      downloadCount: integer("downloadCount").default(0),
+      genreId: integer("genreId").references(() => genres.id),
+      educationalLevel: educationalLevelEnum("educationalLevel"),
+      source: sourceEnum("source").default("gutenberg"),
+      sourceUrl: text("sourceUrl"),
+      // Original URL from source
+      rightsStatus: rightsStatusEnum("rightsStatus").default("unknown").notNull(),
+      licenseName: varchar("licenseName", { length: 255 }),
+      licenseUrl: text("licenseUrl"),
+      directDownloadAllowed: boolean("directDownloadAllowed").default(false).notNull(),
+      provenanceCheckedAt: timestamp("provenanceCheckedAt"),
+      isbn: varchar("isbn", { length: 20 }),
+      pages: integer("pages"),
+      publisher: varchar("publisher", { length: 255 }),
+      publishedDate: varchar("publishedDate", { length: 50 }),
+      rating: integer("rating"),
+      // 1-5 stars
+      importedAt: timestamp("importedAt").defaultNow().notNull(),
+      updatedAt: timestamp("updatedAt").defaultNow().notNull()
+    }, (table) => ({
+      titleIdx: index("books_title_idx").on(table.title),
+      authorIdx: index("books_author_idx").on(table.author),
+      languageIdx: index("books_language_idx").on(table.language),
+      genreIdx: index("books_genre_idx").on(table.genreId),
+      sourceIdx: index("books_source_idx").on(table.source)
+    }));
+    bookSubjects = pgTable("bookSubjects", {
+      id: serial("id").primaryKey(),
+      bookId: integer("bookId").notNull().references(() => books.id, { onDelete: "cascade" }),
+      subjectId: integer("subjectId").notNull().references(() => subjects.id, { onDelete: "cascade" }),
+      createdAt: timestamp("createdAt").defaultNow().notNull()
+    }, (table) => ({
+      uniquePair: uniqueIndex("book_subjects_unique").on(table.bookId, table.subjectId)
+    }));
+    bookshelves = pgTable("bookshelves", {
+      id: serial("id").primaryKey(),
+      userId: integer("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+      bookId: integer("bookId").notNull().references(() => books.id, { onDelete: "cascade" }),
+      savedAt: timestamp("savedAt").defaultNow().notNull()
+    }, (table) => ({
+      uniquePair: uniqueIndex("bookshelf_user_book_unique").on(table.userId, table.bookId)
+    }));
+    downloadHistory = pgTable("downloadHistory", {
+      id: serial("id").primaryKey(),
+      userId: integer("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+      bookId: integer("bookId").notNull().references(() => books.id, { onDelete: "cascade" }),
+      format: varchar("format", { length: 50 }).notNull(),
+      // epub, pdf, txt, html, mobi
+      downloadedAt: timestamp("downloadedAt").defaultNow().notNull()
+    }, (table) => ({
+      userIdx: index("download_history_user_idx").on(table.userId),
+      bookIdx: index("download_history_book_idx").on(table.bookId)
+    }));
+    readingProgress = pgTable("readingProgress", {
+      id: serial("id").primaryKey(),
+      userId: integer("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+      bookId: integer("bookId").notNull().references(() => books.id, { onDelete: "cascade" }),
+      currentPage: integer("currentPage").default(0),
+      totalPages: integer("totalPages"),
+      percentage: integer("percentage").default(0),
+      // 0-100
+      lastReadAt: timestamp("lastReadAt").defaultNow().notNull(),
+      createdAt: timestamp("createdAt").defaultNow().notNull(),
+      updatedAt: timestamp("updatedAt").defaultNow().notNull()
+    }, (table) => ({
+      uniquePair: uniqueIndex("reading_progress_user_book_unique").on(table.userId, table.bookId),
+      userIdx: index("reading_progress_user_idx").on(table.userId)
+    }));
+    recommendations = pgTable("recommendations", {
+      id: serial("id").primaryKey(),
+      userId: integer("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+      bookId: integer("bookId").notNull().references(() => books.id, { onDelete: "cascade" }),
+      score: integer("score").default(0),
+      // recommendation score
+      reason: varchar("reason", { length: 255 }),
+      // e.g., "based on your reading of X"
+      createdAt: timestamp("createdAt").defaultNow().notNull()
+    }, (table) => ({
+      userIdx: index("recommendations_user_idx").on(table.userId),
+      scoreIdx: index("recommendations_score_idx").on(table.score)
+    }));
+    aggregatorStatusEnum = pgEnum("aggregatorStatus", ["pending", "running", "success", "failed"]);
+    aggregatorLogs = pgTable("aggregatorLogs", {
+      id: serial("id").primaryKey(),
+      source: varchar("source", { length: 50 }).default("gutenberg"),
+      // which source was aggregated
+      status: aggregatorStatusEnum("status").default("pending").notNull(),
+      booksAdded: integer("booksAdded").default(0),
+      booksUpdated: integer("booksUpdated").default(0),
+      errorMessage: text("errorMessage"),
+      startedAt: timestamp("startedAt").defaultNow().notNull(),
+      completedAt: timestamp("completedAt")
+    }, (table) => ({
+      statusIdx: index("aggregator_logs_status_idx").on(table.status)
+    }));
+    isActiveEnum = pgEnum("isActive", ["yes", "no"]);
+    aggregatorSources = pgTable("aggregatorSources", {
+      id: serial("id").primaryKey(),
+      name: varchar("name", { length: 128 }).notNull().unique(),
+      slug: varchar("slug", { length: 128 }).notNull().unique(),
+      url: text("url"),
+      isActive: isActiveEnum("isActive").default("yes").notNull(),
+      lastRunAt: timestamp("lastRunAt"),
+      booksFetched: integer("booksFetched").default(0),
+      config: text("config"),
+      // JSON config for the source
+      createdAt: timestamp("createdAt").defaultNow().notNull(),
+      updatedAt: timestamp("updatedAt").defaultNow().notNull()
+    });
+  }
+});
+
+// server/db.ts
+var db_exports = {};
+__export(db_exports, {
+  addToBookshelf: () => addToBookshelf,
+  createAggregatorLog: () => createAggregatorLog,
+  createAggregatorSource: () => createAggregatorSource,
+  createBook: () => createBook,
+  createGenre: () => createGenre,
+  deleteBook: () => deleteBook,
+  generateRecommendations: () => generateRecommendations,
+  getAggregatorLogs: () => getAggregatorLogs,
+  getAggregatorSources: () => getAggregatorSources,
+  getAllReadingProgress: () => getAllReadingProgress,
+  getAllSubjects: () => getAllSubjects,
+  getAllUsers: () => getAllUsers,
+  getBookByGutenbergId: () => getBookByGutenbergId,
+  getBookById: () => getBookById,
+  getBookByTitleAuthor: () => getBookByTitleAuthor,
+  getBookCount: () => getBookCount,
+  getBooks: () => getBooks,
+  getBooksByEducationalLevel: () => getBooksByEducationalLevel,
+  getBooksByGenre: () => getBooksByGenre,
+  getBooksByLanguage: () => getBooksByLanguage,
+  getBooksBySource: () => getBooksBySource,
+  getBookshelfBookIds: () => getBookshelfBookIds,
+  getCurrentlyReading: () => getCurrentlyReading,
+  getDashboardStats: () => getDashboardStats,
+  getDb: () => getDb,
+  getGenreBySlug: () => getGenreBySlug,
+  getGenres: () => getGenres,
+  getLatestAggregatorLog: () => getLatestAggregatorLog,
+  getOrCreateGenre: () => getOrCreateGenre,
+  getOrCreateSubject: () => getOrCreateSubject,
+  getPopularBooks: () => getPopularBooks,
+  getReadingProgress: () => getReadingProgress,
+  getRecentBooks: () => getRecentBooks,
+  getRecommendationsForUser: () => getRecommendationsForUser,
+  getSubjectsByBookId: () => getSubjectsByBookId,
+  getTotalDownloadCount: () => getTotalDownloadCount,
+  getUserBookshelf: () => getUserBookshelf,
+  getUserById: () => getUserById,
+  getUserByOpenId: () => getUserByOpenId,
+  getUserCount: () => getUserCount,
+  getUserDownloadHistory: () => getUserDownloadHistory,
+  getUserDownloads: () => getUserDownloads,
+  incrementDownloadCount: () => incrementDownloadCount,
+  initializeDefaultSources: () => initializeDefaultSources,
+  isBookInBookshelf: () => isBookInBookshelf,
+  linkBookToSubject: () => linkBookToSubject,
+  listBooks: () => listBooks,
+  recordDownload: () => recordDownload,
+  removeFromBookshelf: () => removeFromBookshelf,
+  searchBooks: () => searchBooks,
+  seedDefaultGenres: () => seedDefaultGenres,
+  updateAggregatorLog: () => updateAggregatorLog,
+  updateAggregatorSource: () => updateAggregatorSource,
+  updateBook: () => updateBook,
+  updateReadingProgress: () => updateReadingProgress,
+  updateUserRole: () => updateUserRole,
+  upsertUser: () => upsertUser
+});
+import { and, eq, like, ilike, or, desc, asc, sql, count } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
+async function getDb() {
+  if (!_db && ENV.databaseUrl) {
+    try {
+      const client = postgres(ENV.databaseUrl, {
+        ssl: "require",
+        max: 4,
+        idle_timeout: DATABASE_IDLE_TIMEOUT_SECONDS,
+        max_lifetime: DATABASE_MAX_LIFETIME_SECONDS,
+        connect_timeout: DATABASE_CONNECT_TIMEOUT_SECONDS,
+        // Supabase transaction pooling does not support prepared statements.
+        prepare: false
+      });
+      _db = drizzle(client);
+    } catch (error) {
+      console.warn("[Database] Failed to initialize client:", error);
+      _db = null;
+    }
+  }
+  return _db;
+}
+async function upsertUser(user) {
+  if (!user.openId) {
+    throw new Error("User openId is required for upsert");
+  }
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot upsert user: database not available");
+    return;
+  }
+  try {
+    const values = {
+      openId: user.openId
+    };
+    const updateSet = {};
+    const textFields = ["name", "email", "loginMethod"];
+    const assignNullable = (field) => {
+      const value = user[field];
+      if (value === void 0) return;
+      const normalized = value ?? null;
+      values[field] = normalized;
+      updateSet[field] = normalized;
+    };
+    textFields.forEach(assignNullable);
+    if (user.lastSignedIn !== void 0) {
+      values.lastSignedIn = user.lastSignedIn;
+      updateSet.lastSignedIn = user.lastSignedIn;
+    }
+    if (user.role !== void 0) {
+      values.role = user.role;
+      updateSet.role = user.role;
+    } else if (user.openId === ENV.ownerOpenId) {
+      values.role = "admin";
+      updateSet.role = "admin";
+    }
+    if (!values.lastSignedIn) {
+      values.lastSignedIn = /* @__PURE__ */ new Date();
+    }
+    if (Object.keys(updateSet).length === 0) {
+      updateSet.lastSignedIn = /* @__PURE__ */ new Date();
+    }
+    await db.insert(users).values(values).onConflictDoUpdate({
+      target: users.openId,
+      set: updateSet
+    });
+  } catch (error) {
+    console.error("[Database] Failed to upsert user:", error);
+    throw error;
+  }
+}
+async function getUserByOpenId(openId) {
+  const db = await getDb();
+  if (!db) return void 0;
+  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
+  return result.length > 0 ? result[0] : void 0;
+}
+async function getAllUsers(limit = 50, offset = 0) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(users).orderBy(desc(users.createdAt)).limit(limit).offset(offset);
+}
+async function getUserById(id) {
+  const db = await getDb();
+  if (!db) return void 0;
+  const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  return result.length > 0 ? result[0] : void 0;
+}
+async function updateUserRole(id, role) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(users).set({ role }).where(eq(users.id, id));
+}
+async function getUserCount() {
+  const db = await getDb();
+  if (!db) return 0;
+  const result = await db.select({ count: count() }).from(users);
+  return result[0]?.count ?? 0;
+}
+async function getBooks(limit = 20, offset = 0) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(books).limit(limit).offset(offset);
+}
+async function getBookById(id) {
+  const db = await getDb();
+  if (!db) return void 0;
+  const result = await db.select().from(books).where(eq(books.id, id)).limit(1);
+  return result.length > 0 ? result[0] : void 0;
+}
+async function getBookByGutenbergId(gutenbergId) {
+  const db = await getDb();
+  if (!db) return void 0;
+  const result = await db.select().from(books).where(eq(books.gutenbergId, gutenbergId)).limit(1);
+  return result.length > 0 ? result[0] : void 0;
+}
+async function getBookByTitleAuthor(title, author) {
+  const db = await getDb();
+  if (!db) return void 0;
+  const conditions = [like(books.title, `%${title.substring(0, 100)}%`)];
+  if (author) {
+    conditions.push(like(books.author, `%${author.substring(0, 50)}%`));
+  }
+  const result = await db.select().from(books).where(and(...conditions)).limit(1);
+  return result.length > 0 ? result[0] : void 0;
+}
+async function searchBooks(query, limit = 20, offset = 0) {
+  const db = await getDb();
+  if (!db) return [];
+  try {
+    const words = query.trim().split(/\s+/).filter((w) => /[a-zA-Z0-9]/.test(w) && w.replace(/[^a-zA-Z0-9]/g, "").length >= 3);
+    const tsQuery = words.map((w) => `${w.replace(/[^a-zA-Z0-9]/g, "")}:*`).join(" & ");
+    if (tsQuery) {
+      const rawResult = await db.execute(
+        sql`SELECT * FROM books
+            WHERE search_vector @@ to_tsquery('english', ${tsQuery})
+            ORDER BY ts_rank(search_vector, to_tsquery('english', ${tsQuery})) DESC,
+                     "downloadCount" DESC NULLS LAST
+            LIMIT ${limit} OFFSET ${offset}`
+      );
+      const rows = Array.isArray(rawResult) ? rawResult : rawResult.rows ?? [];
+      if (rows.length > 0) {
+        return rows;
+      }
+    }
+  } catch {
+  }
+  const searchTerm = `%${query}%`;
+  return db.select().from(books).where(
+    or(
+      like(books.title, searchTerm),
+      like(books.author, searchTerm),
+      like(books.subjects, searchTerm),
+      like(books.description, searchTerm)
+    )
+  ).orderBy(desc(books.downloadCount)).limit(limit).offset(offset);
+}
+async function listBooks(options) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = [];
+  if (options.genre) {
+    const genre = await getGenreBySlug(options.genre);
+    if (genre) conditions.push(eq(books.genreId, genre.id));
+  }
+  if (options.language) {
+    conditions.push(ilike(books.language, options.language));
+  }
+  if (options.educationalLevel) conditions.push(eq(books.educationalLevel, options.educationalLevel));
+  if (options.source) conditions.push(eq(books.source, options.source));
+  if (options.search) {
+    conditions.push(
+      or(
+        ilike(books.title, `%${options.search}%`),
+        ilike(books.author, `%${options.search}%`),
+        ilike(books.subjects, `%${options.search}%`),
+        ilike(books.description, `%${options.search}%`)
+      )
+    );
+  }
+  if (options.pdfOnly) {
+    conditions.push(like(books.formats, '%"pdf":%'));
+  }
+  let orderBy = desc(books.importedAt);
+  if (options.sort === "downloads") orderBy = desc(books.downloadCount);
+  else if (options.sort === "title") orderBy = asc(books.title);
+  else if (options.sort === "author") orderBy = asc(books.author);
+  return db.select().from(books).where(conditions.length > 0 ? and(...conditions) : void 0).orderBy(orderBy).limit(options.limit).offset(options.offset);
+}
+async function getRecentBooks(limit = 12) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(books).orderBy(desc(books.importedAt)).limit(limit);
+}
+async function getPopularBooks(limit = 12) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(books).orderBy(desc(books.downloadCount)).limit(limit);
+}
+async function getBooksByEducationalLevel(level, limit = 20) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(books).where(eq(books.educationalLevel, level)).orderBy(desc(books.importedAt)).limit(limit);
+}
+async function getBooksBySource(source, limit = 20) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(books).where(eq(books.source, source)).orderBy(desc(books.importedAt)).limit(limit);
+}
+async function getBooksByGenre(genreId, limit = 20, offset = 0) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(books).where(eq(books.genreId, genreId)).limit(limit).offset(offset);
+}
+async function getBooksByLanguage(language, limit = 20, offset = 0) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(books).where(eq(books.language, language)).limit(limit).offset(offset);
+}
+async function createBook(book) {
+  const db = await getDb();
+  if (!db) return void 0;
+  const result = await db.insert(books).values(book).returning({ id: books.id });
+  return result[0]?.id;
+}
+async function updateBook(id, updates) {
+  const db = await getDb();
+  if (!db) return void 0;
+  return db.update(books).set(updates).where(eq(books.id, id));
+}
+async function incrementDownloadCount(id) {
+  const db = await getDb();
+  if (!db) return;
+  await db.execute(sql`UPDATE books SET downloadCount = downloadCount + 1 WHERE id = ${id}`);
+}
+async function deleteBook(id) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(books).where(eq(books.id, id));
+}
+async function getBookCount() {
+  const db = await getDb();
+  if (!db) return 0;
+  const result = await db.select({ count: count() }).from(books);
+  return result[0]?.count ?? 0;
+}
+async function getAllSubjects() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(subjects).orderBy(subjects.name);
+}
+async function getOrCreateSubject(name) {
+  const db = await getDb();
+  if (!db) return null;
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+  const existing = await db.select().from(subjects).where(eq(subjects.slug, slug)).limit(1);
+  if (existing.length > 0) return existing[0].id;
+  const result = await db.insert(subjects).values({ name, slug }).returning({ id: subjects.id });
+  return result[0]?.id ?? null;
+}
+async function linkBookToSubject(bookId, subjectId) {
+  const db = await getDb();
+  if (!db) return;
+  try {
+    await db.insert(bookSubjects).values({ bookId, subjectId });
+  } catch {
+  }
+}
+async function getSubjectsByBookId(bookId) {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select().from(bookSubjects).innerJoin(subjects, eq(bookSubjects.subjectId, subjects.id)).where(eq(bookSubjects.bookId, bookId));
+  return rows.map((r) => r.subjects);
+}
+async function getGenres() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(genres);
+}
+async function getGenreBySlug(slug) {
+  const db = await getDb();
+  if (!db) return void 0;
+  const result = await db.select().from(genres).where(eq(genres.slug, slug)).limit(1);
+  return result.length > 0 ? result[0] : void 0;
+}
+async function createGenre(genre) {
+  const db = await getDb();
+  if (!db) return void 0;
+  return db.insert(genres).values(genre);
+}
+async function getOrCreateGenre(name) {
+  const db = await getDb();
+  if (!db) return null;
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+  const existing = await getGenreBySlug(slug);
+  if (existing) return existing.id;
+  const result = await db.insert(genres).values({ name, slug }).returning({ id: genres.id });
+  return result[0]?.id ?? null;
+}
+async function getUserBookshelf(userId, limit = 50, offset = 0) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(bookshelves).where(eq(bookshelves.userId, userId)).orderBy(desc(bookshelves.savedAt)).limit(limit).offset(offset);
+}
+async function addToBookshelf(userId, bookId) {
+  const db = await getDb();
+  if (!db) return void 0;
+  return db.insert(bookshelves).values({ userId, bookId });
+}
+async function removeFromBookshelf(userId, bookId) {
+  const db = await getDb();
+  if (!db) return void 0;
+  return db.delete(bookshelves).where(and(eq(bookshelves.userId, userId), eq(bookshelves.bookId, bookId)));
+}
+async function isBookInBookshelf(userId, bookId) {
+  const db = await getDb();
+  if (!db) return false;
+  const result = await db.select().from(bookshelves).where(and(eq(bookshelves.userId, userId), eq(bookshelves.bookId, bookId))).limit(1);
+  return result.length > 0;
+}
+async function getBookshelfBookIds(userId) {
+  const db = await getDb();
+  if (!db) return [];
+  const items = await db.select().from(bookshelves).where(eq(bookshelves.userId, userId));
+  return items.map((item) => item.bookId);
+}
+async function getUserDownloadHistory(userId, limit = 50, offset = 0) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(downloadHistory).where(eq(downloadHistory.userId, userId)).orderBy(desc(downloadHistory.downloadedAt)).limit(limit).offset(offset);
+}
+async function recordDownload(userId, bookId, format) {
+  const db = await getDb();
+  if (!db) return void 0;
+  const result = await db.insert(downloadHistory).values({ userId, bookId, format });
+  await incrementDownloadCount(bookId);
+  return result;
+}
+async function getUserDownloads(userId) {
+  const db = await getDb();
+  if (!db) return 0;
+  const result = await db.select({ count: count() }).from(downloadHistory).where(eq(downloadHistory.userId, userId));
+  return result[0]?.count ?? 0;
+}
+async function getTotalDownloadCount() {
+  const db = await getDb();
+  if (!db) return 0;
+  const result = await db.select({ count: count() }).from(downloadHistory);
+  return result[0]?.count ?? 0;
+}
+async function updateReadingProgress(userId, bookId, data) {
+  const db = await getDb();
+  if (!db) return;
+  const existing = await db.select().from(readingProgress).where(and(eq(readingProgress.userId, userId), eq(readingProgress.bookId, bookId))).limit(1);
+  if (existing.length > 0) {
+    const updateData = { lastReadAt: /* @__PURE__ */ new Date() };
+    if (data.currentPage !== void 0) updateData.currentPage = data.currentPage;
+    if (data.totalPages !== void 0) updateData.totalPages = data.totalPages;
+    if (data.percentage !== void 0) updateData.percentage = data.percentage;
+    await db.update(readingProgress).set(updateData).where(eq(readingProgress.id, existing[0].id));
+  } else {
+    await db.insert(readingProgress).values({
+      userId,
+      bookId,
+      currentPage: data.currentPage ?? 0,
+      totalPages: data.totalPages ?? null,
+      percentage: data.percentage ?? 0
+    });
+  }
+}
+async function getReadingProgress(userId, bookId) {
+  const db = await getDb();
+  if (!db) return void 0;
+  const result = await db.select().from(readingProgress).where(and(eq(readingProgress.userId, userId), eq(readingProgress.bookId, bookId))).limit(1);
+  return result.length > 0 ? result[0] : void 0;
+}
+async function getAllReadingProgress(userId, limit = 20, offset = 0) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(readingProgress).where(eq(readingProgress.userId, userId)).orderBy(desc(readingProgress.lastReadAt)).limit(limit).offset(offset);
+}
+async function getCurrentlyReading(userId) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(readingProgress).where(and(eq(readingProgress.userId, userId), eq(readingProgress.percentage, 0))).orderBy(desc(readingProgress.lastReadAt)).limit(10);
+}
+async function getRecommendationsForUser(userId, limit = 12) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(recommendations).where(eq(recommendations.userId, userId)).orderBy(desc(recommendations.score)).limit(limit);
+}
+async function generateRecommendations(userId) {
+  const db = await getDb();
+  if (!db) return;
+  const bookshelfItems = await getBookshelfBookIds(userId);
+  const readingItems = await getAllReadingProgress(userId, 50);
+  if (bookshelfItems.length === 0 && readingItems.length === 0) return;
+  const allBookIds = [...bookshelfItems, ...readingItems.map((r) => r.bookId)];
+  if (allBookIds.length === 0) return;
+  const subjectCounts = {};
+  for (const bookId of allBookIds) {
+    const bookSubjs = await getSubjectsByBookId(bookId);
+    for (const subject of bookSubjs) {
+      subjectCounts[subject.id] = (subjectCounts[subject.id] || 0) + 1;
+    }
+  }
+  const topSubjects = Object.entries(subjectCounts).sort(([, a], [, b]) => b - a).slice(0, 5).map(([id]) => parseInt(id));
+  if (topSubjects.length === 0) return;
+  await db.delete(recommendations).where(eq(recommendations.userId, userId));
+  const recBookIds = [];
+  for (const subjectId of topSubjects) {
+    const relatedBooks = await db.select().from(bookSubjects).where(eq(bookSubjects.subjectId, subjectId)).limit(10);
+    for (const bs of relatedBooks) {
+      if (!recBookIds.includes(bs.bookId) && !allBookIds.includes(bs.bookId)) {
+        recBookIds.push(bs.bookId);
+        const score = subjectCounts[subjectId] * 10;
+        await db.insert(recommendations).values({
+          userId,
+          bookId: bs.bookId,
+          score,
+          reason: `Based on your interests in related topics`
+        });
+      }
+      if (recBookIds.length >= 50) break;
+    }
+    if (recBookIds.length >= 50) break;
+  }
+}
+async function getAggregatorLogs(limit = 20, offset = 0) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(aggregatorLogs).orderBy(desc(aggregatorLogs.startedAt)).limit(limit).offset(offset);
+}
+async function createAggregatorLog(log) {
+  const db = await getDb();
+  if (!db) return void 0;
+  const result = await db.insert(aggregatorLogs).values(log).returning({ id: aggregatorLogs.id });
+  return result[0];
+}
+async function updateAggregatorLog(id, updates) {
+  const db = await getDb();
+  if (!db) return void 0;
+  return db.update(aggregatorLogs).set(updates).where(eq(aggregatorLogs.id, id));
+}
+async function getLatestAggregatorLog() {
+  const db = await getDb();
+  if (!db) return void 0;
+  const result = await db.select().from(aggregatorLogs).orderBy(desc(aggregatorLogs.startedAt)).limit(1);
+  return result.length > 0 ? result[0] : void 0;
+}
+async function getAggregatorSources() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(aggregatorSources).orderBy(aggregatorSources.name);
+}
+async function createAggregatorSource(data) {
+  const db = await getDb();
+  if (!db) return void 0;
+  return db.insert(aggregatorSources).values(data);
+}
+async function updateAggregatorSource(id, data) {
+  const db = await getDb();
+  if (!db) return void 0;
+  return db.update(aggregatorSources).set(data).where(eq(aggregatorSources.id, id));
+}
+async function initializeDefaultSources() {
+  const db = await getDb();
+  if (!db) return;
+  const defaultSources = [
+    { name: "Project Gutenberg", slug: "gutenberg", url: "https://gutendex.com/books", isActive: "yes", config: "{}" },
+    { name: "DOAB", slug: "doab", url: "https://directory.doabooks.org", isActive: "yes", config: "{}" },
+    { name: "Open Textbook Library", slug: "open_textbook", url: "https://open.umn.edu/opentextbooks", isActive: "yes", config: "{}" },
+    { name: "KICD", slug: "kicd", url: "https://kicd.ac.ke", isActive: "yes", config: "{}" },
+    { name: "KNEC", slug: "knec", url: "https://cba.knec.ac.ke", isActive: "yes", config: "{}" },
+    { name: "AJOL", slug: "ajol", url: "https://www.ajol.info", isActive: "no", config: "{}" }
+  ];
+  for (const source of defaultSources) {
+    try {
+      await db.insert(aggregatorSources).values(source);
+    } catch {
+    }
+  }
+}
+async function getDashboardStats() {
+  const totalBooks = await getBookCount();
+  const totalUsers = await getUserCount();
+  const totalDownloads = await getTotalDownloadCount();
+  const db = await getDb();
+  const booksBySource = {};
+  if (db) {
+    const sourceResult = await db.select({
+      source: books.source,
+      count: count()
+    }).from(books).groupBy(books.source);
+    for (const row of sourceResult) {
+      booksBySource[row.source || "unknown"] = row.count;
+    }
+  }
+  return { totalBooks, totalUsers, totalDownloads, booksBySource };
+}
+async function seedDefaultGenres() {
+  const db = await getDb();
+  if (!db) return;
+  const defaultGenres = [
+    { name: "Fiction", slug: "fiction", description: "Novels, short stories, and creative writing" },
+    { name: "Science", slug: "science", description: "Scientific texts and academic papers" },
+    { name: "History", slug: "history", description: "Historical accounts and biographies" },
+    { name: "Mathematics", slug: "mathematics", description: "Mathematical texts and textbooks" },
+    { name: "Literature", slug: "literature", description: "Classic literature and poetry" },
+    { name: "Philosophy", slug: "philosophy", description: "Philosophical texts and essays" },
+    { name: "Technology", slug: "technology", description: "Technical manuals and programming" },
+    { name: "Education", slug: "education", description: "Textbooks and educational materials" },
+    { name: "Arts", slug: "arts", description: "Art, music, and creative arts" },
+    { name: "Business", slug: "business", description: "Business and economics texts" },
+    { name: "Social Science", slug: "social_science", description: "Sociology, psychology, anthropology" },
+    { name: "Law", slug: "law", description: "Legal texts and jurisprudence" },
+    { name: "Medicine", slug: "medicine", description: "Medical texts and health sciences" }
+  ];
+  for (const genre of defaultGenres) {
+    try {
+      await db.insert(genres).values(genre);
+    } catch {
+    }
+  }
+}
+var _db, DATABASE_CONNECT_TIMEOUT_SECONDS, DATABASE_IDLE_TIMEOUT_SECONDS, DATABASE_MAX_LIFETIME_SECONDS;
+var init_db = __esm({
+  "server/db.ts"() {
+    init_schema();
+    init_env();
+    _db = null;
+    DATABASE_CONNECT_TIMEOUT_SECONDS = 10;
+    DATABASE_IDLE_TIMEOUT_SECONDS = 10;
+    DATABASE_MAX_LIFETIME_SECONDS = 60;
+  }
+});
+
 // server/sources/kicd.ts
 var kicd_exports = {};
 __export(kicd_exports, {
@@ -324,22 +1153,8 @@ import "dotenv/config";
 import express from "express";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 
-// server/_core/env.ts
-var ENV = {
-  appId: process.env.VITE_APP_ID ?? "",
-  cookieSecret: process.env.JWT_SECRET ?? "",
-  databaseUrl: process.env.DATABASE_URL ?? "",
-  oAuthServerUrl: process.env.OAUTH_SERVER_URL ?? "",
-  ownerOpenId: process.env.OWNER_OPEN_ID ?? "",
-  isProduction: process.env.NODE_ENV === "production",
-  forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
-  forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
-  supabaseUrl: process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "",
-  supabaseAnonKey: process.env.SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY ?? "",
-  supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? ""
-};
-
 // server/_core/storageProxy.ts
+init_env();
 function registerStorageProxy(app2) {
   app2.get("/manus-storage/*", async (req, res) => {
     const key = req.params[0];
@@ -409,6 +1224,7 @@ function getSessionCookieOptions(req) {
 import { z } from "zod";
 
 // server/_core/notification.ts
+init_env();
 import { TRPCError } from "@trpc/server";
 var TITLE_MAX_LENGTH = 1200;
 var CONTENT_MAX_LENGTH = 2e4;
@@ -567,679 +1383,8 @@ async function verifySupabaseToken(accessToken) {
 }
 
 // server/routers.ts
+init_db();
 import { z as z2 } from "zod";
-
-// server/db.ts
-import { and, eq, like, ilike, or, desc, asc, sql, count } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
-
-// drizzle/schema.ts
-import { boolean, integer, pgEnum, pgTable, text, timestamp, varchar, index, uniqueIndex, serial } from "drizzle-orm/pg-core";
-var roleEnum = pgEnum("role", ["user", "admin"]);
-var users = pgTable("users", {
-  id: serial("id").primaryKey(),
-  /** Manus OAuth identifier (openId) returned from the OAuth callback. Unique per user. */
-  openId: varchar("openId", { length: 64 }).notNull().unique(),
-  name: text("name"),
-  email: varchar("email", { length: 320 }),
-  loginMethod: varchar("loginMethod", { length: 64 }),
-  role: roleEnum("role").default("user").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
-  lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull()
-});
-var genres = pgTable("genres", {
-  id: serial("id").primaryKey(),
-  name: varchar("name", { length: 128 }).notNull().unique(),
-  slug: varchar("slug", { length: 128 }).notNull().unique(),
-  description: text("description"),
-  createdAt: timestamp("createdAt").defaultNow().notNull()
-});
-var subjects = pgTable("subjects", {
-  id: serial("id").primaryKey(),
-  name: varchar("name", { length: 255 }).notNull().unique(),
-  slug: varchar("slug", { length: 255 }).notNull().unique(),
-  createdAt: timestamp("createdAt").defaultNow().notNull()
-}, (table) => ({
-  nameIdx: index("subjects_name_idx").on(table.name)
-}));
-var educationalLevelEnum = pgEnum("educationalLevel", [
-  "primary",
-  "middle_school",
-  "high_school",
-  "college",
-  "university",
-  "professional",
-  "general"
-]);
-var rightsStatusEnum = pgEnum("rightsStatus", [
-  "public_domain",
-  "open_access",
-  "metadata_only",
-  "unknown"
-]);
-var sourceEnum = pgEnum("source", [
-  "gutenberg",
-  "kicd",
-  "knec",
-  "doab",
-  "open_textbook",
-  "ajol",
-  "unesco",
-  "worldbank",
-  "google_books",
-  "internet_archive",
-  "open_library",
-  "oer_commons",
-  "mit_ocw",
-  "openstax",
-  "libretexts",
-  "wikibooks",
-  "wikisource",
-  "doaj",
-  "pubmed",
-  "ssrn",
-  "saylor",
-  "merlot",
-  "openlearn",
-  "kenyaplex",
-  "easy_elimu",
-  "atika_school",
-  "schools_net",
-  "teacher_co_ke",
-  "cbc_resources",
-  "teachers_updates",
-  "ck12",
-  "oasis",
-  "other"
-]);
-var books = pgTable("books", {
-  id: serial("id").primaryKey(),
-  gutenbergId: integer("gutenbergId").unique(),
-  // Project Gutenberg ID
-  title: varchar("title", { length: 255 }).notNull(),
-  author: varchar("author", { length: 255 }),
-  description: text("description"),
-  language: varchar("language", { length: 10 }).default("en").notNull(),
-  // ISO 639-1 code
-  coverUrl: text("coverUrl"),
-  // URL to book cover image
-  subjects: text("subjects"),
-  // JSON array of subjects
-  formats: text("formats"),
-  // JSON object with format URLs (epub, pdf, txt, html)
-  downloadCount: integer("downloadCount").default(0),
-  genreId: integer("genreId").references(() => genres.id),
-  educationalLevel: educationalLevelEnum("educationalLevel"),
-  source: sourceEnum("source").default("gutenberg"),
-  sourceUrl: text("sourceUrl"),
-  // Original URL from source
-  rightsStatus: rightsStatusEnum("rightsStatus").default("unknown").notNull(),
-  licenseName: varchar("licenseName", { length: 255 }),
-  licenseUrl: text("licenseUrl"),
-  directDownloadAllowed: boolean("directDownloadAllowed").default(false).notNull(),
-  provenanceCheckedAt: timestamp("provenanceCheckedAt"),
-  isbn: varchar("isbn", { length: 20 }),
-  pages: integer("pages"),
-  publisher: varchar("publisher", { length: 255 }),
-  publishedDate: varchar("publishedDate", { length: 50 }),
-  rating: integer("rating"),
-  // 1-5 stars
-  importedAt: timestamp("importedAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull()
-}, (table) => ({
-  titleIdx: index("books_title_idx").on(table.title),
-  authorIdx: index("books_author_idx").on(table.author),
-  languageIdx: index("books_language_idx").on(table.language),
-  genreIdx: index("books_genre_idx").on(table.genreId),
-  sourceIdx: index("books_source_idx").on(table.source)
-}));
-var bookSubjects = pgTable("bookSubjects", {
-  id: serial("id").primaryKey(),
-  bookId: integer("bookId").notNull().references(() => books.id, { onDelete: "cascade" }),
-  subjectId: integer("subjectId").notNull().references(() => subjects.id, { onDelete: "cascade" }),
-  createdAt: timestamp("createdAt").defaultNow().notNull()
-}, (table) => ({
-  uniquePair: uniqueIndex("book_subjects_unique").on(table.bookId, table.subjectId)
-}));
-var bookshelves = pgTable("bookshelves", {
-  id: serial("id").primaryKey(),
-  userId: integer("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
-  bookId: integer("bookId").notNull().references(() => books.id, { onDelete: "cascade" }),
-  savedAt: timestamp("savedAt").defaultNow().notNull()
-}, (table) => ({
-  uniquePair: uniqueIndex("bookshelf_user_book_unique").on(table.userId, table.bookId)
-}));
-var downloadHistory = pgTable("downloadHistory", {
-  id: serial("id").primaryKey(),
-  userId: integer("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
-  bookId: integer("bookId").notNull().references(() => books.id, { onDelete: "cascade" }),
-  format: varchar("format", { length: 50 }).notNull(),
-  // epub, pdf, txt, html, mobi
-  downloadedAt: timestamp("downloadedAt").defaultNow().notNull()
-}, (table) => ({
-  userIdx: index("download_history_user_idx").on(table.userId),
-  bookIdx: index("download_history_book_idx").on(table.bookId)
-}));
-var readingProgress = pgTable("readingProgress", {
-  id: serial("id").primaryKey(),
-  userId: integer("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
-  bookId: integer("bookId").notNull().references(() => books.id, { onDelete: "cascade" }),
-  currentPage: integer("currentPage").default(0),
-  totalPages: integer("totalPages"),
-  percentage: integer("percentage").default(0),
-  // 0-100
-  lastReadAt: timestamp("lastReadAt").defaultNow().notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull()
-}, (table) => ({
-  uniquePair: uniqueIndex("reading_progress_user_book_unique").on(table.userId, table.bookId),
-  userIdx: index("reading_progress_user_idx").on(table.userId)
-}));
-var recommendations = pgTable("recommendations", {
-  id: serial("id").primaryKey(),
-  userId: integer("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
-  bookId: integer("bookId").notNull().references(() => books.id, { onDelete: "cascade" }),
-  score: integer("score").default(0),
-  // recommendation score
-  reason: varchar("reason", { length: 255 }),
-  // e.g., "based on your reading of X"
-  createdAt: timestamp("createdAt").defaultNow().notNull()
-}, (table) => ({
-  userIdx: index("recommendations_user_idx").on(table.userId),
-  scoreIdx: index("recommendations_score_idx").on(table.score)
-}));
-var aggregatorStatusEnum = pgEnum("aggregatorStatus", ["pending", "running", "success", "failed"]);
-var aggregatorLogs = pgTable("aggregatorLogs", {
-  id: serial("id").primaryKey(),
-  source: varchar("source", { length: 50 }).default("gutenberg"),
-  // which source was aggregated
-  status: aggregatorStatusEnum("status").default("pending").notNull(),
-  booksAdded: integer("booksAdded").default(0),
-  booksUpdated: integer("booksUpdated").default(0),
-  errorMessage: text("errorMessage"),
-  startedAt: timestamp("startedAt").defaultNow().notNull(),
-  completedAt: timestamp("completedAt")
-}, (table) => ({
-  statusIdx: index("aggregator_logs_status_idx").on(table.status)
-}));
-var isActiveEnum = pgEnum("isActive", ["yes", "no"]);
-var aggregatorSources = pgTable("aggregatorSources", {
-  id: serial("id").primaryKey(),
-  name: varchar("name", { length: 128 }).notNull().unique(),
-  slug: varchar("slug", { length: 128 }).notNull().unique(),
-  url: text("url"),
-  isActive: isActiveEnum("isActive").default("yes").notNull(),
-  lastRunAt: timestamp("lastRunAt"),
-  booksFetched: integer("booksFetched").default(0),
-  config: text("config"),
-  // JSON config for the source
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull()
-});
-
-// server/db.ts
-var _db = null;
-var DATABASE_CONNECT_TIMEOUT_SECONDS = 10;
-var DATABASE_IDLE_TIMEOUT_SECONDS = 10;
-var DATABASE_MAX_LIFETIME_SECONDS = 60;
-async function getDb() {
-  if (!_db && ENV.databaseUrl) {
-    try {
-      const client = postgres(ENV.databaseUrl, {
-        ssl: "require",
-        max: 4,
-        idle_timeout: DATABASE_IDLE_TIMEOUT_SECONDS,
-        max_lifetime: DATABASE_MAX_LIFETIME_SECONDS,
-        connect_timeout: DATABASE_CONNECT_TIMEOUT_SECONDS,
-        // Supabase transaction pooling does not support prepared statements.
-        prepare: false
-      });
-      _db = drizzle(client);
-    } catch (error) {
-      console.warn("[Database] Failed to initialize client:", error);
-      _db = null;
-    }
-  }
-  return _db;
-}
-async function upsertUser(user) {
-  if (!user.openId) {
-    throw new Error("User openId is required for upsert");
-  }
-  const db = await getDb();
-  if (!db) {
-    console.warn("[Database] Cannot upsert user: database not available");
-    return;
-  }
-  try {
-    const values = {
-      openId: user.openId
-    };
-    const updateSet = {};
-    const textFields = ["name", "email", "loginMethod"];
-    const assignNullable = (field) => {
-      const value = user[field];
-      if (value === void 0) return;
-      const normalized = value ?? null;
-      values[field] = normalized;
-      updateSet[field] = normalized;
-    };
-    textFields.forEach(assignNullable);
-    if (user.lastSignedIn !== void 0) {
-      values.lastSignedIn = user.lastSignedIn;
-      updateSet.lastSignedIn = user.lastSignedIn;
-    }
-    if (user.role !== void 0) {
-      values.role = user.role;
-      updateSet.role = user.role;
-    } else if (user.openId === ENV.ownerOpenId) {
-      values.role = "admin";
-      updateSet.role = "admin";
-    }
-    if (!values.lastSignedIn) {
-      values.lastSignedIn = /* @__PURE__ */ new Date();
-    }
-    if (Object.keys(updateSet).length === 0) {
-      updateSet.lastSignedIn = /* @__PURE__ */ new Date();
-    }
-    await db.insert(users).values(values).onConflictDoUpdate({
-      target: users.openId,
-      set: updateSet
-    });
-  } catch (error) {
-    console.error("[Database] Failed to upsert user:", error);
-    throw error;
-  }
-}
-async function getUserByOpenId(openId) {
-  const db = await getDb();
-  if (!db) return void 0;
-  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
-  return result.length > 0 ? result[0] : void 0;
-}
-async function getAllUsers(limit = 50, offset = 0) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(users).orderBy(desc(users.createdAt)).limit(limit).offset(offset);
-}
-async function getUserById(id) {
-  const db = await getDb();
-  if (!db) return void 0;
-  const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
-  return result.length > 0 ? result[0] : void 0;
-}
-async function updateUserRole(id, role) {
-  const db = await getDb();
-  if (!db) return;
-  await db.update(users).set({ role }).where(eq(users.id, id));
-}
-async function getUserCount() {
-  const db = await getDb();
-  if (!db) return 0;
-  const result = await db.select({ count: count() }).from(users);
-  return result[0]?.count ?? 0;
-}
-async function getBookById(id) {
-  const db = await getDb();
-  if (!db) return void 0;
-  const result = await db.select().from(books).where(eq(books.id, id)).limit(1);
-  return result.length > 0 ? result[0] : void 0;
-}
-async function getBookByGutenbergId(gutenbergId) {
-  const db = await getDb();
-  if (!db) return void 0;
-  const result = await db.select().from(books).where(eq(books.gutenbergId, gutenbergId)).limit(1);
-  return result.length > 0 ? result[0] : void 0;
-}
-async function getBookByTitleAuthor(title, author) {
-  const db = await getDb();
-  if (!db) return void 0;
-  const conditions = [like(books.title, `%${title.substring(0, 100)}%`)];
-  if (author) {
-    conditions.push(like(books.author, `%${author.substring(0, 50)}%`));
-  }
-  const result = await db.select().from(books).where(and(...conditions)).limit(1);
-  return result.length > 0 ? result[0] : void 0;
-}
-async function searchBooks(query, limit = 20, offset = 0) {
-  const db = await getDb();
-  if (!db) return [];
-  try {
-    const tsQuery = query.trim().split(/\s+/).filter(Boolean).map((w) => `${w.replace(/[^a-zA-Z0-9]/g, "")}:*`).join(" & ");
-    if (tsQuery) {
-      const rawResult = await db.execute(
-        sql`SELECT * FROM books
-            WHERE search_vector @@ to_tsquery('english', ${tsQuery})
-            ORDER BY ts_rank(search_vector, to_tsquery('english', ${tsQuery})) DESC,
-                     "downloadCount" DESC NULLS LAST
-            LIMIT ${limit} OFFSET ${offset}`
-      );
-      const rows = Array.isArray(rawResult) ? rawResult : rawResult.rows ?? [];
-      if (rows.length > 0) {
-        return rows;
-      }
-    }
-  } catch {
-  }
-  const searchTerm = `%${query}%`;
-  return db.select().from(books).where(
-    or(
-      like(books.title, searchTerm),
-      like(books.author, searchTerm),
-      like(books.subjects, searchTerm),
-      like(books.description, searchTerm)
-    )
-  ).orderBy(desc(books.downloadCount)).limit(limit).offset(offset);
-}
-async function listBooks(options) {
-  const db = await getDb();
-  if (!db) return [];
-  const conditions = [];
-  if (options.genre) {
-    const genre = await getGenreBySlug(options.genre);
-    if (genre) conditions.push(eq(books.genreId, genre.id));
-  }
-  if (options.language) {
-    conditions.push(ilike(books.language, options.language));
-  }
-  if (options.educationalLevel) conditions.push(eq(books.educationalLevel, options.educationalLevel));
-  if (options.source) conditions.push(eq(books.source, options.source));
-  if (options.search) {
-    conditions.push(
-      or(
-        ilike(books.title, `%${options.search}%`),
-        ilike(books.author, `%${options.search}%`),
-        ilike(books.subjects, `%${options.search}%`),
-        ilike(books.description, `%${options.search}%`)
-      )
-    );
-  }
-  if (options.pdfOnly) {
-    conditions.push(like(books.formats, '%"pdf":%'));
-  }
-  let orderBy = desc(books.importedAt);
-  if (options.sort === "downloads") orderBy = desc(books.downloadCount);
-  else if (options.sort === "title") orderBy = asc(books.title);
-  else if (options.sort === "author") orderBy = asc(books.author);
-  return db.select().from(books).where(conditions.length > 0 ? and(...conditions) : void 0).orderBy(orderBy).limit(options.limit).offset(options.offset);
-}
-async function getRecentBooks(limit = 12) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(books).orderBy(desc(books.importedAt)).limit(limit);
-}
-async function getPopularBooks(limit = 12) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(books).orderBy(desc(books.downloadCount)).limit(limit);
-}
-async function getBooksByEducationalLevel(level, limit = 20) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(books).where(eq(books.educationalLevel, level)).orderBy(desc(books.importedAt)).limit(limit);
-}
-async function getBooksBySource(source, limit = 20) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(books).where(eq(books.source, source)).orderBy(desc(books.importedAt)).limit(limit);
-}
-async function getBooksByGenre(genreId, limit = 20, offset = 0) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(books).where(eq(books.genreId, genreId)).limit(limit).offset(offset);
-}
-async function getBooksByLanguage(language, limit = 20, offset = 0) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(books).where(eq(books.language, language)).limit(limit).offset(offset);
-}
-async function createBook(book) {
-  const db = await getDb();
-  if (!db) return void 0;
-  const result = await db.insert(books).values(book).returning({ id: books.id });
-  return result[0]?.id;
-}
-async function updateBook(id, updates) {
-  const db = await getDb();
-  if (!db) return void 0;
-  return db.update(books).set(updates).where(eq(books.id, id));
-}
-async function incrementDownloadCount(id) {
-  const db = await getDb();
-  if (!db) return;
-  await db.execute(sql`UPDATE books SET downloadCount = downloadCount + 1 WHERE id = ${id}`);
-}
-async function deleteBook(id) {
-  const db = await getDb();
-  if (!db) return;
-  await db.delete(books).where(eq(books.id, id));
-}
-async function getBookCount() {
-  const db = await getDb();
-  if (!db) return 0;
-  const result = await db.select({ count: count() }).from(books);
-  return result[0]?.count ?? 0;
-}
-async function getAllSubjects() {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(subjects).orderBy(subjects.name);
-}
-async function getOrCreateSubject(name) {
-  const db = await getDb();
-  if (!db) return null;
-  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-  const existing = await db.select().from(subjects).where(eq(subjects.slug, slug)).limit(1);
-  if (existing.length > 0) return existing[0].id;
-  const result = await db.insert(subjects).values({ name, slug }).returning({ id: subjects.id });
-  return result[0]?.id ?? null;
-}
-async function linkBookToSubject(bookId, subjectId) {
-  const db = await getDb();
-  if (!db) return;
-  try {
-    await db.insert(bookSubjects).values({ bookId, subjectId });
-  } catch {
-  }
-}
-async function getSubjectsByBookId(bookId) {
-  const db = await getDb();
-  if (!db) return [];
-  const rows = await db.select().from(bookSubjects).innerJoin(subjects, eq(bookSubjects.subjectId, subjects.id)).where(eq(bookSubjects.bookId, bookId));
-  return rows.map((r) => r.subjects);
-}
-async function getGenres() {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(genres);
-}
-async function getGenreBySlug(slug) {
-  const db = await getDb();
-  if (!db) return void 0;
-  const result = await db.select().from(genres).where(eq(genres.slug, slug)).limit(1);
-  return result.length > 0 ? result[0] : void 0;
-}
-async function createGenre(genre) {
-  const db = await getDb();
-  if (!db) return void 0;
-  return db.insert(genres).values(genre);
-}
-async function getUserBookshelf(userId, limit = 50, offset = 0) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(bookshelves).where(eq(bookshelves.userId, userId)).orderBy(desc(bookshelves.savedAt)).limit(limit).offset(offset);
-}
-async function addToBookshelf(userId, bookId) {
-  const db = await getDb();
-  if (!db) return void 0;
-  return db.insert(bookshelves).values({ userId, bookId });
-}
-async function removeFromBookshelf(userId, bookId) {
-  const db = await getDb();
-  if (!db) return void 0;
-  return db.delete(bookshelves).where(and(eq(bookshelves.userId, userId), eq(bookshelves.bookId, bookId)));
-}
-async function isBookInBookshelf(userId, bookId) {
-  const db = await getDb();
-  if (!db) return false;
-  const result = await db.select().from(bookshelves).where(and(eq(bookshelves.userId, userId), eq(bookshelves.bookId, bookId))).limit(1);
-  return result.length > 0;
-}
-async function getBookshelfBookIds(userId) {
-  const db = await getDb();
-  if (!db) return [];
-  const items = await db.select().from(bookshelves).where(eq(bookshelves.userId, userId));
-  return items.map((item) => item.bookId);
-}
-async function getUserDownloadHistory(userId, limit = 50, offset = 0) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(downloadHistory).where(eq(downloadHistory.userId, userId)).orderBy(desc(downloadHistory.downloadedAt)).limit(limit).offset(offset);
-}
-async function recordDownload(userId, bookId, format) {
-  const db = await getDb();
-  if (!db) return void 0;
-  const result = await db.insert(downloadHistory).values({ userId, bookId, format });
-  await incrementDownloadCount(bookId);
-  return result;
-}
-async function getUserDownloads(userId) {
-  const db = await getDb();
-  if (!db) return 0;
-  const result = await db.select({ count: count() }).from(downloadHistory).where(eq(downloadHistory.userId, userId));
-  return result[0]?.count ?? 0;
-}
-async function getTotalDownloadCount() {
-  const db = await getDb();
-  if (!db) return 0;
-  const result = await db.select({ count: count() }).from(downloadHistory);
-  return result[0]?.count ?? 0;
-}
-async function updateReadingProgress(userId, bookId, data) {
-  const db = await getDb();
-  if (!db) return;
-  const existing = await db.select().from(readingProgress).where(and(eq(readingProgress.userId, userId), eq(readingProgress.bookId, bookId))).limit(1);
-  if (existing.length > 0) {
-    const updateData = { lastReadAt: /* @__PURE__ */ new Date() };
-    if (data.currentPage !== void 0) updateData.currentPage = data.currentPage;
-    if (data.totalPages !== void 0) updateData.totalPages = data.totalPages;
-    if (data.percentage !== void 0) updateData.percentage = data.percentage;
-    await db.update(readingProgress).set(updateData).where(eq(readingProgress.id, existing[0].id));
-  } else {
-    await db.insert(readingProgress).values({
-      userId,
-      bookId,
-      currentPage: data.currentPage ?? 0,
-      totalPages: data.totalPages ?? null,
-      percentage: data.percentage ?? 0
-    });
-  }
-}
-async function getReadingProgress(userId, bookId) {
-  const db = await getDb();
-  if (!db) return void 0;
-  const result = await db.select().from(readingProgress).where(and(eq(readingProgress.userId, userId), eq(readingProgress.bookId, bookId))).limit(1);
-  return result.length > 0 ? result[0] : void 0;
-}
-async function getAllReadingProgress(userId, limit = 20, offset = 0) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(readingProgress).where(eq(readingProgress.userId, userId)).orderBy(desc(readingProgress.lastReadAt)).limit(limit).offset(offset);
-}
-async function getCurrentlyReading(userId) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(readingProgress).where(and(eq(readingProgress.userId, userId), eq(readingProgress.percentage, 0))).orderBy(desc(readingProgress.lastReadAt)).limit(10);
-}
-async function getRecommendationsForUser(userId, limit = 12) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(recommendations).where(eq(recommendations.userId, userId)).orderBy(desc(recommendations.score)).limit(limit);
-}
-async function generateRecommendations(userId) {
-  const db = await getDb();
-  if (!db) return;
-  const bookshelfItems = await getBookshelfBookIds(userId);
-  const readingItems = await getAllReadingProgress(userId, 50);
-  if (bookshelfItems.length === 0 && readingItems.length === 0) return;
-  const allBookIds = [...bookshelfItems, ...readingItems.map((r) => r.bookId)];
-  if (allBookIds.length === 0) return;
-  const subjectCounts = {};
-  for (const bookId of allBookIds) {
-    const bookSubjs = await getSubjectsByBookId(bookId);
-    for (const subject of bookSubjs) {
-      subjectCounts[subject.id] = (subjectCounts[subject.id] || 0) + 1;
-    }
-  }
-  const topSubjects = Object.entries(subjectCounts).sort(([, a], [, b]) => b - a).slice(0, 5).map(([id]) => parseInt(id));
-  if (topSubjects.length === 0) return;
-  await db.delete(recommendations).where(eq(recommendations.userId, userId));
-  const recBookIds = [];
-  for (const subjectId of topSubjects) {
-    const relatedBooks = await db.select().from(bookSubjects).where(eq(bookSubjects.subjectId, subjectId)).limit(10);
-    for (const bs of relatedBooks) {
-      if (!recBookIds.includes(bs.bookId) && !allBookIds.includes(bs.bookId)) {
-        recBookIds.push(bs.bookId);
-        const score = subjectCounts[subjectId] * 10;
-        await db.insert(recommendations).values({
-          userId,
-          bookId: bs.bookId,
-          score,
-          reason: `Based on your interests in related topics`
-        });
-      }
-      if (recBookIds.length >= 50) break;
-    }
-    if (recBookIds.length >= 50) break;
-  }
-}
-async function getAggregatorLogs(limit = 20, offset = 0) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(aggregatorLogs).orderBy(desc(aggregatorLogs.startedAt)).limit(limit).offset(offset);
-}
-async function createAggregatorLog(log) {
-  const db = await getDb();
-  if (!db) return void 0;
-  const result = await db.insert(aggregatorLogs).values(log).returning({ id: aggregatorLogs.id });
-  return result[0];
-}
-async function updateAggregatorLog(id, updates) {
-  const db = await getDb();
-  if (!db) return void 0;
-  return db.update(aggregatorLogs).set(updates).where(eq(aggregatorLogs.id, id));
-}
-async function getAggregatorSources() {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(aggregatorSources).orderBy(aggregatorSources.name);
-}
-async function updateAggregatorSource(id, data) {
-  const db = await getDb();
-  if (!db) return void 0;
-  return db.update(aggregatorSources).set(data).where(eq(aggregatorSources.id, id));
-}
-async function getDashboardStats() {
-  const totalBooks = await getBookCount();
-  const totalUsers = await getUserCount();
-  const totalDownloads = await getTotalDownloadCount();
-  const db = await getDb();
-  const booksBySource = {};
-  if (db) {
-    const sourceResult = await db.select({
-      source: books.source,
-      count: count()
-    }).from(books).groupBy(books.source);
-    for (const row of sourceResult) {
-      booksBySource[row.source || "unknown"] = row.count;
-    }
-  }
-  return { totalBooks, totalUsers, totalDownloads, booksBySource };
-}
-
-// server/routers.ts
 import { TRPCError as TRPCError4 } from "@trpc/server";
 
 // server/gutenberg.ts
@@ -1318,6 +1463,7 @@ function extractGutenbergId(urlOrId) {
 }
 
 // server/import.ts
+init_db();
 import { TRPCError as TRPCError3 } from "@trpc/server";
 async function importGutenbergBook(urlOrId) {
   const gutenbergId = extractGutenbergId(urlOrId);
@@ -2258,6 +2404,7 @@ function selectScheduledSource(now = /* @__PURE__ */ new Date()) {
 }
 
 // server/sources/aggregator.ts
+init_db();
 var DEFAULT_SOURCES = [
   // Core open-access sources (reliable JSON APIs - fast)
   { name: "Project Gutenberg", slug: "gutenberg", enabled: true },
@@ -2749,6 +2896,7 @@ async function aggregateAjol() {
 }
 
 // server/routers.ts
+init_db();
 import { sql as sql2 } from "drizzle-orm";
 var appRouter = router({
   system: systemRouter,
@@ -2884,7 +3032,7 @@ var appRouter = router({
     }),
     search: publicProcedure.input(
       z2.object({
-        query: z2.string().min(1).max(200),
+        query: z2.string().max(200).default(""),
         limit: z2.number().int().min(1).max(100).default(20),
         offset: z2.number().int().min(0).default(0),
         source: z2.string().optional(),
@@ -2898,7 +3046,7 @@ var appRouter = router({
         return listBooks({
           limit: input.limit,
           offset: input.offset,
-          search: input.query,
+          search: input.query || void 0,
           source: input.source,
           educationalLevel: input.educationalLevel,
           genre: input.genre,
@@ -2906,7 +3054,7 @@ var appRouter = router({
           sort: input.sort
         });
       }
-      return searchBooks(input.query, input.limit, input.offset);
+      return input.query ? searchBooks(input.query, input.limit, input.offset) : [];
     }),
     autocomplete: publicProcedure.input(
       z2.object({
@@ -3287,6 +3435,7 @@ var appRouter = router({
 });
 
 // server/_core/context.ts
+init_db();
 function extractToken(req) {
   const authHeader = req.headers["authorization"];
   if (authHeader && authHeader.startsWith("Bearer ")) {
@@ -3461,16 +3610,52 @@ app.get("/api/libgen", async (req, res) => {
 app.all("/api/download", async (req, res) => {
   let md5;
   let format = "pdf";
+  let directUrl;
   if (req.method === "GET") {
     md5 = req.query.md5;
+    directUrl = req.query.url;
     format = req.query.format || "pdf";
   } else if (req.method === "POST") {
     const body = req.body || {};
     md5 = body.md5;
+    directUrl = body.url;
     format = body.format || "pdf";
   }
-  if (!md5 || typeof md5 !== "string" || md5.length !== 32) {
-    return res.status(400).json({ error: "Valid 32-character md5 required", success: false });
+  if (directUrl && /^https?:\/\//i.test(directUrl)) {
+    try {
+      const axios8 = await import("axios");
+      const r = await axios8.default.get(directUrl, {
+        responseType: "arraybuffer",
+        timeout: 2e4,
+        maxRedirects: 8,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+          Accept: "*/*"
+        },
+        validateStatus: (s) => s < 500
+      });
+      const buf = Buffer.from(r.data);
+      const ct = r.headers["content-type"] || "";
+      if (buf.length > 1e3 && !/text\/html|text\/xml|application\/json/i.test(ct)) {
+        const magic = buf.slice(0, 4).toString("hex");
+        const isPdf = magic === "25504446" || magic === "41542654" || magic === "0000001c" || /pdf/i.test(ct);
+        if (isPdf || buf.length > 1e5) {
+          const ext = /application\/epub|epub|\.epub/i.test(ct + directUrl) ? "epub" : "pdf";
+          res.setHeader("Content-Type", isPdf ? "application/pdf" : ct || "application/octet-stream");
+          res.setHeader("Content-Disposition", `attachment; filename="document.${ext}"`);
+          res.setHeader("Content-Length", buf.length.toString());
+          res.setHeader("Access-Control-Allow-Origin", "*");
+          res.setHeader("Access-Control-Expose-Headers", "Content-Disposition, Content-Length");
+          return res.send(buf);
+        }
+      }
+    } catch {
+    }
+    const urlMd5 = directUrl.match(/(?:md5=|\/md5\/)([a-f0-9]{32})/i)?.[1];
+    md5 = md5 || urlMd5;
+  }
+  if (!md5 || typeof md5 !== "string" || !/^[a-f0-9]{32}$/i.test(md5)) {
+    return res.status(404).json({ success: false, error: "Download unavailable", message: "This document is not available right now. Try another result." });
   }
   const annaJsonUrl = `https://annas-archive.li/md5/${md5}.json`;
   const annaHtmlUrl = `https://annas-archive.li/md5/${md5}`;
@@ -3619,98 +3804,213 @@ app.get("/api/kicd", async (req, res) => {
 });
 app.get("/api/search", async (req, res) => {
   const q = (req.query.q || "").trim();
-  const limit = parseInt(req.query.limit || "50", 10);
-  if (!q || q.length < 2) {
-    return res.status(400).json({ error: 'Query parameter "q" is required (min 2 chars)' });
+  const rawLimit = Number(req.query.limit || 20);
+  const rawOffset = Number(req.query.offset || 0);
+  const limit = Number.isFinite(rawLimit) ? Math.min(100, Math.max(1, Math.floor(rawLimit))) : 20;
+  const offset = Number.isFinite(rawOffset) ? Math.max(0, Math.floor(rawOffset)) : 0;
+  const level = String(req.query.level || "").trim().toLowerCase();
+  const source = String(req.query.source || "").trim().toLowerCase();
+  const language = String(req.query.language || "").trim().toLowerCase();
+  const genre = String(req.query.genre || "").trim();
+  const sort = String(req.query.sort || "relevance").trim().toLowerCase();
+  if (q.length < 2 && !level && !source && !language && !genre) {
+    return res.status(400).json({ error: 'Query parameter "q" or a catalog filter is required' });
   }
   try {
     const axios7 = await import("axios");
     const cheerioModule = await import("cheerio");
     const cheerio5 = cheerioModule.default || cheerioModule;
-    let libgenBooks = [];
-    try {
-      const encodedQuery = encodeURIComponent(q);
-      const lgUrl = `https://libgen.li/index.php?req=${encodedQuery}&lg_topic=libgen&open=0&view=simple&res=50&phrase=1&column=def`;
-      const response = await axios7.default.get(lgUrl, {
-        timeout: 2e4,
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; ZAMIFU-E-MATERIALS/2.0; Educational Aggregator)" }
-      });
-      const $ = cheerio5.load(response.data);
-      $("#tablelibgen tr").each((_i, row) => {
-        const cells = $(row).find("td");
-        if (cells.length < 9) return;
-        const editionLinks = cells.eq(0).find('a[href*="edition.php"]');
-        const titleLink = editionLinks.length > 1 ? editionLinks.last() : editionLinks.first();
-        if (!titleLink.length) return;
-        const title = titleLink.text().trim();
-        const author = cells.eq(1).text().trim();
-        const year = cells.eq(3).text().trim();
-        const lang = cells.eq(4).text().trim();
-        const annaLink = cells.eq(8).find('a[href*="annas-archive"]').first();
-        const libgenLink = cells.eq(8).find('a[title="libgen"], a[href*="/get.php"]').first();
-        const md5Href = libgenLink.attr("href") || annaLink.attr("href") || "";
-        const md5Match = md5Href.match(/md5=([a-f0-9]{32})/);
-        const md5 = md5Match ? md5Match[1] : "";
-        const formatCell = cells.eq(7).text().trim().toLowerCase();
-        if (title && md5 && title.length > 2 && formatCell === "pdf") {
-          libgenBooks.push({
-            title,
-            author: author || "Unknown",
-            year: year || "",
-            language: lang || "en",
+    const queryTokens = q.toLowerCase().split(/\s+/).filter(Boolean);
+    const requestedLimit = Math.min(100, Math.max(50, offset + limit));
+    const matchesQuery = (book) => {
+      if (queryTokens.length === 0) return true;
+      const subjects2 = Array.isArray(book.subjects) ? book.subjects : book.subjects ? [book.subjects] : [];
+      const searchable = [book.title, book.author, book.description, ...subjects2].filter(Boolean).join(" ").toLowerCase();
+      return queryTokens.every((token) => searchable.includes(token));
+    };
+    const matchesFilters = (book) => (!source || String(book.source || "").toLowerCase() === source) && (!level || String(book.educationalLevel || "").toLowerCase() === level) && (!language || String(book.language || "").toLowerCase() === language) && matchesQuery(book);
+    const withTimeout = async (promise, milliseconds) => {
+      let timer;
+      try {
+        return await Promise.race([
+          promise,
+          new Promise((_, reject) => {
+            timer = setTimeout(() => reject(new Error("source timeout")), milliseconds);
+          })
+        ]);
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    };
+    const libgenPromise = (async () => {
+      const books3 = [];
+      if (q.length < 2) return books3;
+      try {
+        const url = `https://libgen.li/index.php?req=${encodeURIComponent(q)}&lg_topic=libgen&open=0&view=simple&res=100&phrase=1&column=def`;
+        const response = await axios7.default.get(url, {
+          timeout: 2e4,
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; ZAMIFU-E-MATERIALS/2.0; Educational Aggregator)" }
+        });
+        const $ = cheerio5.load(response.data);
+        $("#tablelibgen tr").each((_i, row) => {
+          const cells = $(row).find("td");
+          if (cells.length < 9) return;
+          const editionLinks = cells.eq(0).find('a[href*="edition.php"]');
+          const titleLink = editionLinks.length > 1 ? editionLinks.last() : editionLinks.first();
+          const title = titleLink.text().trim();
+          const format = cells.eq(7).text().trim().toLowerCase();
+          const annaLink = cells.eq(8).find('a[href*="annas-archive"]').first();
+          const libgenLink = cells.eq(8).find('a[title="libgen"], a[href*="/get.php"]').first();
+          const md5Href = libgenLink.attr("href") || annaLink.attr("href") || "";
+          const md5Match = md5Href.match(/md5=([a-f0-9]{32})/i);
+          const md5 = md5Match ? md5Match[1] : "";
+          if (!title || !md5 || format !== "pdf" || /^[\d\s;:.,-]+$/.test(title)) return;
+          const sourceUrl = annaLink.attr("href") || `https://annas-archive.li/md5/${md5}`;
+          books3.push({
+            title: title.slice(0, 255),
+            author: cells.eq(1).text().trim() || "Unknown",
+            publisher: cells.eq(2).text().trim(),
+            year: cells.eq(3).text().trim(),
+            language: cells.eq(4).text().trim() || "en",
+            pages: cells.eq(5).text().trim(),
+            filesize: cells.eq(6).text().trim(),
+            format,
             md5,
             source: "libgen",
-            sourceUrl: `https://annas-archive.li/md5/${md5}`
+            sourceUrl,
+            downloadUrl: "",
+            annaUrl: sourceUrl,
+            formats: { pdf: sourceUrl }
           });
+        });
+      } catch {
+      }
+      return books3;
+    })();
+    const annaPromise = (async () => {
+      const books3 = [];
+      if (q.length < 2) return books3;
+      try {
+        const response = await axios7.default.get(`https://annas-archive.li/search?q=${encodeURIComponent(q)}`, {
+          timeout: 15e3,
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; ZAMIFU-E-MATERIALS/2.0; Educational Aggregator)" }
+        });
+        const $ = cheerio5.load(response.data);
+        $("a[href*='/md5/']").each((_i, element) => {
+          if (books3.length >= 50) return false;
+          const href = $(element).attr("href") || "";
+          const md5Match = href.match(/\/md5\/([a-f0-9]{32})/i);
+          if (!md5Match) return;
+          const md5 = md5Match[1];
+          const parent = $(element).closest("div, li, tr");
+          const title = (parent.find("h3, h4, .text-lg, .font-bold").first().text().trim() || $(element).text().trim()).slice(0, 255);
+          const author = parent.find(".text-gray-500, .text-sm, .italic").first().text().trim() || "Unknown";
+          const format = parent.find('span:contains("pdf"), span:contains("epub"), span:contains("mobi")').first().text().trim().toLowerCase();
+          if (!title || format && format !== "pdf") return;
+          const sourceUrl = `https://annas-archive.li/md5/${md5}`;
+          books3.push({ title, author, publisher: "", year: "", language: "en", pages: "", filesize: "", format: "pdf", md5, source: "annas_archive", sourceUrl, downloadUrl: "", annaUrl: sourceUrl, formats: { pdf: sourceUrl } });
+        });
+      } catch {
+      }
+      return books3;
+    })();
+    const [localResult, libgenResult, annaResult, kicdResult, knecResult] = await Promise.allSettled([
+      Promise.resolve().then(() => (init_db(), db_exports)).then(({ listBooks: listBooks2 }) => listBooks2({
+        limit: requestedLimit,
+        offset: 0,
+        search: q || void 0,
+        genre: genre || void 0,
+        language: language || void 0,
+        educationalLevel: level || void 0,
+        source: source || void 0
+      })),
+      libgenPromise,
+      annaPromise,
+      Promise.resolve().then(() => (init_kicd(), kicd_exports)).then(async ({ fetchKicdResources: fetchKicdResources2 }) => {
+        const rows = await withTimeout(fetchKicdResources2(Math.min(50, requestedLimit)), 8e3);
+        return rows.filter(matchesFilters).map((book) => ({ ...book, source: "kicd", year: book.publishedDate ? String(book.publishedDate).slice(0, 4) : "", format: "pdf", formats: { pdf: book.downloadUrl || book.sourceUrl || "" } }));
+      }),
+      Promise.resolve().then(() => (init_knec(), knec_exports)).then(async ({ fetchKnecResources: fetchKnecResources2 }) => {
+        const rows = await withTimeout(fetchKnecResources2(Math.min(50, requestedLimit)), 8e3);
+        return rows.filter(matchesFilters).map((book) => ({ ...book, source: "knec", year: book.publishedDate ? String(book.publishedDate).slice(0, 4) : "", format: "pdf", formats: { pdf: book.downloadUrl || book.sourceUrl || "" } }));
+      })
+    ]);
+    const parseFormats = (value) => {
+      if (value && typeof value === "object") return value;
+      if (typeof value === "string") {
+        try {
+          return JSON.parse(value);
+        } catch {
+          return {};
         }
-      });
-    } catch (e) {
-    }
-    let kicdBooks = [];
-    try {
-      const [kicdModule, knecModule] = await Promise.all([
-        Promise.resolve().then(() => (init_kicd(), kicd_exports)).catch(() => null),
-        Promise.resolve().then(() => (init_knec(), knec_exports)).catch(() => null)
-      ]);
-      const fetchKicdResources2 = kicdModule?.fetchKicdResources;
-      const fetchKnecResources2 = knecModule?.fetchKnecResources;
-      if (fetchKicdResources2) {
-        const results = await Promise.race([
-          fetchKicdResources2(20),
-          new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 8e3))
-        ]).catch(() => []);
-        kicdBooks.push(...results.filter((r) => r.title.toLowerCase().includes(q)));
       }
-      if (fetchKnecResources2) {
-        const results = await Promise.race([
-          fetchKnecResources2(20),
-          new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 8e3))
-        ]).catch(() => []);
-        kicdBooks.push(...results.filter((r) => r.title.toLowerCase().includes(q)));
+      return {};
+    };
+    const localBooks = localResult.status === "fulfilled" ? localResult.value.map((book) => {
+      const formats = parseFormats(book.formats);
+      return {
+        ...book,
+        formats,
+        downloadUrl: book.downloadUrl || formats.pdf || book.sourceUrl || "",
+        format: "pdf",
+        year: book.publishedDate || "",
+        md5: book.md5 || ""
+      };
+    }) : [];
+    const libgenBooks = libgenResult.status === "fulfilled" ? libgenResult.value : [];
+    const annaBooks = annaResult.status === "fulfilled" ? annaResult.value : [];
+    const kicdBooks = kicdResult.status === "fulfilled" ? kicdResult.value : [];
+    const knecBooks = knecResult.status === "fulfilled" ? knecResult.value : [];
+    const candidates = [...localBooks, ...libgenBooks, ...annaBooks, ...kicdBooks, ...knecBooks].filter(matchesFilters);
+    const merged = /* @__PURE__ */ new Map();
+    for (const book of candidates) {
+      const title = String(book.title || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      const author = String(book.author || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      const key = book.md5 ? `md5:${String(book.md5).toLowerCase()}` : `title:${title}|author:${author}`;
+      const existing = merged.get(key);
+      if (!existing) {
+        merged.set(key, book);
+        continue;
       }
-    } catch (e) {
+      const combined = { ...existing, ...book, id: typeof existing.id === "number" ? existing.id : book.id };
+      combined.md5 = existing.md5 || book.md5 || "";
+      combined.downloadUrl = existing.downloadUrl || book.downloadUrl || "";
+      combined.sourceUrl = existing.sourceUrl || book.sourceUrl || "";
+      combined.formats = { ...book.formats || {}, ...existing.formats || {} };
+      merged.set(key, combined);
     }
-    const allBooks = [...libgenBooks, ...kicdBooks.map((b) => ({
-      ...b,
-      source: b.author === "KICD" ? "kicd" : "knec"
-    }))];
+    const relevance = (book) => {
+      if (!q) return 0;
+      const needle = q.toLowerCase();
+      const title = String(book.title || "").toLowerCase();
+      const author = String(book.author || "").toLowerCase();
+      const description = String(book.description || "").toLowerCase();
+      let score = title === needle ? 1e3 : title.includes(needle) ? 500 : 0;
+      if (author.includes(needle)) score += 300;
+      if (description.includes(needle)) score += 100;
+      for (const token of queryTokens) {
+        if (title.includes(token)) score += 40;
+        if (author.includes(token)) score += 20;
+      }
+      return score;
+    };
+    const books2 = Array.from(merged.values()).sort((a, b) => {
+      if (sort === "title") return String(a.title || "").localeCompare(String(b.title || ""));
+      if (sort === "author") return String(a.author || "").localeCompare(String(b.author || ""));
+      if (sort === "downloads") return Number(b.downloadCount || 0) - Number(a.downloadCount || 0);
+      if (sort === "newest") return String(b.publishedDate || b.year || b.importedAt || "").localeCompare(String(a.publishedDate || a.year || a.importedAt || ""));
+      return relevance(b) - relevance(a) || String(a.title || "").localeCompare(String(b.title || ""));
+    });
     return res.status(200).json({
       success: true,
       query: q,
-      total: allBooks.length,
-      sources: {
-        libgen: libgenBooks.length,
-        kicd_knec: kicdBooks.length
-      },
-      books: allBooks.slice(0, limit)
+      total: books2.length,
+      sources: { local: localBooks.length, libgen: libgenBooks.filter(matchesFilters).length, annas_archive: annaBooks.filter(matchesFilters).length, kicd: kicdBooks.length, knec: knecBooks.length },
+      books: books2.slice(offset, offset + limit)
     });
   } catch (error) {
     console.error("Unified search error:", error);
-    return res.status(500).json({
-      success: false,
-      error: "Unified search failed",
-      message: error instanceof Error ? error.message : "Unknown error"
-    });
+    return res.status(500).json({ success: false, error: "Unified search failed", message: error instanceof Error ? error.message : "Unknown error" });
   }
 });
 function handler(req, res) {

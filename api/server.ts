@@ -204,59 +204,58 @@ app.get("/api/libgen", async (req: any, res: any) => {
 app.all("/api/download", async (req: any, res: any) => {
   let md5: string | undefined;
   let format = "pdf";
+  let directUrl: string | undefined;
 
   if (req.method === "GET") {
     md5 = req.query.md5 as string | undefined;
+    directUrl = req.query.url as string | undefined;
     format = (req.query.format as string) || "pdf";
   } else if (req.method === "POST") {
     const body = req.body || {};
     md5 = body.md5;
+    directUrl = body.url;
     format = body.format || "pdf";
   }
 
-  // ── Direct URL mode: books with a real PDF URL (e.g. Kenyan exam papers) ──
-  if (req.method === "GET") {
-    const directUrl = req.query.url as string | undefined;
-    if (directUrl && /^https?:\/\//i.test(directUrl)) {
-      try {
-        const axios = await import("axios");
-        const r = await axios.default.get(directUrl, {
-          responseType: "arraybuffer",
-          timeout: 30000,
-          maxRedirects: 8,
-          headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-            Accept: "*/*",
-          },
-          validateStatus: (s: number) => s < 500,
-        });
-        const buf = Buffer.from(r.data);
-        const ct = r.headers["content-type"] || "";
-        if (/text\/html|text\/xml/.test(ct) && buf.length < 50000) {
-          return res.status(502).json({ error: "Source returned an HTML page instead of a PDF. The file may have been moved or removed.", success: false });
+  // Try a provided URL first. A source page is not treated as a download; if it
+  // contains an MD5, execution continues through the server-side mirror flow.
+  if (directUrl && /^https?:\/\//i.test(directUrl)) {
+    try {
+      const axios = await import("axios");
+      const r = await axios.default.get(directUrl, {
+        responseType: "arraybuffer",
+        timeout: 20000,
+        maxRedirects: 8,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+          Accept: "*/*",
+        },
+        validateStatus: (s: number) => s < 500,
+      });
+      const buf = Buffer.from(r.data);
+      const ct = r.headers["content-type"] || "";
+      if (buf.length > 1000 && !/text\/html|text\/xml|application\/json/i.test(ct)) {
+        const magic = buf.slice(0, 4).toString("hex");
+        const isPdf = magic === "25504446" || magic === "41542654" || magic === "0000001c" || /pdf/i.test(ct);
+        if (isPdf || buf.length > 100000) {
+          const ext = /application\/epub|epub|\.epub/i.test(ct + directUrl) ? "epub" : "pdf";
+          res.setHeader("Content-Type", isPdf ? "application/pdf" : ct || "application/octet-stream");
+          res.setHeader("Content-Disposition", `attachment; filename="document.${ext}"`);
+          res.setHeader("Content-Length", buf.length.toString());
+          res.setHeader("Access-Control-Allow-Origin", "*");
+          res.setHeader("Access-Control-Expose-Headers", "Content-Disposition, Content-Length");
+          return res.send(buf);
         }
-        if (buf.length > 1000) {
-          const magic = buf.slice(0, 4).toString("hex");
-          const isPdf = magic === "25504446" || magic === "41542654" || magic === "0000001c" || /pdf/i.test(ct);
-          if (isPdf || buf.length > 100000) {
-            const ext = /application\/epub|epub|\.epub/i.test(ct + directUrl) ? "epub" : "pdf";
-            res.setHeader("Content-Type", isPdf ? "application/pdf" : ct || "application/octet-stream");
-            res.setHeader("Content-Disposition", `attachment; filename="document.${ext}"`);
-            res.setHeader("Content-Length", buf.length.toString());
-            res.setHeader("Access-Control-Allow-Origin", "*");
-            res.setHeader("Access-Control-Expose-Headers", "Content-Disposition, Content-Length");
-            return res.send(buf);
-          }
-        }
-        return res.status(502).json({ error: "Source did not return a valid document.", success: false });
-      } catch (e) {
-        return res.status(502).json({ error: "Failed to fetch from source", message: e instanceof Error ? e.message : "Unknown error", success: false });
       }
+    } catch {
+      // Continue to MD5 or search fallback instead of redirecting the user.
     }
+    const urlMd5 = directUrl.match(/(?:md5=|\/md5\/)([a-f0-9]{32})/i)?.[1];
+    md5 = md5 || urlMd5;
   }
 
-  if (!md5 || typeof md5 !== "string" || md5.length !== 32) {
-    return res.status(400).json({ error: "Valid 32-character md5 required", success: false });
+  if (!md5 || typeof md5 !== "string" || !/^[a-f0-9]{32}$/i.test(md5)) {
+    return res.status(404).json({ success: false, error: "Download unavailable", message: "This document is not available right now. Try another result." });
   }
 
   // ── Anna's Archive fallback URL (most reliable, returns JSON with mirror list) ──
@@ -437,104 +436,207 @@ app.get("/api/kicd", async (req: any, res: any) => {
   }
 });
 
-// Unified search — combines LibGen, KICD/KNEC, and local DB
+// Unified search — combines local metadata, LibGen, Anna's Archive, KICD, and KNEC
 app.get("/api/search", async (req: any, res: any) => {
   const q = (req.query.q as string || "").trim();
-  const limit = parseInt(req.query.limit as string || "50", 10);
+  const rawLimit = Number(req.query.limit || 20);
+  const rawOffset = Number(req.query.offset || 0);
+  const limit = Number.isFinite(rawLimit) ? Math.min(100, Math.max(1, Math.floor(rawLimit))) : 20;
+  const offset = Number.isFinite(rawOffset) ? Math.max(0, Math.floor(rawOffset)) : 0;
+  const level = String(req.query.level || "").trim().toLowerCase();
+  const source = String(req.query.source || "").trim().toLowerCase();
+  const language = String(req.query.language || "").trim().toLowerCase();
+  const genre = String(req.query.genre || "").trim();
+  const sort = String(req.query.sort || "relevance").trim().toLowerCase();
 
-  if (!q || q.length < 2) {
-    return res.status(400).json({ error: 'Query parameter "q" is required (min 2 chars)' });
+  if (q.length < 2 && !level && !source && !language && !genre) {
+    return res.status(400).json({ error: 'Query parameter "q" or a catalog filter is required' });
   }
 
   try {
     const axios = await import("axios");
     const cheerioModule = await import("cheerio");
     const cheerio = cheerioModule.default || cheerioModule;
+    const queryTokens = q.toLowerCase().split(/\s+/).filter(Boolean);
+    const requestedLimit = Math.min(100, Math.max(50, offset + limit));
 
-    // 1. Fetch LibGen results
-    let libgenBooks: any[] = [];
-    try {
-      const encodedQuery = encodeURIComponent(q);
-      const lgUrl = `https://libgen.li/index.php?req=${encodedQuery}&lg_topic=libgen&open=0&view=simple&res=50&phrase=1&column=def`;
-      const response = await axios.default.get(lgUrl, {
-        timeout: 20000,
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; ZAMIFU-E-MATERIALS/2.0; Educational Aggregator)" },
-      });
-      const $ = cheerio.load(response.data);
-      $("#tablelibgen tr").each((_i: number, row: any) => {
-        const cells = $(row).find("td");
-        if (cells.length < 9) return;
-        const editionLinks = cells.eq(0).find('a[href*="edition.php"]');
-        const titleLink = editionLinks.length > 1 ? editionLinks.last() : editionLinks.first();
-        if (!titleLink.length) return;
-        const title = titleLink.text().trim();
-        const author = cells.eq(1).text().trim();
-        const year = cells.eq(3).text().trim();
-        const lang = cells.eq(4).text().trim();
-        const annaLink = cells.eq(8).find('a[href*="annas-archive"]').first();
-        const libgenLink = cells.eq(8).find('a[title="libgen"], a[href*="/get.php"]').first();
-        const md5Href = libgenLink.attr("href") || annaLink.attr("href") || "";
-        const md5Match = md5Href.match(/md5=([a-f0-9]{32})/);
-        const md5 = md5Match ? md5Match[1] : "";
-        // Only include PDFs
-        const formatCell = cells.eq(7).text().trim().toLowerCase();
-        if (title && md5 && title.length > 2 && formatCell === 'pdf') {
-          libgenBooks.push({
-            title, author: author || "Unknown", year: year || "",
-            language: lang || "en", md5, source: "libgen",
-            sourceUrl: `https://annas-archive.li/md5/${md5}`,
+    const matchesQuery = (book: any) => {
+      if (queryTokens.length === 0) return true;
+      const subjects = Array.isArray(book.subjects) ? book.subjects : (book.subjects ? [book.subjects] : []);
+      const searchable = [book.title, book.author, book.description, ...subjects]
+        .filter(Boolean).join(" ").toLowerCase();
+      return queryTokens.every((token: string) => searchable.includes(token));
+    };
+    const matchesFilters = (book: any) => (
+      (!source || String(book.source || "").toLowerCase() === source) &&
+      (!level || String(book.educationalLevel || "").toLowerCase() === level) &&
+      (!language || String(book.language || "").toLowerCase() === language) &&
+      matchesQuery(book)
+    );
+    const withTimeout = async <T,>(promise: Promise<T>, milliseconds: number): Promise<T> => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        return await Promise.race([
+          promise,
+          new Promise<T>((_, reject) => { timer = setTimeout(() => reject(new Error("source timeout")), milliseconds); }),
+        ]);
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    };
+
+    const libgenPromise = (async () => {
+      const books: any[] = [];
+      if (q.length < 2) return books;
+      try {
+        const url = `https://libgen.li/index.php?req=${encodeURIComponent(q)}&lg_topic=libgen&open=0&view=simple&res=100&phrase=1&column=def`;
+        const response = await axios.default.get(url, {
+          timeout: 20000,
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; ZAMIFU-E-MATERIALS/2.0; Educational Aggregator)" },
+        });
+        const $ = cheerio.load(response.data);
+        $("#tablelibgen tr").each((_i: number, row: any) => {
+          const cells = $(row).find("td");
+          if (cells.length < 9) return;
+          const editionLinks = cells.eq(0).find('a[href*="edition.php"]');
+          const titleLink = editionLinks.length > 1 ? editionLinks.last() : editionLinks.first();
+          const title = titleLink.text().trim();
+          const format = cells.eq(7).text().trim().toLowerCase();
+          const annaLink = cells.eq(8).find('a[href*="annas-archive"]').first();
+          const libgenLink = cells.eq(8).find('a[title="libgen"], a[href*="/get.php"]').first();
+          const md5Href = libgenLink.attr("href") || annaLink.attr("href") || "";
+          const md5Match = md5Href.match(/md5=([a-f0-9]{32})/i);
+          const md5 = md5Match ? md5Match[1] : "";
+          if (!title || !md5 || format !== "pdf" || /^[\d\s;:.,-]+$/.test(title)) return;
+          const sourceUrl = annaLink.attr("href") || `https://annas-archive.li/md5/${md5}`;
+          books.push({
+            title: title.slice(0, 255), author: cells.eq(1).text().trim() || "Unknown",
+            publisher: cells.eq(2).text().trim(), year: cells.eq(3).text().trim(),
+            language: cells.eq(4).text().trim() || "en", pages: cells.eq(5).text().trim(),
+            filesize: cells.eq(6).text().trim(), format, md5, source: "libgen",
+            sourceUrl, downloadUrl: "", annaUrl: sourceUrl, formats: { pdf: sourceUrl },
           });
-        }
-      });
-    } catch (e) { /* LibGen unavailable — continue with other sources */ }
-
-    // 2. Fetch KICD/KNEC (lightweight — timeout fast)
-    let kicdBooks: any[] = [];
-    try {
-      const [kicdModule, knecModule] = await Promise.all([
-        import("../server/sources/kicd").catch(() => null),
-        import("../server/sources/knec").catch(() => null),
-      ]);
-      const fetchKicdResources = (kicdModule as any)?.fetchKicdResources;
-      const fetchKnecResources = (knecModule as any)?.fetchKnecResources;
-      if (fetchKicdResources) {
-        const results = await Promise.race([
-          fetchKicdResources(20),
-          new Promise<any[]>((_, reject) => setTimeout(() => reject(new Error("timeout")), 8000)),
-        ]).catch(() => []);
-        kicdBooks.push(...results.filter((r: any) => r.title.toLowerCase().includes(q)));
+        });
+      } catch {
+        // Continue with other sources.
       }
-      if (fetchKnecResources) {
-        const results = await Promise.race([
-          fetchKnecResources(20),
-          new Promise<any[]>((_, reject) => setTimeout(() => reject(new Error("timeout")), 8000)),
-        ]).catch(() => []);
-        kicdBooks.push(...results.filter((r: any) => r.title.toLowerCase().includes(q)));
-      }
-    } catch (e) { /* KICD/KNEC unavailable */ }
+      return books;
+    })();
 
-    // 3. Combine and deduplicate
-    const allBooks = [...libgenBooks, ...kicdBooks.map((b: any) => ({
-      ...b, source: b.author === "KICD" ? "kicd" : "knec",
-    }))];
+    const annaPromise = (async () => {
+      const books: any[] = [];
+      if (q.length < 2) return books;
+      try {
+        const response = await axios.default.get(`https://annas-archive.li/search?q=${encodeURIComponent(q)}`, {
+          timeout: 15000,
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; ZAMIFU-E-MATERIALS/2.0; Educational Aggregator)" },
+        });
+        const $ = cheerio.load(response.data);
+        $("a[href*='/md5/']").each((_i: number, element: any) => {
+          if (books.length >= 50) return false;
+          const href = $(element).attr("href") || "";
+          const md5Match = href.match(/\/md5\/([a-f0-9]{32})/i);
+          if (!md5Match) return;
+          const md5 = md5Match[1];
+          const parent = $(element).closest("div, li, tr");
+          const title = (parent.find("h3, h4, .text-lg, .font-bold").first().text().trim() || $(element).text().trim()).slice(0, 255);
+          const author = parent.find(".text-gray-500, .text-sm, .italic").first().text().trim() || "Unknown";
+          const format = parent.find('span:contains("pdf"), span:contains("epub"), span:contains("mobi")').first().text().trim().toLowerCase();
+          if (!title || (format && format !== "pdf")) return;
+          const sourceUrl = `https://annas-archive.li/md5/${md5}`;
+          books.push({ title, author, publisher: "", year: "", language: "en", pages: "", filesize: "", format: "pdf", md5, source: "annas_archive", sourceUrl, downloadUrl: "", annaUrl: sourceUrl, formats: { pdf: sourceUrl } });
+        });
+      } catch {
+        // Continue with other sources.
+      }
+      return books;
+    })();
+
+    const [localResult, libgenResult, annaResult, kicdResult, knecResult] = await Promise.allSettled([
+      import("../server/db").then(({ listBooks }) => listBooks({
+        limit: requestedLimit, offset: 0, search: q || undefined,
+        genre: genre || undefined, language: language || undefined,
+        educationalLevel: level || undefined, source: source || undefined,
+      })),
+      libgenPromise,
+      annaPromise,
+      import("../server/sources/kicd").then(async ({ fetchKicdResources }) => {
+        const rows = await withTimeout(fetchKicdResources(Math.min(50, requestedLimit)), 8000);
+        return rows.filter(matchesFilters).map((book: any) => ({ ...book, source: "kicd", year: book.publishedDate ? String(book.publishedDate).slice(0, 4) : "", format: "pdf", formats: { pdf: book.downloadUrl || book.sourceUrl || "" } }));
+      }),
+      import("../server/sources/knec").then(async ({ fetchKnecResources }) => {
+        const rows = await withTimeout(fetchKnecResources(Math.min(50, requestedLimit)), 8000);
+        return rows.filter(matchesFilters).map((book: any) => ({ ...book, source: "knec", year: book.publishedDate ? String(book.publishedDate).slice(0, 4) : "", format: "pdf", formats: { pdf: book.downloadUrl || book.sourceUrl || "" } }));
+      }),
+    ]);
+
+    const parseFormats = (value: any) => {
+      if (value && typeof value === "object") return value;
+      if (typeof value === "string") {
+        try { return JSON.parse(value); } catch { return {}; }
+      }
+      return {};
+    };
+    const localBooks = localResult.status === "fulfilled" ? localResult.value.map((book: any) => {
+      const formats = parseFormats(book.formats);
+      return {
+        ...book,
+        formats,
+        downloadUrl: book.downloadUrl || formats.pdf || book.sourceUrl || "",
+        format: "pdf",
+        year: book.publishedDate || "",
+        md5: book.md5 || "",
+      };
+    }) : [];
+    const libgenBooks = libgenResult.status === "fulfilled" ? libgenResult.value : [];
+    const annaBooks = annaResult.status === "fulfilled" ? annaResult.value : [];
+    const kicdBooks = kicdResult.status === "fulfilled" ? kicdResult.value : [];
+    const knecBooks = knecResult.status === "fulfilled" ? knecResult.value : [];
+    const candidates = [...localBooks, ...libgenBooks, ...annaBooks, ...kicdBooks, ...knecBooks].filter(matchesFilters);
+
+    const merged = new Map<string, any>();
+    for (const book of candidates) {
+      const title = String(book.title || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      const author = String(book.author || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      const key = book.md5 ? `md5:${String(book.md5).toLowerCase()}` : `title:${title}|author:${author}`;
+      const existing = merged.get(key);
+      if (!existing) { merged.set(key, book); continue; }
+      const combined = { ...existing, ...book, id: typeof existing.id === "number" ? existing.id : book.id };
+      combined.md5 = existing.md5 || book.md5 || "";
+      combined.downloadUrl = existing.downloadUrl || book.downloadUrl || "";
+      combined.sourceUrl = existing.sourceUrl || book.sourceUrl || "";
+      combined.formats = { ...(book.formats || {}), ...(existing.formats || {}) };
+      merged.set(key, combined);
+    }
+
+    const relevance = (book: any) => {
+      if (!q) return 0;
+      const needle = q.toLowerCase();
+      const title = String(book.title || "").toLowerCase();
+      const author = String(book.author || "").toLowerCase();
+      const description = String(book.description || "").toLowerCase();
+      let score = title === needle ? 1000 : title.includes(needle) ? 500 : 0;
+      if (author.includes(needle)) score += 300;
+      if (description.includes(needle)) score += 100;
+      for (const token of queryTokens) { if (title.includes(token)) score += 40; if (author.includes(token)) score += 20; }
+      return score;
+    };
+    const books = Array.from(merged.values()).sort((a: any, b: any) => {
+      if (sort === "title") return String(a.title || "").localeCompare(String(b.title || ""));
+      if (sort === "author") return String(a.author || "").localeCompare(String(b.author || ""));
+      if (sort === "downloads") return Number(b.downloadCount || 0) - Number(a.downloadCount || 0);
+      if (sort === "newest") return String(b.publishedDate || b.year || b.importedAt || "").localeCompare(String(a.publishedDate || a.year || a.importedAt || ""));
+      return relevance(b) - relevance(a) || String(a.title || "").localeCompare(String(b.title || ""));
+    });
 
     return res.status(200).json({
-      success: true,
-      query: q,
-      total: allBooks.length,
-      sources: {
-        libgen: libgenBooks.length,
-        kicd_knec: kicdBooks.length,
-      },
-      books: allBooks.slice(0, limit),
+      success: true, query: q, total: books.length,
+      sources: { local: localBooks.length, libgen: libgenBooks.filter(matchesFilters).length, annas_archive: annaBooks.filter(matchesFilters).length, kicd: kicdBooks.length, knec: knecBooks.length },
+      books: books.slice(offset, offset + limit),
     });
   } catch (error: any) {
     console.error("Unified search error:", error);
-    return res.status(500).json({
-      success: false,
-      error: "Unified search failed",
-      message: error instanceof Error ? error.message : "Unknown error",
-    });
+    return res.status(500).json({ success: false, error: "Unified search failed", message: error instanceof Error ? error.message : "Unknown error" });
   }
 });
 

@@ -4,12 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Loader2, BookOpen, Search as SearchIcon, X, SlidersHorizontal,
-  ChevronLeft, ChevronRight, ArrowRight, Globe
+  ChevronLeft, ChevronRight, ArrowRight
 } from "lucide-react";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useDebounce } from "@/hooks/useDebounce";
-import { LibGenResults } from "@/components/LibGenResults";
-import { KICDResults } from "@/components/KICDResults";
+import { DownloadButton } from "@/components/DownloadButton";
 
 const SOURCES = [
   { key: "", label: "All Sources" },
@@ -71,46 +70,63 @@ const LANGUAGES = [
 
 const POPULAR_SEARCHES = ["mathematics", "biology", "history", "physics", "economics", "literature", "computer science"];
 
-function BookCard({ book, onClick }: { book: any; onClick: () => void }) {
+function BookCard({ book, query, onClick }: { book: any; query: string; onClick?: () => void }) {
+  const formats = typeof book.formats === "string"
+    ? (() => { try { return JSON.parse(book.formats); } catch { return {}; } })()
+    : (book.formats || {});
+  const downloadUrl = book.downloadUrl || formats.pdf || book.sourceUrl || "";
+  const hasLocalId = typeof book.id === "number";
+
   return (
     <div
       onClick={onClick}
-      className="card-neon cursor-pointer group hover:border-primary/60 transition-all duration-200 flex gap-4 p-4"
+      className="card-neon group flex gap-4 p-4 transition-all duration-200 hover:border-primary/60"
     >
-      {book.coverUrl ? (
-        <img
-          src={book.coverUrl}
-          alt={book.title}
-          className="w-16 h-20 object-cover rounded flex-shrink-0 group-hover:opacity-90 transition"
-          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-        />
-      ) : (
-        <div className="w-16 h-20 bg-gradient-to-br from-primary/20 to-secondary/20 rounded flex-shrink-0 flex items-center justify-center">
-          <BookOpen className="w-6 h-6 text-muted-foreground/50" />
-        </div>
-      )}
-      <div className="flex-1 min-w-0">
-        <h3 className="font-bold text-sm mb-1 line-clamp-2 group-hover:text-primary transition leading-snug">{book.title}</h3>
-        <p className="text-xs text-muted-foreground mb-2 line-clamp-1">{book.author || "Unknown Author"}</p>
-        {book.description && (
-          <p className="text-[11px] text-muted-foreground/70 line-clamp-2 mb-2">{book.description}</p>
+      <div className="flex min-w-0 flex-1 gap-4">
+        {book.coverUrl ? (
+          <img
+            src={book.coverUrl}
+            alt={book.title}
+            className="h-20 w-16 shrink-0 rounded object-cover transition group-hover:opacity-90"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+          />
+        ) : (
+          <div className="flex h-20 w-16 shrink-0 items-center justify-center rounded bg-gradient-to-br from-primary/20 to-secondary/20">
+            <BookOpen className="h-6 w-6 text-muted-foreground/50" />
+          </div>
         )}
-        <div className="flex flex-wrap gap-1 items-center">
-          <span className="px-1.5 py-0.5 bg-red-500/20 text-red-400 border border-red-500/30 rounded text-[10px] font-bold uppercase tracking-wider">
-            PDF
-          </span>
-          {book.language && (
-            <span className="px-1.5 py-0.5 bg-accent/10 text-accent rounded text-[10px]">
-              {book.language.toUpperCase()}
-            </span>
+        <div className="min-w-0 flex-1">
+          <h3
+            className={`mb-1 line-clamp-2 text-sm font-bold leading-snug transition ${hasLocalId ? "cursor-pointer group-hover:text-primary" : ""}`}
+            onClick={hasLocalId ? onClick : undefined}
+          >
+            {book.title || "Untitled document"}
+          </h3>
+          <p className="mb-1 line-clamp-1 text-xs text-muted-foreground">{book.author || "Unknown Author"}</p>
+          {(book.year || book.publishedDate || book.publisher) && (
+            <p className="mb-2 line-clamp-1 text-[11px] text-muted-foreground/70">
+              {book.year || book.publishedDate || ""}{book.publisher ? ` · ${book.publisher}` : ""}
+            </p>
           )}
-          {/* Source hidden */}
-          {book.downloadCount > 0 && (
-            <span className="px-1.5 py-0.5 bg-muted/30 text-muted-foreground rounded text-[10px]">
-              {book.downloadCount} ↓
-            </span>
+          {book.description && (
+            <p className="mb-2 line-clamp-2 text-[11px] text-muted-foreground/70">{book.description}</p>
           )}
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="rounded border border-red-500/30 bg-red-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-400">PDF</span>
+            {book.language && <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px] text-accent">{String(book.language).toUpperCase()}</span>}
+            {book.educationalLevel && <span className="rounded bg-secondary/10 px-1.5 py-0.5 text-[10px] text-secondary">{String(book.educationalLevel).replace("_", " ")}</span>}
+            {book.downloadCount > 0 && <span className="rounded bg-muted/30 px-1.5 py-0.5 text-[10px] text-muted-foreground">{book.downloadCount} ↓</span>}
+          </div>
         </div>
+      </div>
+      <div className="flex shrink-0 items-end" onClick={(event) => event.stopPropagation()}>
+        <DownloadButton
+          md5={book.md5}
+          title={book.title || "document"}
+          format="pdf"
+          url={downloadUrl}
+          query={query}
+        />
       </div>
     </div>
   );
@@ -155,20 +171,56 @@ export default function Search() {
 
   const pageSize = 20;
   const genres = trpc.genres.list.useQuery();
+  const [results, setResults] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [searchError, setSearchError] = useState("");
 
-  const { data: results, isLoading } = trpc.books.search.useQuery(
-    {
-      query: query || " ",
-      limit: pageSize,
-      offset: currentPage * pageSize,
-      source: selectedSource || undefined,
-      educationalLevel: selectedLevel || undefined,
-      language: selectedLanguage || undefined,
-      sort: selectedSort,
-      genre: selectedGenre || undefined,
-    },
-    { enabled: !!(query || selectedSource || selectedLevel || selectedLanguage || selectedGenre) }
-  );
+  useEffect(() => {
+    const hasSearch = query.trim().length >= 2;
+    const hasFilters = !!(selectedSource || selectedLevel || selectedLanguage || selectedGenre);
+    if (!hasSearch && !hasFilters) {
+      setResults([]);
+      setSearchError("");
+      setIsLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    let active = true;
+    const timer = window.setTimeout(async () => {
+      setIsLoading(true);
+      setSearchError("");
+      try {
+        const searchParams = new URLSearchParams();
+        if (hasSearch) searchParams.set("q", query.trim());
+        searchParams.set("limit", String(pageSize));
+        searchParams.set("offset", String(currentPage * pageSize));
+        if (selectedSource) searchParams.set("source", selectedSource);
+        if (selectedLevel) searchParams.set("level", selectedLevel);
+        if (selectedLanguage) searchParams.set("language", selectedLanguage);
+        if (selectedGenre) searchParams.set("genre", selectedGenre);
+        if (selectedSort !== "newest") searchParams.set("sort", selectedSort);
+
+        const response = await fetch(`/api/search?${searchParams.toString()}`, { signal: controller.signal });
+        if (!response.ok) throw new Error("Search is temporarily unavailable");
+        const data = await response.json();
+        if (active) setResults(Array.isArray(data.books) ? data.books : []);
+      } catch (error) {
+        if (active && !controller.signal.aborted) {
+          setResults([]);
+          setSearchError(error instanceof Error ? error.message : "Search is temporarily unavailable");
+        }
+      } finally {
+        if (active) setIsLoading(false);
+      }
+    }, hasSearch ? 200 : 0);
+
+    return () => {
+      active = false;
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [query, currentPage, selectedSource, selectedLevel, selectedLanguage, selectedGenre, selectedSort]);
 
   const { data: suggestions } = trpc.books.autocomplete.useQuery(
     { query: searchInput, limit: 6 },
@@ -447,7 +499,7 @@ export default function Search() {
             )}
 
             {/* Empty state */}
-            {!isLoading && !query && !selectedSource && !selectedLevel && (
+            {!isLoading && !searchError && !query && !selectedSource && !selectedLevel && !selectedLanguage && !selectedGenre && (
               <div className="text-center py-20">
                 <SearchIcon className="w-14 h-14 mx-auto mb-4 text-muted-foreground/30" />
                 <h3 className="text-xl font-bold mb-2">Search ZAMIFU E-MATERIALS</h3>
@@ -468,14 +520,18 @@ export default function Search() {
               </div>
             )}
 
-            {/* No local results — show subtle inline note, LibGen results appear below */}
-            {!isLoading && results && results.length === 0 && query && query.length >= 2 && (
-              <div className="text-center py-4 text-sm text-muted-foreground/70">
-                No local results for "<strong className="text-foreground">{query}</strong>"
-                {hasFilters && (
-                  <> — <button onClick={clearFilters} className="underline hover:text-primary transition">clear filters</button></>
-                )}
-                {" "}— see LibGen results below.
+            {!isLoading && searchError && (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-center text-sm text-destructive" role="alert">
+                {searchError}
+              </div>
+            )}
+
+            {!isLoading && !searchError && results.length === 0 && (query.length >= 2 || hasFilters) && (
+              <div className="py-12 text-center text-sm text-muted-foreground">
+                <SearchIcon className="mx-auto mb-3 h-10 w-10 text-muted-foreground/30" />
+                <p className="text-base font-medium text-foreground">No results found</p>
+                <p className="mt-1">Try another title, author, subject, or filter.</p>
+                {hasFilters && <button onClick={clearFilters} className="mt-3 underline hover:text-primary transition">Clear filters</button>}
               </div>
             )}
 
@@ -483,8 +539,13 @@ export default function Search() {
             {!isLoading && results && results.length > 0 && (
               <>
                 <div className="space-y-2.5">
-                  {results.map((book) => (
-                    <BookCard key={book.id} book={book} onClick={() => navigate(`/book/${book.id}`)} />
+                  {results.map((book, index) => (
+                    <BookCard
+                      key={`${book.md5 || book.id || book.title || "result"}-${index}`}
+                      book={book}
+                      query={query}
+                      onClick={typeof book.id === "number" ? () => navigate(`/book/${book.id}`) : undefined}
+                    />
                   ))}
                 </div>
 
@@ -514,31 +575,6 @@ export default function Search() {
                 </div>
               </>
             )}
-            {/* LibGen results — external search */}
-            {query && query.length >= 2 && (
-              <div className="mt-8 pt-6 border-t border-border">
-                <div className="flex items-center gap-2 mb-4">
-                  <Globe className="w-5 h-5 text-primary" />
-                  <h3 className="font-bold text-sm">LibGen Results</h3>
-                  <span className="text-xs text-muted-foreground">
-                    (additional external results)
-                  </span>
-                </div>
-                <LibGenResults query={query} />
-              </div>
-            )}
-
-            {/* KICD/KNEC Results */}
-            {query && query.length >= 2 && (
-              <div className="mt-8 pt-6 border-t border-border">
-                <div className="flex items-center gap-2 mb-4">
-                  <h3 className="font-bold text-sm">Kenya Educational Materials</h3>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/10 text-green-400">KICD + KNEC</span>
-                </div>
-                <KICDResults query={query} />
-              </div>
-            )}
-
           </main>
         </div>
       </div>

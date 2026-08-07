@@ -2,7 +2,8 @@ import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { Loader2, BookOpen, Download, Heart, Share2, ExternalLink, Calendar, Globe, ArrowLeft, Copy, Check } from "lucide-react";
+import { DownloadButton } from "@/components/DownloadButton";
+import { Loader2, BookOpen, Heart, Share2, ExternalLink, Calendar, Globe, ArrowLeft, Copy, Check } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -12,7 +13,6 @@ export default function BookDetail() {
   const { user } = useAuth();
   const [isSaved, setIsSaved] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [downloadState, setDownloadState] = useState<"idle" | "preparing" | "downloading">("idle");
 
   const bookId = parseInt(id || "0", 10);
 
@@ -87,82 +87,6 @@ export default function BookDetail() {
     }
   };
 
-  // Extract md5 from known formats (anna's archive / libgen URLs)
-  const extractMd5 = (url: string): string | null => {
-    const match = /md5=([a-f0-9]{32})/i.exec(url) || /\/md5\/([a-f0-9]{32})/i.exec(url);
-    return match ? match[1] : null;
-  };
-
-  const handleDownload = async (format: string, url: string) => {
-    if (user) {
-      recordDownloadMutation.mutate({ bookId, format: format as any });
-    }
-    const md5 = extractMd5(url);
-    if (md5) {
-      // Route through our serverless download proxy — streams the binary file
-      // directly to the browser (no redirects, no 401 from blocked mirrors).
-      setDownloadState("preparing");
-      toast.info("Preparing your download...");
-      try {
-        const resp = await fetch(`/api/download?md5=${md5}&format=${encodeURIComponent(format)}`, {
-          headers: { Accept: "application/pdf,application/octet-stream,*/*" },
-        });
-        if (resp.headers.get("content-type")?.startsWith("application/") || resp.headers.get("content-disposition")) {
-          setDownloadState("downloading");
-          const blob = await resp.blob();
-          const blobUrl = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = blobUrl;
-          link.download = `book.${format}`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
-          toast.success("Download started!");
-        } else {
-          // Proxy couldn't fetch — fall back to opening the source directly
-          toast.warning("Server is busy, opening the source directly...");
-          window.open(url, "_blank", "noopener,noreferrer");
-        }
-      } catch {
-        window.open(url, "_blank", "noopener,noreferrer");
-      } finally {
-        setDownloadState("idle");
-      }
-      return;
-    }
-    // Non-md5 records (KICD, KNEC, Kenyan exam papers) — route through our
-    // serverless download proxy which fetches the source PDF server-side
-    setDownloadState("preparing");
-    toast.info("Preparing your download...");
-    try {
-      const resp = await fetch(`/api/download?url=${encodeURIComponent(url)}`, {
-        headers: { Accept: "application/pdf,application/octet-stream,*/*" },
-      });
-      if (resp.headers.get("content-type")?.includes("application/") || resp.headers.get("content-disposition")) {
-        setDownloadState("downloading");
-        const blob = await resp.blob();
-        const safe = (book?.title || "document").replace(/[^A-Za-z0-9 ]+/g, " ").trim().slice(0, 60) || "document";
-        const blobUrl = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        link.download = `${safe}.${format === "pdf" ? "pdf" : format}`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
-        toast.success("Download started!");
-      } else {
-        toast.warning("Download unavailable — the file may have been moved. Opening the source directly...");
-        window.open(url, "_blank", "noopener,noreferrer");
-      }
-    } catch {
-      window.open(url, "_blank", "noopener,noreferrer");
-    } finally {
-      setDownloadState("idle");
-    }
-  };
-
   const handleMarkAsRead = () => {
     if (!user) {
       toast.error("Please sign in first");
@@ -205,23 +129,13 @@ export default function BookDetail() {
     );
   }
 
-  const formats = book.formats ? JSON.parse(book.formats) : {};
-  const subjects = book.subjects ? JSON.parse(book.subjects) : [];
-  const canDownload = book.directDownloadAllowed && book.rightsStatus !== "metadata_only";
-
-  const SOURCE_COLORS: Record<string, string> = {
-    gutenberg: "bg-green-500/10 text-green-400",
-    doab: "bg-blue-500/10 text-blue-400",
-    open_textbook: "bg-orange-500/10 text-orange-400",
-    kicd: "bg-purple-500/10 text-purple-400",
-    knec: "bg-yellow-500/10 text-yellow-400",
-    ajol: "bg-red-500/10 text-red-400",
-    internet_archive: "bg-cyan-500/10 text-cyan-400",
-    open_library: "bg-teal-500/10 text-teal-400",
-    openstax: "bg-indigo-500/10 text-indigo-400",
-    mit_ocw: "bg-pink-500/10 text-pink-400",
-    pubmed: "bg-emerald-500/10 text-emerald-400",
+  const parseJson = (value: string | null | undefined, fallback: any) => {
+    if (!value) return fallback;
+    try { return JSON.parse(value); } catch { return fallback; }
   };
+  const formats = parseJson(book.formats, {});
+  const subjects = parseJson(book.subjects, []);
+  const pdfUrl = formats?.pdf || (book as any).directDownloadUrl || book.sourceUrl || "";
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(window.location.href);
@@ -416,30 +330,22 @@ export default function BookDetail() {
 
             {/* Download Options */}
             <div className="mb-8">
-              <h2 className="text-2xl font-bold mb-4 text-primary">{canDownload ? "Download" : "Access"}</h2>
-              <div className="grid grid-cols-1 gap-4 max-w-sm">
-                {canDownload && formats.pdf && (
-                  <Button onClick={() => handleDownload("pdf", formats.pdf)} disabled={downloadState !== "idle"} className="btn-neon gap-2 h-auto py-4 flex-col">
-                    {downloadState !== "idle" ? (
-                      <Loader2 className="w-6 h-6 animate-spin" />
-                    ) : (
-                      <Download className="w-6 h-6" />
-                    )}
-                    <span className="text-lg font-bold">Download PDF</span>
-                    <span className="text-xs opacity-75">
-                      {downloadState === "preparing" ? "Preparing..." : downloadState === "downloading" ? "Downloading..." : "Full high-quality document"}
-                    </span>
-                  </Button>
-                )}
+              <h2 className="mb-4 text-2xl font-bold text-primary">Download</h2>
+              <div className="card-neon max-w-xl p-4">
+                <DownloadButton
+                  md5={null}
+                  title={book.title}
+                  format="pdf"
+                  url={pdfUrl || null}
+                  query={book.title}
+                  onSuccess={() => {
+                    if (user) recordDownloadMutation.mutate({ bookId, format: "pdf" });
+                    toast.success("Download started!");
+                  }}
+                />
+                <p className="mt-3 text-xs text-muted-foreground">The download stays on ZAMIFU while it tries the available document paths.</p>
               </div>
-              {(!canDownload || Object.keys(formats).length === 0) && (
-                <div className="card-neon p-4 text-center">
-                  <p className="text-muted-foreground text-sm">
-                    {book.sourceUrl ? "This record links to the original source for access." : "No verified download formats are available for this record."}
-                  </p>
-                </div>
-              )}
-              <div className="text-xs text-muted-foreground mt-4 space-y-1">
+              <div className="mt-4 space-y-1 text-xs text-muted-foreground">
                 <p>{book.licenseName || "Rights information has not yet been verified for this record."}</p>
                 {book.licenseUrl && (
                   <a href={book.licenseUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-accent hover:text-primary transition">

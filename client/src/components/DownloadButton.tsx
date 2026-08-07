@@ -1,137 +1,165 @@
 import { useState } from "react";
-import { Download, Loader2, ExternalLink, ChevronDown } from "lucide-react";
-
-interface Mirror {
-  label: string;
-  url: string;
-}
+import { Download, Loader2 } from "lucide-react";
 
 interface DownloadButtonProps {
-  md5: string;
+  md5?: string | null;
   title: string;
   format?: string;
+  url?: string | null;
+  query?: string;
+  onSuccess?: () => void;
 }
 
-export function DownloadButton({ md5, title, format = "pdf" }: DownloadButtonProps) {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [mirrors, setMirrors] = useState<Mirror[]>([]);
-  const [showMirrors, setShowMirrors] = useState(false);
+interface SearchCandidate {
+  md5?: string;
+  downloadUrl?: string;
+  sourceUrl?: string;
+  formats?: { pdf?: string };
+  title?: string;
+}
 
-  const handleDownload = async () => {
-    if (!md5) {
-      setError("No download link available");
-      return;
+function safeFilename(title: string, format: string) {
+  const name = title
+    .replace(/[^a-z0-9]+/gi, " ")
+    .trim()
+    .slice(0, 80) || "document";
+  const extension = format.toLowerCase().replace(/[^a-z0-9]/g, "") || "pdf";
+  return `${name}.${extension}`;
+}
+
+async function saveDownload(response: Response, filename: string) {
+  const contentType = response.headers.get("content-type") || "";
+  const contentDisposition = response.headers.get("content-disposition") || "";
+
+  if (!response.ok) {
+    let message = "Download unavailable";
+    try {
+      const data = await response.json();
+      message = data?.message || data?.error || message;
+    } catch {
+      // Keep the concise fallback message for non-JSON errors.
     }
+    throw new Error(message);
+  }
 
-    setLoading(true);
-    setError("");
+  if (contentType.includes("application/json") || contentType.includes("text/html") || contentType.includes("text/plain")) {
+    let message = "Download unavailable";
+    try {
+      const data = await response.json();
+      message = data?.message || data?.error || message;
+    } catch {
+      // The proxy may return a non-JSON error page; do not expose it in the UI.
+    }
+    throw new Error(message);
+  }
 
+  const blob = await response.blob();
+  if (blob.size < 1000 && !contentDisposition) {
+    throw new Error("The source did not return a complete document");
+  }
+
+  const blobUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = blobUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
+}
+
+async function requestDownload(
+  candidate: { md5?: string | null; url?: string | null; query?: string; format: string; title: string },
+  onSuccess?: () => void,
+) {
+  const filename = safeFilename(candidate.title, candidate.format);
+  const attemptedMd5 = new Set<string>();
+  const attemptedUrls = new Set<string>();
+
+  const tryMd5 = async (md5?: string | null) => {
+    if (!md5 || !/^[a-f0-9]{32}$/i.test(md5) || attemptedMd5.has(md5.toLowerCase())) return false;
+    attemptedMd5.add(md5.toLowerCase());
     try {
       const response = await fetch("/api/download", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ md5, format }),
+        headers: { "Content-Type": "application/json", Accept: "application/pdf,application/octet-stream,*/*" },
+        body: JSON.stringify({ md5, format: candidate.format }),
       });
+      await saveDownload(response, filename);
+      return true;
+    } catch {
+      return false;
+    }
+  };
 
-      if (!response.ok) {
-        throw new Error("Download request failed");
-      }
+  const tryUrl = async (url?: string | null) => {
+    if (!url || !/^https?:\/\//i.test(url) || attemptedUrls.has(url)) return false;
+    attemptedUrls.add(url);
+    try {
+      const response = await fetch(`/api/download?url=${encodeURIComponent(url)}`, {
+        headers: { Accept: "application/pdf,application/octet-stream,*/*" },
+      });
+      await saveDownload(response, filename);
+      return true;
+    } catch {
+      return false;
+    }
+  };
 
-      const contentType = response.headers.get("content-type") || "";
+  const urlMd5 = candidate.url?.match(/(?:md5=|\/md5\/)([a-f0-9]{32})/i)?.[1] || null;
+  if (await tryMd5(candidate.md5 || urlMd5)) { onSuccess?.(); return; }
+  if (await tryUrl(candidate.url)) { onSuccess?.(); return; }
 
-      if (contentType.includes("application/json")) {
-        // Server returned mirror links
-        const data = await response.json();
-        if (data.success && data.mirrors && data.mirrors.length > 0) {
-          setMirrors(data.mirrors);
-          // Open the first mirror automatically (Anna's Archive)
-          window.open(data.mirrors[0].url, "_blank", "noopener,noreferrer");
-          setShowMirrors(true);
-        } else {
-          throw new Error("No download links available");
+  if (candidate.query && candidate.query.trim().length >= 2) {
+    try {
+      const response = await fetch(`/api/search?q=${encodeURIComponent(candidate.query.trim())}&limit=20`);
+      if (response.ok) {
+        const data = await response.json() as { books?: SearchCandidate[] };
+        for (const result of data.books || []) {
+          if (await tryMd5(result.md5)) { onSuccess?.(); return; }
+          const resultUrl = result.downloadUrl || result.formats?.pdf || result.sourceUrl;
+          if (await tryUrl(resultUrl)) { onSuccess?.(); return; }
         }
-      } else if (!contentType.includes("text/html")) {
-        // Direct file download
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `${title}.${format}`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      } else {
-        throw new Error("Unexpected response from download server");
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Download failed");
-      // Fallback to Anna's Archive directly
-      window.open(`https://annas-archive.org/md5/${md5}`, "_blank", "noopener,noreferrer");
+    } catch {
+      // Report the same helpful message for network and source failures.
+    }
+  }
+
+  throw new Error("Book not available right now. Try another source.");
+}
+
+export function DownloadButton({ md5, title, format = "pdf", url, query, onSuccess }: DownloadButtonProps) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleDownload = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (loading) return;
+
+    setLoading(true);
+    setError("");
+    try {
+      await requestDownload({ md5, url, query, format, title }, onSuccess);
+    } catch (downloadError) {
+      setError(downloadError instanceof Error ? downloadError.message : "Book not available right now. Try another source.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="flex items-center gap-2 relative">
+    <div className="flex min-w-0 items-center gap-2">
       <button
+        type="button"
         onClick={handleDownload}
         disabled={loading}
-        className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary to-pink-600 text-primary-foreground rounded-lg text-xs font-bold hover:shadow-lg hover:shadow-primary/40 hover:scale-105 transition disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100 shadow-md"
+        className="flex shrink-0 items-center gap-2 rounded-lg bg-gradient-to-r from-primary to-pink-600 px-4 py-2 text-xs font-bold text-primary-foreground shadow-md transition hover:scale-105 hover:shadow-lg hover:shadow-primary/40 disabled:cursor-not-allowed disabled:scale-100 disabled:opacity-50"
       >
-        {loading ? (
-          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-        ) : (
-          <Download className="w-3.5 h-3.5" />
-        )}
-        {loading ? "Opening..." : "Download PDF"}
+        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+        <span>{loading ? "Downloading..." : error ? "Try Again" : "Download PDF"}</span>
       </button>
-
-      {mirrors.length > 0 && (
-        <div className="relative">
-          <button
-            onClick={() => setShowMirrors((v) => !v)}
-            className="flex items-center gap-1 px-2.5 py-1.5 bg-secondary/10 text-secondary rounded-md text-xs font-medium hover:bg-secondary/20 transition border border-secondary/20"
-          >
-            Mirrors <ChevronDown className="w-3 h-3" />
-          </button>
-          {showMirrors && (
-            <div
-              className="absolute right-0 top-full mt-2 z-50 min-w-[240px] rounded-lg border border-border/60 bg-card shadow-2xl shadow-black/60 overflow-hidden backdrop-blur-sm"
-              onMouseLeave={() => setShowMirrors(false)}
-            >
-              <div className="px-4 py-3 text-[11px] font-bold text-muted-foreground tracking-widest uppercase border-b border-border/40 bg-muted/20">
-                Download Mirrors
-              </div>
-              {mirrors.map((m, idx) => (
-                <a
-                  key={m.url}
-                  href={m.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`flex items-center justify-between gap-3 px-4 py-3 text-xs hover:bg-primary/15 hover:text-primary transition-all group ${
-                    idx !== mirrors.length - 1 ? 'border-b border-border/20' : ''
-                  }`}
-                  onClick={() => setShowMirrors(false)}
-                >
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <ExternalLink className="w-3.5 h-3.5 shrink-0 opacity-60 group-hover:opacity-100" />
-                    <div className="min-w-0">
-                      <p className="font-medium truncate">{m.label}</p>
-                    </div>
-                  </div>
-                </a>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {error && (
-        <span className="text-[10px] text-destructive">{error}</span>
-      )}
+      {error && <span className="min-w-0 truncate text-[10px] font-medium text-destructive" role="alert">{error}</span>}
     </div>
   );
 }
