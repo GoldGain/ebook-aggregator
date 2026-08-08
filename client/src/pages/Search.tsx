@@ -172,6 +172,7 @@ export default function Search() {
   const pageSize = 20;
   const genres = trpc.genres.list.useQuery();
   const [results, setResults] = useState<any[]>([]);
+  const [totalResults, setTotalResults] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [searchError, setSearchError] = useState("");
 
@@ -180,6 +181,7 @@ export default function Search() {
     const hasFilters = !!(selectedSource || selectedLevel || selectedLanguage || selectedGenre);
     if (!hasSearch && !hasFilters) {
       setResults([]);
+      setTotalResults(0);
       setSearchError("");
       setIsLoading(false);
       return;
@@ -204,7 +206,10 @@ export default function Search() {
         const response = await fetch(`/api/search?${searchParams.toString()}`, { signal: controller.signal });
         if (!response.ok) throw new Error("Search is temporarily unavailable");
         const data = await response.json();
-        if (active) setResults(Array.isArray(data.books) ? data.books : []);
+        if (active) {
+          setResults(Array.isArray(data.books) ? data.books : []);
+          if (typeof data.total === "number" && data.total >= 0) setTotalResults(data.total);
+        }
       } catch (error) {
         if (active && !controller.signal.aborted) {
           setResults([]);
@@ -221,6 +226,14 @@ export default function Search() {
       window.clearTimeout(timer);
     };
   }, [query, currentPage, selectedSource, selectedLevel, selectedLanguage, selectedGenre, selectedSort]);
+
+  const totalResultsText = useMemo(() => {
+    if (totalResults > 0) {
+      const extra = results.length + currentPage * pageSize - totalResults;
+      return totalResults.toLocaleString() + (extra > 0 ? " +" : "") + " results";
+    }
+    return "";
+  }, [totalResults, results.length, currentPage]);
 
   const { data: suggestions } = trpc.books.autocomplete.useQuery(
     { query: searchInput, limit: 6 },
@@ -328,7 +341,7 @@ export default function Search() {
       <div className="container py-6">
         <div className="flex gap-6">
           {/* ─── Filters Sidebar ─── */}
-          <aside className={`${showFilters ? "block" : "hidden"} lg:block w-52 flex-shrink-0`}>
+          <aside className={`${showFilters ? "block" : "hidden"} lg:block lg:w-52 w-full flex-shrink-0`}>
             <div className="card-neon p-4 sticky top-24">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-bold text-sm">Filters</h3>
@@ -454,7 +467,7 @@ export default function Search() {
                 )}
                 {results && query && (
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {results.length === pageSize ? `${pageSize}+ results` : `${results.length} result${results.length !== 1 ? "s" : ""}`}
+                    {totalResultsText || (results.length === pageSize ? `${pageSize}+ results` : `${results.length} result${results.length !== 1 ? "s" : ""}`)}
                     {currentPage > 0 && ` · Page ${currentPage + 1}`}
                   </p>
                 )}
@@ -504,7 +517,7 @@ export default function Search() {
                 <SearchIcon className="w-14 h-14 mx-auto mb-4 text-muted-foreground/30" />
                 <h3 className="text-xl font-bold mb-2">Search ZAMIFU E-MATERIALS</h3>
                 <p className="text-muted-foreground text-sm max-w-sm mx-auto mb-6">
-                  Search across millions of free ebooks from 50+ open-access sources worldwide.
+                  Search thousands of public-domain, open-access, and educational titles from Project Gutenberg, Open Library, the Internet Archive, OpenStax, KICD, and more.
                 </p>
                 <div className="flex flex-wrap gap-2 justify-center">
                   {POPULAR_SEARCHES.map((tag) => (
