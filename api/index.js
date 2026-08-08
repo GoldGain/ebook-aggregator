@@ -4005,7 +4005,10 @@ app.get("/api/search", async (req, res) => {
     let externalResults = {};
     if (q.length >= 2) {
       const { runExternalSearch: runExternalSearch2 } = await Promise.resolve().then(() => (init_external_search(), external_search_exports));
-      externalResults = await runExternalSearch2(q, 10);
+      const aggregate = await runExternalSearch2(q, 10);
+      externalResults = Object.fromEntries(
+        Object.entries(aggregate).map(([provider, items]) => [provider, items])
+      );
     }
     const externalBooks = Object.entries(externalResults).flatMap(
       ([provider, items]) => items.map((item) => ({

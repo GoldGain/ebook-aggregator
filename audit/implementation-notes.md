@@ -25,3 +25,11 @@ User: "Don't restrict downloads, you'll be destroying my code by doing that." ->
 - DownloadButton props: md5, title, format="pdf", url, query, onSuccess. BookDetail calls with md5=null, url=pdfUrl, query=book.title.
 - Vercel project: ebook-aggregator.vercel.app; git repo cloned via gh from user's GitHub.
 - pnpm install done (frozen lockfile). pnpm check passes. pnpm test fails at test collection due to supabaseAuth env; add SUPABASE_URL/ANON_KEY env stubs to .env.test or skip for now.
+## Deployment state (Aug 8, 2026)
+- Branch improve-safe-catalog pushed to origin with commit 6f0912e ("Improve catalog search...").
+- Vercel preview deployment dpl_C7ip2VcXCAyThzxQENV6R4UhVDa8 BUILDING, URL: https://ebook-aggregator-6bfurjbpn-goldgain-3350s-projects.vercel.app (branch alias: https://ebook-aggregator-git-improve-saf-c2facd-goldgain-3350s-projects.vercel.app). Team id: team_hxUpiTU3c8DwOJJprzIRSxvG. Project id: prj_hVXSguxcYjQHQuTClkABiuRM9o9a.
+- Production deployment: dpl_EXnfqfSvgKjMEZTY9uzBGb3i2fYu (READY) — NOT touched yet. Deployment alias for main: ebook-aggregator-git-main-goldgain-3350s-projects.vercel.app.
+- Production alias target domain: ebook-aggregator.vercel.app (live production).
+- User has NOT asked to merge to main; ask before promoting preview to production (they said "don't destroy my code").
+- Files changed on branch: api/server.ts (new /api/search only), server/db.ts (buildSearchCondition + countBooks), server/sources/external-search.ts (new), client Search.tsx (totals/responsive), BookDetail.tsx (source/license provenance display). Download routes untouched.
+- Pro upgrade note for user: Manus subscription upgrade happens at https://manus.im/settings/billing (account settings), not something the agent can perform. Support questions -> https://help.manus.im.

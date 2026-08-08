@@ -491,7 +491,10 @@ app.get("/api/search", async (req: any, res: any) => {
     let externalResults: Record<string, any[]> = {};
     if (q.length >= 2) {
       const { runExternalSearch } = await import("../server/sources/external-search");
-      externalResults = await runExternalSearch(q, 10);
+      const aggregate = await runExternalSearch(q, 10);
+      externalResults = Object.fromEntries(
+        Object.entries(aggregate).map(([provider, items]) => [provider, items as any[]]),
+      ) as Record<string, any[]>;
     }
 
     const externalBooks = Object.entries(externalResults).flatMap(([provider, items]) =>
