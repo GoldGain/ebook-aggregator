@@ -1353,6 +1353,7 @@ __export(external_search_exports, {
   runExternalSearch: () => runExternalSearch,
   searchGutenberg: () => searchGutenberg,
   searchInternetArchive: () => searchInternetArchive,
+  searchOpenLibrary: () => searchOpenLibrary,
   searchOpenStax: () => searchOpenStax
 });
 async function fetchJson(url, timeoutMs = 8e3) {
@@ -1363,7 +1364,9 @@ async function fetchJson(url, timeoutMs = 8e3) {
 async function searchInternetArchive(query, limit = 15) {
   if (!isApprovedSource("internet_archive")) return [];
   try {
-    const url = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(query)}+AND+(licenseurl%3A*creativecommons*+OR+collection%3A(prelinger+or+gutenberg+or+federalregister))+AND+mediatype%3Atexts&fl[]=identifier,title,creator,description,language,subject,date,publisher,pdf&rows=${Math.min(limit, 50)}&output=json`;
+    const tokens = query.trim().split(/\s+/).filter(Boolean);
+    const qTerm = tokens.length > 1 ? encodeURIComponent(`"${tokens.join(" ")}"`) : encodeURIComponent(query);
+    const url = `https://archive.org/advancedsearch.php?q=${qTerm}+AND+mediatype%3Atexts&fl[]=identifier,title,creator,description,language,subject,date,publisher,pdf&rows=${Math.min(limit, 50)}&output=json`;
     const data = await fetchJson(url);
     const docs = (data?.response?.docs || []).slice(0, limit);
     const policy = getSourceRightsPolicy("internet_archive");
@@ -1414,6 +1417,38 @@ async function searchGutenberg(query, limit = 15) {
     return [];
   }
 }
+async function searchOpenLibrary(query, limit = 8) {
+  if (!isApprovedSource("open_library")) return [];
+  try {
+    const data = await fetchJson(
+      `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=${Math.min(limit, 20)}`
+    );
+    const docs = (data?.docs || []).slice(0, limit);
+    const policy = getSourceRightsPolicy("open_library");
+    return docs.map((b) => ({
+      title: b.title || "",
+      author: b.author_name?.[0] || "Unknown",
+      description: [
+        b.first_publish_year ? `First published ${b.first_publish_year}` : "",
+        b.language?.[0] ? `Language: ${b.language[0]}` : ""
+      ].filter(Boolean).join(". "),
+      language: b.language?.[0] || "unknown",
+      subjects: (b.subject || []).slice(0, 5),
+      year: b.first_publish_year ? String(b.first_publish_year) : void 0,
+      publisher: b.publisher?.[0] || void 0,
+      coverUrl: b.cover_edition_key ? `https://covers.openlibrary.org/b/olid/${b.cover_edition_key}-M.jpg` : void 0,
+      pdfUrl: void 0,
+      sourceUrl: b.key ? `https://openlibrary.org${b.key}` : "https://openlibrary.org",
+      source: "open_library",
+      rightsStatus: policy.rightsStatus,
+      licenseName: policy.licenseName,
+      licenseUrl: policy.licenseUrl,
+      directDownloadAllowed: policy.allowDirectDownload
+    })).filter((r) => r.title.length > 2);
+  } catch {
+    return [];
+  }
+}
 async function searchOpenStax(query, limit = 10) {
   if (!isApprovedSource("openstax")) return [];
   try {
@@ -1444,14 +1479,16 @@ async function searchOpenStax(query, limit = 10) {
   }
 }
 async function runExternalSearch(query, limit = 15) {
-  const [internetArchive, gutenberg, openstax] = await Promise.allSettled([
+  const [internetArchive, gutenberg, openLibrary, openstax] = await Promise.allSettled([
     withTimeout(searchInternetArchive(query, limit), 8e3),
     withTimeout(searchGutenberg(query, limit), 8e3),
+    withTimeout(searchOpenLibrary(query, limit), 8e3),
     withTimeout(searchOpenStax(query, limit), 8e3)
   ]);
   return {
     internet_archive: internetArchive.status === "fulfilled" ? internetArchive.value : [],
     gutenberg: gutenberg.status === "fulfilled" ? gutenberg.value : [],
+    open_library: openLibrary.status === "fulfilled" ? openLibrary.value : [],
     openstax: openstax.status === "fulfilled" ? openstax.value : []
   };
 }

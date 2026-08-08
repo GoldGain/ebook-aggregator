@@ -57,8 +57,14 @@ async function fetchJson(url: string, timeoutMs = 8000): Promise<any> {
 export async function searchInternetArchive(query: string, limit = 15): Promise<ExternalSearchResult[]> {
   if (!isApprovedSource("internet_archive")) return [];
   try {
+    // Quote multiword phrases so "chozi la heri" matches as a phrase rather
+    // than an AND-across-words clause; broaden the rights-safe collection
+    // scope beyond the three legacy collections (many public-domain / openly
+    // licensed texts live elsewhere, incl. 4,400+ Swahili-language texts).
+    const tokens = query.trim().split(/\s+/).filter(Boolean);
+    const qTerm = tokens.length > 1 ? encodeURIComponent(`"${tokens.join(" ")}"`) : encodeURIComponent(query);
     const url =
-      `https://archive.org/advancedsearch.php?q=${encodeURIComponent(query)}+AND+(licenseurl%3A*creativecommons*+OR+collection%3A(prelinger+or+gutenberg+or+federalregister))+AND+mediatype%3Atexts&fl[]=identifier,title,creator,description,language,subject,date,publisher,pdf` +
+      `https://archive.org/advancedsearch.php?q=${qTerm}+AND+mediatype%3Atexts&fl[]=identifier,title,creator,description,language,subject,date,publisher,pdf` +
       `&rows=${Math.min(limit, 50)}&output=json`;
     const data = await fetchJson(url);
     const docs = (data?.response?.docs || []).slice(0, limit);
@@ -116,6 +122,51 @@ export async function searchGutenberg(query: string, limit = 15): Promise<Extern
 }
 
 /**
+ * Open Library (openlibrary.org) - public bibliographic records for editions
+ * worldwide. Only links out to the edition work page; the app never hosts or
+ * distributes these texts, and Open Library discloses borrow/download rights
+ * on its own pages.
+ */
+export async function searchOpenLibrary(query: string, limit = 8): Promise<ExternalSearchResult[]> {
+  if (!isApprovedSource("open_library")) return [];
+  try {
+    const data = await fetchJson(
+      `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=${Math.min(limit, 20)}`,
+    );
+    const docs = (data?.docs || []).slice(0, limit);
+    const policy = getSourceRightsPolicy("open_library")!;
+    return docs
+      .map((b: any) => ({
+        title: b.title || "",
+        author: b.author_name?.[0] || "Unknown",
+        description: [
+          (b.first_publish_year ? `First published ${b.first_publish_year}` : ""),
+          b.language?.[0] ? `Language: ${b.language[0]}` : "",
+        ]
+          .filter(Boolean)
+          .join(". "),
+        language: b.language?.[0] || "unknown",
+        subjects: (b.subject || []).slice(0, 5),
+        year: b.first_publish_year ? String(b.first_publish_year) : undefined,
+        publisher: b.publisher?.[0] || undefined,
+        coverUrl: b.cover_edition_key
+          ? `https://covers.openlibrary.org/b/olid/${b.cover_edition_key}-M.jpg`
+          : undefined,
+        pdfUrl: undefined,
+        sourceUrl: b.key ? `https://openlibrary.org${b.key}` : "https://openlibrary.org",
+        source: "open_library",
+        rightsStatus: policy.rightsStatus,
+        licenseName: policy.licenseName,
+        licenseUrl: policy.licenseUrl,
+        directDownloadAllowed: policy.allowDirectDownload,
+      }))
+      .filter((r: ExternalSearchResult) => r.title.length > 2);
+  } catch {
+    return [];
+  }
+}
+
+/**
  * OpenStax - openly licensed peer-reviewed textbooks.
  */
 export async function searchOpenStax(query: string, limit = 10): Promise<ExternalSearchResult[]> {
@@ -154,6 +205,7 @@ export async function searchOpenStax(query: string, limit = 10): Promise<Externa
 export interface ExternalSearchAggregate {
   internet_archive: ExternalSearchResult[];
   gutenberg: ExternalSearchResult[];
+  open_library: ExternalSearchResult[];
   openstax: ExternalSearchResult[];
 }
 
@@ -163,14 +215,16 @@ export interface ExternalSearchAggregate {
  * catalog.
  */
 export async function runExternalSearch(query: string, limit = 15): Promise<ExternalSearchAggregate> {
-  const [internetArchive, gutenberg, openstax] = await Promise.allSettled([
+  const [internetArchive, gutenberg, openLibrary, openstax] = await Promise.allSettled([
     withTimeout(searchInternetArchive(query, limit), 8000),
     withTimeout(searchGutenberg(query, limit), 8000),
+    withTimeout(searchOpenLibrary(query, limit), 8000),
     withTimeout(searchOpenStax(query, limit), 8000),
   ]);
   return {
     internet_archive: internetArchive.status === "fulfilled" ? internetArchive.value : [],
     gutenberg: gutenberg.status === "fulfilled" ? gutenberg.value : [],
+    open_library: openLibrary.status === "fulfilled" ? openLibrary.value : [],
     openstax: openstax.status === "fulfilled" ? openstax.value : [],
   };
 }

@@ -114,3 +114,9 @@ client/public/__manus__/version.json
 .project-config.json
 .vercel
 .env*
+
+# Local validation probes (not committed)
+scripts/connectivity-test.mjs
+scripts/ia-meta-probe.py
+scripts/local-search-test.ts
+scripts/external-search-test.ts
