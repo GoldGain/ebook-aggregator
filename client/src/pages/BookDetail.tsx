@@ -265,6 +265,12 @@ export default function BookDetail() {
                   <p className="font-semibold">{book.publisher}</p>
                 </div>
               )}
+              {book.source && (
+                <div>
+                  <p className="text-sm text-muted-foreground">Source</p>
+                  <p className="font-semibold capitalize">{String(book.source).replace(/_/g, " ")}</p>
+                </div>
+              )}
               {book.isbn && (
                 <div>
                   <p className="text-sm text-muted-foreground">ISBN</p>
@@ -346,10 +352,18 @@ export default function BookDetail() {
                 <p className="mt-3 text-xs text-muted-foreground">The download stays on ZAMIFU while it tries the available document paths.</p>
               </div>
               <div className="mt-4 space-y-1 text-xs text-muted-foreground">
+                {book.rightsStatus && (
+                  <p className="font-semibold uppercase tracking-wide text-accent">{String(book.rightsStatus).replace(/_/g, " ")}</p>
+                )}
                 <p>{book.licenseName || "Rights information has not yet been verified for this record."}</p>
                 {book.licenseUrl && (
                   <a href={book.licenseUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-accent hover:text-primary transition">
                     <ExternalLink className="w-3 h-3" /> License and access terms
+                  </a>
+                )}
+                {book.sourceUrl && (
+                  <a href={book.sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-accent hover:text-primary transition">
+                    <ExternalLink className="w-3 h-3" /> View original record
                   </a>
                 )}
               </div>

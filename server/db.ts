@@ -219,21 +219,60 @@ export async function searchBooks(query: string, limit: number = 20, offset: num
   }
 
   // Trigram / ILIKE fallback for fuzzy matching and short queries
-  const searchTerm = `%${query}%`;
   return db
     .select()
     .from(books)
-    .where(
-      or(
-        like(books.title, searchTerm),
-        like(books.author, searchTerm),
-        like(books.subjects, searchTerm),
-        like(books.description, searchTerm),
-      )
-    )
+    .where(buildSearchCondition(query))
     .orderBy(desc(books.downloadCount))
     .limit(limit)
     .offset(offset);
+}
+
+/**
+ * Builds a multi-field search condition matching title, author, subjects,
+ * description, publisher, ISBN, and published date.
+ */
+function buildSearchCondition(query: string): ReturnType<typeof or> {
+  const searchTerm = `%${query}%`;
+  return or(
+    ilike(books.title, searchTerm),
+    ilike(books.author, searchTerm),
+    ilike(books.subjects, searchTerm),
+    ilike(books.description, searchTerm),
+    ilike(books.publisher, searchTerm),
+    ilike(books.isbn, searchTerm),
+    ilike(books.publishedDate, searchTerm),
+  );
+}
+
+/**
+ * Total matching row count for a search, so the UI can show real result totals.
+ */
+export async function countBooks(options: {
+  genre?: string;
+  language?: string;
+  educationalLevel?: string;
+  source?: string;
+  search?: string;
+}): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const conditions: any[] = [];
+  if (options.genre) {
+    const genre = await getGenreBySlug(options.genre);
+    if (genre) conditions.push(eq(books.genreId, genre.id));
+  }
+  if (options.language) conditions.push(ilike(books.language, options.language));
+  if (options.educationalLevel) conditions.push(eq(books.educationalLevel, options.educationalLevel as any));
+  if (options.source) conditions.push(eq(books.source, options.source as any));
+  if (options.search) conditions.push(buildSearchCondition(options.search));
+
+  const result = await db
+    .select({ count: count() })
+    .from(books)
+    .where(conditions.length > 0 ? and(...conditions) : undefined);
+  return result[0]?.count ?? 0;
 }
 
 export async function listBooks(options: {
@@ -262,14 +301,7 @@ export async function listBooks(options: {
   if (options.educationalLevel) conditions.push(eq(books.educationalLevel, options.educationalLevel as any));
   if (options.source) conditions.push(eq(books.source, options.source as any));
   if (options.search) {
-    conditions.push(
-      or(
-        ilike(books.title, `%${options.search}%`),
-        ilike(books.author, `%${options.search}%`),
-        ilike(books.subjects, `%${options.search}%`),
-        ilike(books.description, `%${options.search}%`),
-      )
-    );
+    conditions.push(buildSearchCondition(options.search));
   }
 
   // Optionally restrict to records with a downloadable PDF format.
