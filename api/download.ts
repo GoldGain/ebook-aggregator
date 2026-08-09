@@ -6,306 +6,277 @@ const FETCH_HEADERS = {
   'Accept-Language': 'en-US,en;q=0.9',
 };
 
-// ============================================================
-// HELPERS
-// ============================================================
-function isBinaryContent(contentType: string): boolean {
-  const c = contentType.toLowerCase();
+function isBinaryContent(ct: string): boolean {
+  const c = ct.toLowerCase();
   return c.includes('application/pdf') || c.includes('application/octet-stream')
     || c.includes('application/epub') || c.includes('application/x-mobipocket')
     || c.includes('application/djvu') || c.includes('binary');
 }
 
-function isHtmlOrJson(contentType: string): boolean {
-  const c = contentType.toLowerCase();
-  return c.includes('text/html') || c.includes('application/json') || c.includes('text/plain');
-}
-
-function normalizeTitle(s: string): string {
+function normalized(s: string): string {
   return s.toLowerCase().replace(/^(the|a|an|le|la|les|il|lo|die|der|das|el|los|las|un|une|des)\s+/i, '')
     .replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
 }
 
-function titlesFuzzyMatch(title1: string, title2: string): boolean {
-  const t1 = normalizeTitle(title1);
-  const t2 = normalizeTitle(title2);
+function fuzzyMatch(a: string, b: string): boolean {
+  const t1 = normalized(a), t2 = normalized(b);
   if (!t1 || !t2) return true;
   if (t1 === t2 || t1.includes(t2) || t2.includes(t1)) return true;
   const w1 = new Set(t1.split(' ').filter(w => w.length > 1));
   const w2 = new Set(t2.split(' ').filter(w => w.length > 1));
   if (w1.size === 0 || w2.size === 0) return true;
-  const overlap = [...w1].filter(w => w2.has(w)).length / Math.max(w1.size, w2.size);
-  return overlap >= 0.4;
+  return [...w1].filter(w => w2.has(w)).length / Math.max(w1.size, w2.size) >= 0.4;
 }
 
-async function streamToBuffer(response: Response): Promise<{ buffer: Buffer; contentType: string } | null> {
-  const arrayBuffer = await response.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-  if (buffer.length < 1000) return null;
-  const firstBytes = buffer.slice(0, 4).toString('hex');
-  // PDF: %PDF, EPUB/ZIP: PK, DJVU: AT&T
-  if (firstBytes === '25504446' || firstBytes === '504b0304' || firstBytes === '41542654' || buffer.length > 500000) {
-    return { buffer, contentType: response.headers.get('content-type') || 'application/pdf' };
+async function bufferFromResponse(r: Response): Promise<{ buffer: Buffer; ct: string } | null> {
+  const ab = await r.arrayBuffer();
+  const buf = Buffer.from(ab);
+  if (buf.length < 1000) return null;
+  const magic = buf.slice(0, 4).toString('hex');
+  if (magic === '25504446' || magic === '504b0304' || magic === '41542654' || buf.length > 500000) {
+    return { buffer: buf, ct: r.headers.get('content-type') || 'application/pdf' };
   }
   return null;
 }
 
 // ============================================================
-// STRATEGY 1: ANNA'S ARCHIVE (PRIMARY — not blocked by Vercel)
+// SEARCH ALL SOURCES for a book by title/author → return best download
 // ============================================================
-async function downloadFromAnnasArchive(md5: string, title?: string): Promise<{ buffer: Buffer; contentType: string; filename: string } | null> {
-  const mirrors = ['https://annas-archive.li', 'https://annas-archive.org', 'https://annas-archive.se'];
+type DownloadResult = { buffer: Buffer; ct: string; filename: string; source: string; foundMd5?: string; foundUrl?: string };
 
-  for (const mirror of mirrors) {
+async function searchAndDownload(title: string, author?: string): Promise<DownloadResult | null> {
+  const q = encodeURIComponent(`${title} ${author || ''}`.trim());
+
+  // ── SOURCE 1: Anna's Archive search → get MD5 → scrape download links ──
+  console.log(`[search] Trying Anna's Archive for "${title}"...`);
+  for (const mirror of ['https://annas-archive.li', 'https://annas-archive.org']) {
     try {
-      // Step 1: Get the MD5 info page
-      const infoResp = await fetch(`${mirror}/md5/${md5}`, {
-        headers: { ...FETCH_HEADERS, 'Accept': 'text/html,application/xhtml+xml' },
+      // Search
+      const sr = await fetch(`${mirror}/search?q=${q}`, {
+        headers: { ...FETCH_HEADERS, 'Accept': 'text/html' },
         signal: AbortSignal.timeout(15000),
-        redirect: 'follow',
       });
-      if (!infoResp.ok) continue;
+      if (!sr.ok) continue;
+      const html = await sr.text();
 
-      const html = await infoResp.text();
+      // Extract MD5 links from search results
+      const md5Pattern = /\/md5\/([a-f0-9]{32})/gi;
+      const seen = new Set<string>();
 
-      // Step 1b: Verify title if provided
-      if (title) {
+      for (const m of html.matchAll(md5Pattern)) {
+        const candidateMd5 = m[1];
+        if (seen.has(candidateMd5)) continue;
+        seen.add(candidateMd5);
+
+        // Quick title check from surrounding context
+        const ctx = html.slice(Math.max(0, m.index! - 400), Math.min(html.length, m.index! + 400)).toLowerCase();
+        if (!fuzzyMatch(title, ctx)) continue;
+
+        console.log(`[search] Found candidate MD5 ${candidateMd5} on ${mirror}`);
+
+        // Get the MD5 info page
+        const ir = await fetch(`${mirror}/md5/${candidateMd5}`, {
+          headers: { ...FETCH_HEADERS, 'Accept': 'text/html' },
+          signal: AbortSignal.timeout(12000),
+        });
+        if (!ir.ok) continue;
+
+        const pageHtml = await ir.text();
+
+        // Title verification on the detail page
         let pageTitle = '';
-        const h1M = html.match(/<h1[^>]*>([^<]+)<\/h1>/i);
-        if (h1M) pageTitle = h1M[1].trim();
+        const h1 = pageHtml.match(/<h1[^>]*>([^<]+)<\/h1>/i);
+        if (h1) pageTitle = h1[1].trim();
         if (!pageTitle) {
-          const tM = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-          if (tM) pageTitle = tM[1].replace(/\s*[|\-–—].*$/, '').trim();
+          const tm = pageHtml.match(/<title[^>]*>([^<]+)<\/title>/i);
+          if (tm) pageTitle = tm[1].replace(/\s*[|\-–—].*$/, '').trim();
         }
-        if (pageTitle && !titlesFuzzyMatch(title, pageTitle)) {
-          console.warn(`[AA] Title mismatch: expected="${title}", found="${pageTitle}"`);
-          return null; // Wrong book — don't download
-        }
-      }
-
-      // Step 2: Extract actual download URLs from the page
-      const downloadUrls: string[] = [];
-
-      // Anna's Archive provides links to download sources
-      // Look for links to LibGen, IPFS, and slow_download
-      const linkPatterns = [
-        /href="(https?:\/\/[^"]*libgen[^"]*)"/gi,
-        /href="(https?:\/\/[^"]*ipfs[^"]*)"/gi,
-        /href="(https?:\/\/[^"]*cloudflare-ipfs[^"]*)"/gi,
-        /href="([^"]*slow_download[^"]*)"/gi,
-        /href="([^"]*\/ds\/[^"]*)"/gi,
-      ];
-
-      for (const pattern of linkPatterns) {
-        const matches = [...html.matchAll(pattern)];
-        for (const m of matches) {
-          let url = m[1];
-          if (url.startsWith('/')) url = `${mirror}${url}`;
-          if (!downloadUrls.includes(url)) downloadUrls.push(url);
-        }
-      }
-
-      console.log(`[AA] Found ${downloadUrls.length} download URLs on ${mirror}`);
-
-      // Step 3: Try each download URL
-      for (const dlUrl of downloadUrls) {
-        try {
-          // If it's a slow_download link, we need to follow it to get the actual file
-          const dlResp = await fetch(dlUrl, {
-            headers: { ...FETCH_HEADERS, 'Referer': `${mirror}/md5/${md5}` },
-            signal: AbortSignal.timeout(30000),
-            redirect: 'follow',
-          });
-
-          if (!dlResp.ok) continue;
-
-          const ct = dlResp.headers.get('content-type') || '';
-          const cl = parseInt(dlResp.headers.get('content-length') || '0', 10);
-
-          if (cl === 0) continue;
-          if (isHtmlOrJson(ct) && cl < 50000) continue;
-
-          if (isBinaryContent(ct) || cl > 100000) {
-            const result = await streamToBuffer(dlResp);
-            if (result) {
-              console.log(`[AA] ✅ Downloaded from ${dlUrl.substring(0, 80)}`);
-              return { ...result, filename: `${md5}.pdf` };
-            }
-          }
-        } catch (err: any) {
-          console.warn(`[AA] Failed download URL ${dlUrl.substring(0, 60)}: ${err.message}`);
+        if (pageTitle && !fuzzyMatch(title, pageTitle)) {
+          console.warn(`[search] Title mismatch: "${pageTitle}" ≠ "${title}"`);
           continue;
         }
-      }
-    } catch (err: any) {
-      console.warn(`[AA] Mirror ${mirror} failed: ${err.message}`);
-      continue;
-    }
-  }
 
-  return null;
-}
-
-// ============================================================
-// STRATEGY 2: INTERNET ARCHIVE (SECONDARY — not blocked)
-// ============================================================
-async function downloadFromInternetArchive(title: string, author?: string): Promise<{ buffer: Buffer; contentType: string; filename: string } | null> {
-  try {
-    // Search Internet Archive for the title
-    const query = encodeURIComponent(`${title} ${author || ''}`.trim());
-    const searchUrl = `https://archive.org/advancedsearch.php?q=${query}+AND+mediatype:texts&fl[]=identifier,title,creator&rows=10&output=json`;
-
-    const searchResp = await fetch(searchUrl, {
-      headers: FETCH_HEADERS,
-      signal: AbortSignal.timeout(15000),
-    });
-
-    if (!searchResp.ok) return null;
-
-    const data = await searchResp.json();
-    const docs = data?.response?.docs || [];
-
-    // Find the best matching document
-    for (const doc of docs) {
-      const docTitle = doc.title || '';
-      if (!titlesFuzzyMatch(title, docTitle)) continue;
-
-      const identifier = doc.identifier;
-      if (!identifier) continue;
-
-      // Try PDF download
-      const pdfUrl = `https://archive.org/download/${identifier}/${identifier}.pdf`;
-      console.log(`[IA] Trying: ${pdfUrl}`);
-
-      try {
-        const dlResp = await fetch(pdfUrl, {
-          headers: FETCH_HEADERS,
-          signal: AbortSignal.timeout(30000),
-          redirect: 'follow',
-        });
-
-        if (!dlResp.ok) continue;
-
-        const ct = dlResp.headers.get('content-type') || '';
-        const result = await streamToBuffer(dlResp);
-        if (result) {
-          console.log(`[IA] ✅ Downloaded ${identifier}.pdf`);
-          return { ...result, filename: `${identifier}.pdf` };
+        // Extract download URLs from the page
+        const linkPattern = /href="((?:https?:\/\/[^"]*(?:libgen|ipfs|slow_download|cloudflare)[^"]*)|(?:\/[^"]*(?:slow_download|ds\/)[^"]*))"/gi;
+        const dlUrls: string[] = [];
+        for (const lm of pageHtml.matchAll(linkPattern)) {
+          let u = lm[1];
+          if (u.startsWith('/')) u = `${mirror}${u}`;
+          if (!dlUrls.includes(u)) dlUrls.push(u);
         }
-      } catch {
-        continue;
-      }
-    }
 
-  } catch (err: any) {
-    console.warn(`[IA] Search failed: ${err.message}`);
+        console.log(`[search] Found ${dlUrls.length} download URLs for MD5 ${candidateMd5}`);
+
+        // Try each download URL
+        for (const dlUrl of dlUrls) {
+          try {
+            const dr = await fetch(dlUrl, {
+              headers: { ...FETCH_HEADERS, 'Referer': `${mirror}/md5/${candidateMd5}` },
+              signal: AbortSignal.timeout(30000),
+              redirect: 'follow',
+            });
+            if (!dr.ok) continue;
+            const ct = dr.headers.get('content-type') || '';
+            const buf = await bufferFromResponse(dr);
+            if (buf) {
+              console.log(`[search] ✅ Downloaded from Anna's Archive: ${dlUrl.substring(0,70)}`);
+              return { ...buf, filename: `${candidateMd5}.pdf`, source: 'annas_archive', foundMd5: candidateMd5 };
+            }
+          } catch { continue; }
+        }
+      }
+    } catch (e: any) { console.warn(`[search] AA mirror ${mirror}: ${e.message}`); }
   }
 
-  return null;
-}
-
-// ============================================================
-// STRATEGY 3: OPEN LIBRARY (TERTIARY — not blocked)
-// ============================================================
-async function downloadFromOpenLibrary(title: string, author?: string): Promise<{ buffer: Buffer; contentType: string; filename: string } | null> {
+  // ── SOURCE 2: Internet Archive ──
+  console.log(`[search] Trying Internet Archive for "${title}"...`);
   try {
-    const query = encodeURIComponent(`${title} ${author || ''}`.trim());
-    const searchUrl = `https://openlibrary.org/search.json?q=${query}&has_fulltext=true&limit=10&fields=key,title,author_name,editions`;
-
-    const searchResp = await fetch(searchUrl, {
-      headers: FETCH_HEADERS,
-      signal: AbortSignal.timeout(15000),
-    });
-
-    if (!searchResp.ok) return null;
-
-    const data = await searchResp.json();
-    const docs = data?.docs || [];
-
-    for (const doc of docs) {
-      const docTitle = doc.title || '';
-      if (!titlesFuzzyMatch(title, docTitle)) continue;
-
-      const key = doc.key; // e.g., "/works/OL123W"
-      if (!key) continue;
-
-      // Try to get the edition with PDF
-      const editionUrl = `https://openlibrary.org${key}.json`;
-      try {
-        const edResp = await fetch(editionUrl, {
-          headers: FETCH_HEADERS,
-          signal: AbortSignal.timeout(10000),
-        });
-        if (!edResp.ok) continue;
-
-        const edData = await edResp.json();
-        // Check for PDF links in ebooks
-        const ebooks = edData?.ebooks || [];
-        for (const ebook of ebooks) {
-          if (ebook.formats?.pdf?.url) {
-            const pdfUrl = ebook.formats.pdf.url;
-            console.log(`[OL] Trying PDF: ${pdfUrl}`);
-            try {
-              const dlResp = await fetch(pdfUrl, {
-                headers: FETCH_HEADERS,
-                signal: AbortSignal.timeout(30000),
-                redirect: 'follow',
-              });
-              if (dlResp.ok) {
-                const result = await streamToBuffer(dlResp);
-                if (result) {
-                  console.log(`[OL] ✅ Downloaded from Open Library`);
-                  return { ...result, filename: `${docTitle.replace(/[^a-z0-9]+/gi, '_')}.pdf` };
-                }
-              }
-            } catch { continue; }
+    const iaUrl = `https://archive.org/advancedsearch.php?q=${encodeURIComponent(title)}+AND+mediatype:texts&fl[]=identifier,title,creator&rows=10&output=json`;
+    const sr = await fetch(iaUrl, { headers: FETCH_HEADERS, signal: AbortSignal.timeout(15000) });
+    if (sr.ok) {
+      const docs = (await sr.json())?.response?.docs || [];
+      for (const doc of docs) {
+        if (!fuzzyMatch(title, doc.title || '')) continue;
+        const id = doc.identifier;
+        if (!id) continue;
+        const pdfUrl = `https://archive.org/download/${id}/${id}.pdf`;
+        try {
+          const dr = await fetch(pdfUrl, { headers: FETCH_HEADERS, signal: AbortSignal.timeout(30000), redirect: 'follow' });
+          if (!dr.ok) continue;
+          const buf = await bufferFromResponse(dr);
+          if (buf) {
+            console.log(`[search] ✅ Downloaded from Internet Archive: ${id}`);
+            return { ...buf, filename: `${id}.pdf`, source: 'internet_archive', foundUrl: pdfUrl };
           }
-        }
-      } catch { continue; }
+        } catch { continue; }
+      }
     }
+  } catch (e: any) { console.warn(`[search] IA: ${e.message}`); }
 
-  } catch (err: any) {
-    console.warn(`[OL] Search failed: ${err.message}`);
-  }
+  // ── SOURCE 3: Open Library ──
+  console.log(`[search] Trying Open Library for "${title}"...`);
+  try {
+    const olUrl = `https://openlibrary.org/search.json?q=${encodeURIComponent(title)}&has_fulltext=true&limit=10&fields=key,title,author_name`;
+    const sr = await fetch(olUrl, { headers: FETCH_HEADERS, signal: AbortSignal.timeout(15000) });
+    if (sr.ok) {
+      const docs = (await sr.json())?.docs || [];
+      for (const doc of docs) {
+        if (!fuzzyMatch(title, doc.title || '')) continue;
+        const key = doc.key;
+        if (!key) continue;
+        try {
+          const er = await fetch(`https://openlibrary.org${key}.json`, { headers: FETCH_HEADERS, signal: AbortSignal.timeout(10000) });
+          if (!er.ok) continue;
+          const ed = await er.json();
+          for (const ebook of ed?.ebooks || []) {
+            const url = ebook?.formats?.pdf?.url;
+            if (!url) continue;
+            const dr = await fetch(url, { headers: FETCH_HEADERS, signal: AbortSignal.timeout(30000), redirect: 'follow' });
+            if (!dr.ok) continue;
+            const buf = await bufferFromResponse(dr);
+            if (buf) {
+              console.log(`[search] ✅ Downloaded from Open Library`);
+              return { ...buf, filename: `${normalized(title).replace(/\s+/g,'_')}.pdf`, source: 'open_library', foundUrl: url };
+            }
+          }
+        } catch { continue; }
+      }
+    }
+  } catch (e: any) { console.warn(`[search] OL: ${e.message}`); }
 
+  console.log(`[search] All sources exhausted for "${title}"`);
   return null;
 }
 
 // ============================================================
-// STRATEGY 4: LIBGEN MIRRORS (LAST RESORT — likely blocked)
+// Download by MD5 (existing sources)
 // ============================================================
-async function downloadFromLibGen(md5: string): Promise<{ buffer: Buffer; contentType: string; filename: string } | null> {
-  const sources = [
+async function downloadByMd5(md5: string): Promise<{ buffer: Buffer; ct: string; filename: string } | null> {
+  // Try Anna's Archive first (scrape MD5 page for links)
+  for (const mirror of ['https://annas-archive.li', 'https://annas-archive.org']) {
+    try {
+      const ir = await fetch(`${mirror}/md5/${md5}`, {
+        headers: { ...FETCH_HEADERS, 'Accept': 'text/html' },
+        signal: AbortSignal.timeout(12000),
+      });
+      if (!ir.ok) continue;
+      const html = await ir.text();
+
+      const linkPattern = /href="((?:https?:\/\/[^"]*(?:libgen|ipfs|slow_download|cloudflare)[^"]*)|(?:\/[^"]*(?:slow_download|ds\/)[^"]*))"/gi;
+      const dlUrls: string[] = [];
+      for (const m of html.matchAll(linkPattern)) {
+        let u = m[1]; if (u.startsWith('/')) u = `${mirror}${u}`;
+        if (!dlUrls.includes(u)) dlUrls.push(u);
+      }
+
+      for (const dlUrl of dlUrls) {
+        try {
+          const dr = await fetch(dlUrl, {
+            headers: { ...FETCH_HEADERS, 'Referer': `${mirror}/md5/${md5}` },
+            signal: AbortSignal.timeout(30000), redirect: 'follow',
+          });
+          if (!dr.ok) continue;
+          const buf = await bufferFromResponse(dr);
+          if (buf) {
+            console.log(`[md5] ✅ Downloaded MD5 ${md5} from ${mirror}`);
+            return { ...buf, filename: `${md5}.pdf` };
+          }
+        } catch { continue; }
+      }
+    } catch (e: any) { console.warn(`[md5] AA mirror ${mirror}: ${e.message}`); }
+  }
+
+  // Try LibGen mirrors
+  const lgUrls = [
     `https://libgen.li/ads.php?md5=${md5}`,
     `https://libgen.rocks/ads.php?md5=${md5}`,
-    `https://libgen.gs/ads.php?md5=${md5}`,
-    `https://libgen.is/ads.php?md5=${md5}`,
     `https://cdn1.booksdl.org/get.php?md5=${md5}`,
   ];
-
-  for (const url of sources) {
+  for (const url of lgUrls) {
     try {
-      const resp = await fetch(url, {
+      const dr = await fetch(url, {
         headers: { ...FETCH_HEADERS, 'Referer': 'https://libgen.is/' },
-        signal: AbortSignal.timeout(20000),
-        redirect: 'follow',
+        signal: AbortSignal.timeout(20000), redirect: 'follow',
       });
-      if (!resp.ok) continue;
-
-      const ct = resp.headers.get('content-type') || '';
-      const cl = parseInt(resp.headers.get('content-length') || '0', 10);
-      if (cl === 0 || (isHtmlOrJson(ct) && cl < 50000)) continue;
-
-      if (isBinaryContent(ct) || cl > 100000) {
-        const result = await streamToBuffer(resp);
-        if (result) {
-          console.log(`[LG] ✅ Downloaded from ${url.substring(0, 60)}`);
-          return { ...result, filename: `${md5}.pdf` };
-        }
+      if (!dr.ok) continue;
+      const buf = await bufferFromResponse(dr);
+      if (buf) {
+        console.log(`[md5] ✅ Downloaded from LibGen: ${url.substring(0,60)}`);
+        return { ...buf, filename: `${md5}.pdf` };
       }
     } catch { continue; }
   }
+
   return null;
+}
+
+// ============================================================
+// Update Supabase with found MD5 (best-effort)
+// ============================================================
+async function updateBookMd5(bookId: number, md5: string) {
+  try {
+    const SUPABASE_URL = process.env.SUPABASE_URL;
+    const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!SUPABASE_URL || !SUPABASE_KEY) return;
+
+    await fetch(`${SUPABASE_URL}/rest/v1/books?id=eq.${bookId}`, {
+      method: 'PATCH',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal',
+      },
+      body: JSON.stringify({
+        formats: JSON.stringify({ pdf: `md5:${md5}` }),
+        directDownloadAllowed: true,
+        rightsStatus: 'open_access',
+      }),
+    });
+    console.log(`[db] Updated book ${bookId} with MD5 ${md5}`);
+  } catch (e: any) {
+    console.warn(`[db] Failed to update book ${bookId}: ${e.message}`);
+  }
 }
 
 // ============================================================
@@ -313,22 +284,22 @@ async function downloadFromLibGen(md5: string): Promise<{ buffer: Buffer; conten
 // ============================================================
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   let md5: string | undefined;
-  let format = 'pdf';
   let title: string | undefined;
   let author: string | undefined;
+  let bookId: number | undefined;
 
   if (req.method === 'GET') {
     md5 = req.query.md5 as string | undefined;
-    format = (req.query.format as string) || 'pdf';
     title = req.query.title as string | undefined;
     author = req.query.author as string | undefined;
+    bookId = req.query.bookId ? parseInt(req.query.bookId as string) : undefined;
   } else if (req.method === 'POST') {
     try {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
       md5 = body?.md5;
-      format = body?.format || 'pdf';
       title = body?.title;
       author = body?.author;
+      bookId = body?.bookId ? parseInt(String(body.bookId)) : undefined;
     } catch {
       return res.status(400).json({ success: false, error: 'Invalid JSON body' });
     }
@@ -336,64 +307,55 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ success: false, error: 'Method not allowed' });
   }
 
-  if (!md5 || typeof md5 !== 'string' || md5.length !== 32) {
-    return res.status(400).json({ success: false, error: 'Valid 32-character md5 hash required' });
+  // Require at least one of: md5, title, bookId
+  if (!md5 && !title) {
+    return res.status(400).json({ success: false, error: 'md5 or title required' });
   }
 
   try {
-    // ============================================================
-    // DOWNLOAD FLOW: Try sources in priority order
-    // ============================================================
-    let result: { buffer: Buffer; contentType: string; filename: string } | null = null;
+    let result: { buffer: Buffer; ct: string; filename: string; source?: string; foundMd5?: string; foundUrl?: string } | null = null;
 
-    // STRATEGY 1: Anna's Archive (PRIMARY — not blocked by Vercel)
-    console.log(`[download] Strategy 1: Anna's Archive for MD5 ${md5}`);
-    result = await downloadFromAnnasArchive(md5, title);
-
-    // STRATEGY 2: Internet Archive (SECONDARY)
-    if (!result && title) {
-      console.log(`[download] Strategy 2: Internet Archive for "${title}"`);
-      result = await downloadFromInternetArchive(title.trim(), author);
+    // STEP 1: If MD5 provided, try direct download
+    if (md5 && /^[a-f0-9]{32}$/i.test(md5)) {
+      console.log(`[download] Trying direct MD5: ${md5}`);
+      const r = await downloadByMd5(md5);
+      if (r) result = { ...r, source: 'md5_direct' };
     }
 
-    // STRATEGY 3: Open Library (TERTIARY)
-    if (!result && title) {
-      console.log(`[download] Strategy 3: Open Library for "${title}"`);
-      result = await downloadFromOpenLibrary(title.trim(), author);
+    // STEP 2: Search-and-download (if no MD5 or MD5 failed)
+    if (!result && title && title.trim().length > 1) {
+      console.log(`[download] Searching sources for "${title}"...`);
+      const r = await searchAndDownload(title.trim(), author);
+      if (r) result = r;
     }
 
-    // STRATEGY 4: LibGen mirrors (LAST RESORT)
-    if (!result) {
-      console.log(`[download] Strategy 4: LibGen mirrors for MD5 ${md5}`);
-      result = await downloadFromLibGen(md5);
+    // STEP 3: Update database if we found a new MD5
+    if (result?.foundMd5 && bookId) {
+      await updateBookMd5(bookId, result.foundMd5);
     }
 
-    // ============================================================
-    // RETURN
-    // ============================================================
+    // STEP 4: Return result
     if (!result) {
       return res.status(404).json({
         success: false,
         error: 'Download unavailable',
-        message: 'This book is not available for download right now. Please try again later or search for a different edition.',
+        message: 'Could not find this book for download. Please try again later.',
       });
     }
 
-    res.setHeader('Content-Type', result.contentType);
+    res.setHeader('Content-Type', result.ct);
     res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
     res.setHeader('Content-Length', result.buffer.length.toString());
     res.setHeader('Cache-Control', 'public, max-age=86400');
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, Content-Length');
+    // Let client know the source
+    res.setHeader('X-Download-Source', result.source || 'unknown');
 
     return res.status(200).send(result.buffer);
 
   } catch (error: any) {
     console.error('[download] Error:', error.message);
-    return res.status(500).json({
-      success: false,
-      error: 'Download failed',
-      message: error.message,
-    });
+    return res.status(500).json({ success: false, error: 'Download failed', message: error.message });
   }
 }
