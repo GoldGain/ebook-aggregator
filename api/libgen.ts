@@ -120,13 +120,28 @@ async function searchAnnasArchive(query: string, limit: number): Promise<LibGenB
       const format = formatEl.text().trim().toLowerCase() || 'pdf';
       if (format !== 'pdf') return;
 
+      // Detect language from surrounding text
+      let detectedLang = 'unknown';
+      const langText = parent.text().toLowerCase();
+      if (langText.includes('swahili') || langText.includes('kiswahili')) detectedLang = 'sw';
+      else if (langText.includes('english')) detectedLang = 'en';
+      else if (langText.includes('spanish') || langText.includes('español')) detectedLang = 'es';
+      else if (langText.includes('french') || langText.includes('français')) detectedLang = 'fr';
+      else if (langText.includes('german') || langText.includes('deutsch')) detectedLang = 'de';
+      else if (langText.includes('russian')) detectedLang = 'ru';
+      else if (langText.includes('chinese')) detectedLang = 'zh';
+      else if (langText.includes('arabic')) detectedLang = 'ar';
+      else if (langText.includes('portuguese')) detectedLang = 'pt';
+      else if (langText.includes('italian')) detectedLang = 'it';
+      else if (langText.includes('japanese')) detectedLang = 'ja';
+
       if (title && title.length > 1) {
         books.push({
           title: title.substring(0, 200),
           author,
           publisher: '',
           year: '',
-          language: 'en',
+          language: detectedLang,
           pages: '',
           size,
           format,
