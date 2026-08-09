@@ -344,6 +344,8 @@ export default function BookDetail() {
                   format="pdf"
                   url={pdfUrl || null}
                   query={book.title}
+                  directDownloadAllowed={book.directDownloadAllowed}
+                  sourceUrl={book.sourceUrl || null}
                   onSuccess={() => {
                     if (user) recordDownloadMutation.mutate({ bookId, format: "pdf" });
                     toast.success("Download started!");

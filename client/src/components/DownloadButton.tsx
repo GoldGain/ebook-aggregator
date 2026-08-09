@@ -7,6 +7,8 @@ interface DownloadButtonProps {
   format?: string;
   url?: string | null;
   query?: string;
+  directDownloadAllowed?: boolean;
+  sourceUrl?: string | null;
   onSuccess?: () => void;
 }
 
@@ -129,13 +131,20 @@ async function requestDownload(
   throw new Error("Book not available right now. Try another source.");
 }
 
-export function DownloadButton({ md5, title, format = "pdf", url, query, onSuccess }: DownloadButtonProps) {
+export function DownloadButton({ md5, title, format = "pdf", url, query, directDownloadAllowed = true, sourceUrl, onSuccess }: DownloadButtonProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const isMetadataOnly = directDownloadAllowed === false;
+  const sourcePageUrl = isMetadataOnly && sourceUrl ? sourceUrl : null;
+
   const handleDownload = async (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
-    if (loading) return;
+    if (loading || sourcePageUrl) return;
+    if (sourcePageUrl) {
+      window.open(sourcePageUrl, "_blank", "noopener");
+      return;
+    }
 
     setLoading(true);
     setError("");
@@ -148,16 +157,19 @@ export function DownloadButton({ md5, title, format = "pdf", url, query, onSucce
     }
   };
 
+  const label = sourcePageUrl ? "View on Source" : loading ? "Downloading..." : error ? "Try Again" : "Download PDF";
+
   return (
     <div className="flex min-w-0 items-center gap-2">
       <button
         type="button"
         onClick={handleDownload}
         disabled={loading}
+        title={sourcePageUrl ? "Open the official catalog record at the source library" : undefined}
         className="flex shrink-0 items-center gap-2 rounded-lg bg-gradient-to-r from-primary to-pink-600 px-4 py-2 text-xs font-bold text-primary-foreground shadow-md transition hover:scale-105 hover:shadow-lg hover:shadow-primary/40 disabled:cursor-not-allowed disabled:scale-100 disabled:opacity-50"
       >
         {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-        <span>{loading ? "Downloading..." : error ? "Try Again" : "Download PDF"}</span>
+        <span>{label}</span>
       </button>
       {error && <span className="min-w-0 truncate text-[10px] font-medium text-destructive" role="alert">{error}</span>}
     </div>
