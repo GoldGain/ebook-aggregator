@@ -126,8 +126,6 @@ function BookCard({ book, query, onClick }: { book: any; query: string; onClick?
           format="pdf"
           url={downloadUrl}
           query={query}
-          directDownloadAllowed={book.directDownloadAllowed}
-          sourceUrl={book.sourceUrl}
         />
       </div>
     </div>
