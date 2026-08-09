@@ -220,6 +220,47 @@ app.all("/api/download", async (req: any, res: any) => {
   // Try a provided URL first. A source page is not treated as a download; if it
   // contains an MD5, execution continues through the server-side mirror flow.
   if (directUrl && /^https?:\/\//i.test(directUrl)) {
+    // Internet Archive items: the URL /download/{id} is an HTML file index, so
+    // resolve the actual PDF via the public metadata endpoint and serve it.
+    const iaItem = directUrl.match(/^https?:\/\/archive\.org\/download\/([^/?#]+)/i)?.[1];
+    if (iaItem) {
+      try {
+        const axios = await import("axios");
+        const meta = await axios.default.get(`https://archive.org/metadata/${encodeURIComponent(iaItem)}`, {
+          timeout: 20000,
+          validateStatus: (s: number) => s < 500,
+        });
+        const files: { name?: string; source?: string }[] = meta?.data?.files || [];
+        const pdfName = files.find((f) => /\.pdf$/i.test(f.name || "") && f.source !== "metadata")?.name;
+        if (pdfName) {
+          const fileUrl = `https://archive.org/download/${encodeURIComponent(iaItem)}/${encodeURIComponent(pdfName)}`;
+          const r = await axios.default.get(fileUrl, {
+            responseType: "arraybuffer",
+            timeout: 120000,
+            maxRedirects: 8,
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+              Accept: "*/*",
+            },
+            validateStatus: (s: number) => s < 500,
+          });
+          const buf = Buffer.from(r.data);
+          const ct = r.headers["content-type"] || "";
+          if (buf.length > 1000 && !/text\/html|text\/xml|application\/json/i.test(ct)) {
+            const magic = buf.slice(0, 4).toString("hex");
+            const isPdf = magic === "25504446" || magic === "41542654" || magic === "0000001c" || /pdf/i.test(ct);
+            res.setHeader("Content-Type", isPdf ? "application/pdf" : ct || "application/octet-stream");
+            res.setHeader("Content-Disposition", `attachment; filename="${pdfName}"`);
+            res.setHeader("Content-Length", buf.length.toString());
+            res.setHeader("Access-Control-Allow-Origin", "*");
+            res.setHeader("Access-Control-Expose-Headers", "Content-Disposition, Content-Length");
+            return res.send(buf);
+          }
+        }
+      } catch {
+        // Fall through to the generic URL attempt or the mirror flow.
+      }
+    }
     try {
       const axios = await import("axios");
       const r = await axios.default.get(directUrl, {

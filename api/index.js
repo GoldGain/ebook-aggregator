@@ -1379,6 +1379,7 @@ async function searchInternetArchive(query, limit = 15) {
       year: d.date ? String(d.date).slice(0, 4) : void 0,
       publisher: d.publisher || void 0,
       pdfUrl: d.pdf ? `https://archive.org/download/${d.identifier}/${d.pdf}` : `https://archive.org/download/${d.identifier}`,
+      coverUrl: `https://archive.org/services/img/${d.identifier}`,
       sourceUrl: `https://archive.org/details/${d.identifier}`,
       source: "internet_archive",
       rightsStatus: policy.rightsStatus,
@@ -1436,7 +1437,7 @@ async function searchOpenLibrary(query, limit = 8) {
       subjects: (b.subject || []).slice(0, 5),
       year: b.first_publish_year ? String(b.first_publish_year) : void 0,
       publisher: b.publisher?.[0] || void 0,
-      coverUrl: b.cover_edition_key ? `https://covers.openlibrary.org/b/olid/${b.cover_edition_key}-M.jpg` : void 0,
+      coverUrl: b.cover_edition_key ? `https://covers.openlibrary.org/b/olid/${b.cover_edition_key}-M.jpg` : b.cover_i ? `https://covers.openlibrary.org/b/id/${b.cover_i}-M.jpg` : void 0,
       pdfUrl: void 0,
       sourceUrl: b.key ? `https://openlibrary.org${b.key}` : "https://openlibrary.org",
       source: "open_library",
@@ -3811,6 +3812,44 @@ app.all("/api/download", async (req, res) => {
     format = body.format || "pdf";
   }
   if (directUrl && /^https?:\/\//i.test(directUrl)) {
+    const iaItem = directUrl.match(/^https?:\/\/archive\.org\/download\/([^/?#]+)/i)?.[1];
+    if (iaItem) {
+      try {
+        const axios8 = await import("axios");
+        const meta = await axios8.default.get(`https://archive.org/metadata/${encodeURIComponent(iaItem)}`, {
+          timeout: 2e4,
+          validateStatus: (s) => s < 500
+        });
+        const files = meta?.data?.files || [];
+        const pdfName = files.find((f) => /\.pdf$/i.test(f.name || "") && f.source !== "metadata")?.name;
+        if (pdfName) {
+          const fileUrl = `https://archive.org/download/${encodeURIComponent(iaItem)}/${encodeURIComponent(pdfName)}`;
+          const r = await axios8.default.get(fileUrl, {
+            responseType: "arraybuffer",
+            timeout: 12e4,
+            maxRedirects: 8,
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+              Accept: "*/*"
+            },
+            validateStatus: (s) => s < 500
+          });
+          const buf = Buffer.from(r.data);
+          const ct = r.headers["content-type"] || "";
+          if (buf.length > 1e3 && !/text\/html|text\/xml|application\/json/i.test(ct)) {
+            const magic = buf.slice(0, 4).toString("hex");
+            const isPdf = magic === "25504446" || magic === "41542654" || magic === "0000001c" || /pdf/i.test(ct);
+            res.setHeader("Content-Type", isPdf ? "application/pdf" : ct || "application/octet-stream");
+            res.setHeader("Content-Disposition", `attachment; filename="${pdfName}"`);
+            res.setHeader("Content-Length", buf.length.toString());
+            res.setHeader("Access-Control-Allow-Origin", "*");
+            res.setHeader("Access-Control-Expose-Headers", "Content-Disposition, Content-Length");
+            return res.send(buf);
+          }
+        }
+      } catch {
+      }
+    }
     try {
       const axios8 = await import("axios");
       const r = await axios8.default.get(directUrl, {
