@@ -12,14 +12,6 @@ interface DownloadButtonProps {
   onSuccess?: () => void;
 }
 
-interface SearchCandidate {
-  md5?: string;
-  downloadUrl?: string;
-  sourceUrl?: string;
-  formats?: { pdf?: string };
-  title?: string;
-}
-
 function safeFilename(title: string, format: string) {
   const name = title
     .replace(/[^a-z0-9]+/gi, " ")
@@ -71,7 +63,7 @@ async function saveDownload(response: Response, filename: string) {
 }
 
 async function requestDownload(
-  candidate: { md5?: string | null; url?: string | null; query?: string; format: string; title: string },
+  candidate: { md5?: string | null; url?: string | null; format: string; title: string },
   onSuccess?: () => void,
 ) {
   const filename = safeFilename(candidate.title, candidate.format);
@@ -82,10 +74,11 @@ async function requestDownload(
     if (!md5 || !/^[a-f0-9]{32}$/i.test(md5) || attemptedMd5.has(md5.toLowerCase())) return false;
     attemptedMd5.add(md5.toLowerCase());
     try {
+      // Pass the title so the server can verify the MD5 matches
       const response = await fetch("/api/download", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/pdf,application/octet-stream,*/*" },
-        body: JSON.stringify({ md5, format: candidate.format }),
+        body: JSON.stringify({ md5, format: candidate.format, title: candidate.title }),
       });
       await saveDownload(response, filename);
       return true;
@@ -108,27 +101,16 @@ async function requestDownload(
     }
   };
 
+  // Try the primary MD5 first (from the search result the user selected)
   const urlMd5 = candidate.url?.match(/(?:md5=|\/md5\/)([a-f0-9]{32})/i)?.[1] || null;
   if (await tryMd5(candidate.md5 || urlMd5)) { onSuccess?.(); return; }
+
+  // Try the URL if available
   if (await tryUrl(candidate.url)) { onSuccess?.(); return; }
 
-  if (candidate.query && candidate.query.trim().length >= 2) {
-    try {
-      const response = await fetch(`/api/search?q=${encodeURIComponent(candidate.query.trim())}&limit=20`);
-      if (response.ok) {
-        const data = await response.json() as { books?: SearchCandidate[] };
-        for (const result of data.books || []) {
-          if (await tryMd5(result.md5)) { onSuccess?.(); return; }
-          const resultUrl = result.downloadUrl || result.formats?.pdf || result.sourceUrl;
-          if (await tryUrl(resultUrl)) { onSuccess?.(); return; }
-        }
-      }
-    } catch {
-      // Report the same helpful message for network and source failures.
-    }
-  }
-
-  throw new Error("Book not available right now. Try another source.");
+  // ALL attempts failed — do NOT re-search for other books
+  // The user clicked download on THIS book, not any book
+  throw new Error("This book is not available for download right now. Please try again later or search for a different edition.");
 }
 
 export function DownloadButton({ md5, title, format = "pdf", url, query, onSuccess }: DownloadButtonProps) {
@@ -142,7 +124,7 @@ export function DownloadButton({ md5, title, format = "pdf", url, query, onSucce
     setLoading(true);
     setError("");
     try {
-      await requestDownload({ md5, url, query, format, title }, onSuccess);
+      await requestDownload({ md5, url, format, title }, onSuccess);
     } catch (downloadError) {
       setError(downloadError instanceof Error ? downloadError.message : "Book not available right now. Try another source.");
     } finally {
