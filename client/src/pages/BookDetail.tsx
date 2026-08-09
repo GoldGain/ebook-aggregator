@@ -341,6 +341,9 @@ export default function BookDetail() {
                 <DownloadButton
                   md5={null}
                   title={book.title}
+                  author={book.author || null}
+                  bookId={book.id || null}
+                  rightsStatus={String(book.rightsStatus || '')}
                   format="pdf"
                   url={pdfUrl || null}
                   query={book.title}
@@ -352,7 +355,7 @@ export default function BookDetail() {
                 <p className="mt-3 text-xs text-muted-foreground">The download stays on ZAMIFU while it tries the available document paths.</p>
               </div>
               <div className="mt-4 space-y-1 text-xs text-muted-foreground">
-                {book.rightsStatus && (
+                {book.rightsStatus && book.rightsStatus !== 'metadata_only' && (
                   <p className="font-semibold uppercase tracking-wide text-accent">{String(book.rightsStatus).replace(/_/g, " ")}</p>
                 )}
                 <p>{book.licenseName || "Rights information has not yet been verified for this record."}</p>
