@@ -78,6 +78,7 @@ export async function searchInternetArchive(query: string, limit = 15): Promise<
       year: d.date ? String(d.date).slice(0, 4) : undefined,
       publisher: d.publisher || undefined,
       pdfUrl: d.pdf ? `https://archive.org/download/${d.identifier}/${d.pdf}` : `https://archive.org/download/${d.identifier}`,
+      coverUrl: `https://archive.org/services/img/${d.identifier}`,
       sourceUrl: `https://archive.org/details/${d.identifier}`,
       source: "internet_archive",
       rightsStatus: policy.rightsStatus,
@@ -151,7 +152,9 @@ export async function searchOpenLibrary(query: string, limit = 8): Promise<Exter
         publisher: b.publisher?.[0] || undefined,
         coverUrl: b.cover_edition_key
           ? `https://covers.openlibrary.org/b/olid/${b.cover_edition_key}-M.jpg`
-          : undefined,
+          : b.cover_i
+            ? `https://covers.openlibrary.org/b/id/${b.cover_i}-M.jpg`
+            : undefined,
         pdfUrl: undefined,
         sourceUrl: b.key ? `https://openlibrary.org${b.key}` : "https://openlibrary.org",
         source: "open_library",
