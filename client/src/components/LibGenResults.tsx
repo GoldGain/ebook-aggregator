@@ -135,7 +135,7 @@ function LibGenBookCard({ book, onBookSelect }: { book: LibGenBook; onBookSelect
       const resp = await fetch("/api/download", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ md5: book.md5, format: book.format?.toLowerCase() || "pdf" }),
+        body: JSON.stringify({ md5: book.md5, format: book.format?.toLowerCase() || "pdf", title: book.title }),
       });
 
       if (resp.ok) {
