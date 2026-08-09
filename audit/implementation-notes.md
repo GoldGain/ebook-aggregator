@@ -69,3 +69,18 @@ Plan: (a) add searchOpenLibrary adapter to external-search.ts (approved source, 
 5. TODO: commit/push; then deliver final report with Pro upgrade steps (upgrade at https://manus.im/settings/billing; support https://help.manus.im).
 6. Note: DB has 6,102 books, no Kiswahili titles in local catalog — external results are what surface the user's requested books. Production env issue (supabaseUrl missing on previews) remains for preview testing; user chose local testing instead. Service role key unavailable; validated via MCP execute_sql (anon REST blocked by RLS) and live provider API probes.
 7. Local env file .env.local created (anon key only). Scripts added: scripts/external-search-test.ts, scripts/ia-meta-probe.py, scripts/connectivity-test.mjs (remove before commit? keep scripts/ out of dist — gitignored? verify).
+## Download/cover fix state (Aug 9 ~00:15 UTC)
+- Merged to main as commit 4668e8e (PR #3 merged after closing conflicting earlier PR). Vercel deploying production now.
+- Fix: /api/download resolves archive.org/download/{id} via /metadata endpoint → real PDF file → proxied with filename header (120s timeout, 34MB PDF verified locally via curl: downloaded OK, PDF 1.7, 34.3MB).
+- Covers: IA results → https://archive.org/services/img/{id}; OL fallback → covers.openlibrary.org/b/id/{cover_i}-M.jpg (Kichwamaji doc has no cover_edition_key; OL3450172W likely has NO edition cover at all → cover may still be placeholder for Kichwamaji. OL work page shows no cover image in search API. Acceptable/honest.)
+- "Kichwamaji doesn't show": API DOES return it (total 1, OL result); likely user saw empty before deploy. Verify live after Vercel builds.
+- Local verification done: PDF download from IA works via curl chain (302 → file server 200).
+- Still to do: verify live site search+cover+download via browser; deliver final result.
+## Kichwamaji cover conclusion
+OL work OL3450172W has exactly one edition (OL4872792M) and its covers field is null. Open Library genuinely has NO cover image for this book. The placeholder icon is honest data — not a bug we can fix from OL. Options: fetch cover from another source (not allowed to scrape piracy sites); leave as is with clear placeholder. Decision: leave as is. Book DOES appear in search (verified live, 1 result). User's claim "Kichwamaji doesn't show" was likely from before the earlier deploy; verified fixed.
+## LIVE VERIFICATION COMPLETE (Aug 9 ~00:14 UTC)
+1. chozi la heri: cover thumbnail visible (archive.org/services/img), Download PDF clicked → "Downloading..." → 58.6MB "Chozi la Heri.pdf" valid PDF saved to sandbox Downloads. FIXED.
+2. kichwamaji: result card shows (fixed), cover = placeholder (no cover exists in OL — honest data).
+## Kichwamaji download reproduction (Aug 9 01:16 UTC)
+Live: clicking Download on Kichwamaji → "Book not available right now. Try another source." (404 from /api/download). Cause: OL result has pdfUrl=undefined, no md5 → no URL branch, no md5 branch → 404. The DownloadButton shows a Download PDF button even for metadata-only records (directDownloadAllowed=false), which is misleading.
+FIX NEEDED: for metadata-only external results (source=open_library, directDownloadAllowed=false), button should open sourceUrl (OL book page / borrow-read) in new tab instead of hitting /api/download. Better UX: label "Read / Borrow at Open Library". Also improve error message for truly unavailable. Keep local+IA paths unchanged.
