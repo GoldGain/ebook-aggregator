@@ -3873,6 +3873,15 @@ async function searchLibGenForMd5(title, author, expectedLang, axios7) {
     `https://libgen.li/index.php?req=${q}&lg_topic=libgen&open=0&view=simple&res=25&phrase=1&column=def`,
     `https://libgen.rs/index.php?req=${q}&lg_topic=libgen&open=0&view=simple&res=25&phrase=1&column=def`
   ];
+  const formatScore = (fmt) => {
+    const f = fmt.toLowerCase();
+    if (f === "pdf") return 10;
+    if (f === "epub") return 8;
+    if (f === "djvu") return 6;
+    if (f === "mobi" || f === "azw3") return 4;
+    if (f === "fb2") return 2;
+    return 1;
+  };
   for (const url of mirrors) {
     try {
       const sr = await axios7.get(url, {
@@ -3882,6 +3891,7 @@ async function searchLibGenForMd5(title, author, expectedLang, axios7) {
       const html = sr.data;
       const rowPattern = /<tr[\s\S]*?<\/tr>/gi;
       const rows = html.match(rowPattern) || [];
+      const candidates = [];
       for (const row of rows) {
         const md5Match = row.match(/md5=([a-f0-9]{32})/i);
         if (!md5Match) continue;
@@ -3889,10 +3899,9 @@ async function searchLibGenForMd5(title, author, expectedLang, axios7) {
         const titleMatch = row.match(/edition\.php[^>]*>([^<]+)</i);
         const rowTitle = titleMatch ? titleMatch[1].trim() : "";
         const cells = row.match(/<td[^>]*>([\s\S]*?)<\/td>/gi) || [];
-        let rowLang = "";
-        if (cells.length >= 5) {
-          rowLang = cells[4].replace(/<[^>]+>/g, "").trim();
-        }
+        const cleanCell = (c) => c.replace(/<[^>]+>/g, "").trim();
+        const rowLang = cells.length >= 5 ? cleanCell(cells[4]) : "";
+        const rowFormat = cells.length >= 8 ? cleanCell(cells[7]) : "";
         const titleNorm = (s) => s.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
         const t1 = titleNorm(title);
         const t2 = titleNorm(rowTitle);
@@ -3905,12 +3914,22 @@ async function searchLibGenForMd5(title, author, expectedLang, axios7) {
         if (expectedLang && rowLang) {
           const rowLangNorm = normalizeLang(rowLang);
           if (rowLangNorm && !langsMatch(expectedLang, rowLangNorm)) {
-            console.warn(`[libgen] Language mismatch: expected=${expectedLang}, found=${rowLang} for "${rowTitle}"`);
             continue;
           }
         }
-        console.log(`[libgen] Found MD5 ${candidateMd5} for "${rowTitle}" [${rowLang}]`);
-        return candidateMd5;
+        candidates.push({
+          md5: candidateMd5,
+          title: rowTitle,
+          lang: rowLang,
+          format: rowFormat,
+          score: formatScore(rowFormat)
+        });
+      }
+      if (candidates.length > 0) {
+        candidates.sort((a, b) => b.score - a.score);
+        const best = candidates[0];
+        console.log(`[libgen] Best match: MD5=${best.md5} title="${best.title}" format=${best.format} lang=${best.lang} (${candidates.length} candidates)`);
+        return best.md5;
       }
     } catch (e) {
       console.warn(`[libgen] Search failed for ${url.slice(0, 60)}: ${e.message}`);

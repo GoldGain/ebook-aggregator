@@ -271,6 +271,7 @@ async function fetchBookCover(title: string, author?: string, isbn?: string): Pr
 
 // Search LibGen for a book by title+language, return MD5 if found
 // LibGen works from server-side (no JS fingerprinting like Anna's Archive)
+// Prefers PDF format; falls back to EPUB, then MOBI/AZW3
 async function searchLibGenForMd5(title: string, author: string | undefined, expectedLang: string | null, axios: any): Promise<string | null> {
   const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
   const q = encodeURIComponent(`${title} ${author || ''}`.trim());
@@ -278,6 +279,17 @@ async function searchLibGenForMd5(title: string, author: string | undefined, exp
     `https://libgen.li/index.php?req=${q}&lg_topic=libgen&open=0&view=simple&res=25&phrase=1&column=def`,
     `https://libgen.rs/index.php?req=${q}&lg_topic=libgen&open=0&view=simple&res=25&phrase=1&column=def`,
   ];
+
+  // Format preference: pdf > epub > djvu > mobi/azw3/fb2 > other
+  const formatScore = (fmt: string): number => {
+    const f = fmt.toLowerCase();
+    if (f === 'pdf') return 10;
+    if (f === 'epub') return 8;
+    if (f === 'djvu') return 6;
+    if (f === 'mobi' || f === 'azw3') return 4;
+    if (f === 'fb2') return 2;
+    return 1;
+  };
 
   for (const url of mirrors) {
     try {
@@ -291,6 +303,9 @@ async function searchLibGenForMd5(title: string, author: string | undefined, exp
       const rowPattern = /<tr[\s\S]*?<\/tr>/gi;
       const rows = html.match(rowPattern) || [];
 
+      // Collect all matching candidates, then pick best by format
+      const candidates: Array<{ md5: string; title: string; lang: string; format: string; score: number }> = [];
+
       for (const row of rows) {
         // Extract MD5
         const md5Match = row.match(/md5=([a-f0-9]{32})/i);
@@ -301,12 +316,11 @@ async function searchLibGenForMd5(title: string, author: string | undefined, exp
         const titleMatch = row.match(/edition\.php[^>]*>([^<]+)</i);
         const rowTitle = titleMatch ? titleMatch[1].trim() : '';
 
-        // Extract language from row (5th cell)
+        // Extract cells: Language is 5th cell (index 4), Format is 8th cell (index 7)
         const cells = row.match(/<td[^>]*>([\s\S]*?)<\/td>/gi) || [];
-        let rowLang = '';
-        if (cells.length >= 5) {
-          rowLang = cells[4].replace(/<[^>]+>/g, '').trim();
-        }
+        const cleanCell = (c: string) => c.replace(/<[^>]+>/g, '').trim();
+        const rowLang = cells.length >= 5 ? cleanCell(cells[4]) : '';
+        const rowFormat = cells.length >= 8 ? cleanCell(cells[7]) : '';
 
         // Title fuzzy match
         const titleNorm = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
@@ -323,13 +337,25 @@ async function searchLibGenForMd5(title: string, author: string | undefined, exp
         if (expectedLang && rowLang) {
           const rowLangNorm = normalizeLang(rowLang);
           if (rowLangNorm && !langsMatch(expectedLang, rowLangNorm)) {
-            console.warn(`[libgen] Language mismatch: expected=${expectedLang}, found=${rowLang} for "${rowTitle}"`);
             continue;
           }
         }
 
-        console.log(`[libgen] Found MD5 ${candidateMd5} for "${rowTitle}" [${rowLang}]`);
-        return candidateMd5;
+        candidates.push({
+          md5: candidateMd5,
+          title: rowTitle,
+          lang: rowLang,
+          format: rowFormat,
+          score: formatScore(rowFormat),
+        });
+      }
+
+      if (candidates.length > 0) {
+        // Sort by format preference (highest score first)
+        candidates.sort((a, b) => b.score - a.score);
+        const best = candidates[0];
+        console.log(`[libgen] Best match: MD5=${best.md5} title="${best.title}" format=${best.format} lang=${best.lang} (${candidates.length} candidates)`);
+        return best.md5;
       }
     } catch (e: any) {
       console.warn(`[libgen] Search failed for ${url.slice(0, 60)}: ${e.message}`);
