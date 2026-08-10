@@ -3919,18 +3919,18 @@ async function searchLibGenForMd5(title, author, expectedLang, axios7) {
   }
   return null;
 }
-async function downloadFromLibGen(md5, axios7) {
+async function getLibGenDownloadUrl(md5, axios7) {
   const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
   const mirrors = [
     { ads: `https://libgen.li/ads.php?md5=${md5}`, base: "https://libgen.li", referer: "https://libgen.li/" },
     { ads: `https://libgen.rocks/ads.php?md5=${md5}`, base: "https://libgen.rocks", referer: "https://libgen.rocks/" },
     { ads: `https://libgen.gs/ads.php?md5=${md5}`, base: "https://libgen.gs", referer: "https://libgen.gs/" }
   ];
-  for (const { ads, base, referer } of mirrors) {
+  for (const { ads, base } of mirrors) {
     try {
       const adsResp = await axios7.get(ads, {
-        timeout: 15e3,
-        headers: { "User-Agent": UA, "Referer": referer },
+        timeout: 8e3,
+        headers: { "User-Agent": UA },
         validateStatus: (s) => s < 500
       });
       const adsHtml = adsResp.data;
@@ -3938,54 +3938,11 @@ async function downloadFromLibGen(md5, axios7) {
       if (keyMatch) {
         const key = keyMatch[1];
         const dlUrl = `${base}/get.php?md5=${md5}&key=${key}`;
-        try {
-          const dr = await axios7.get(dlUrl, {
-            responseType: "arraybuffer",
-            timeout: 6e4,
-            maxRedirects: 5,
-            headers: { "User-Agent": UA, "Referer": ads },
-            validateStatus: (s) => s < 500
-          });
-          const buf = Buffer.from(dr.data);
-          const ct = dr.headers["content-type"] || "";
-          if (buf.length > 1e3) {
-            const magic = buf.slice(0, 4).toString("hex");
-            if (magic === "25504446" || magic === "504b0304" || buf.length > 1e5) {
-              console.log(`[libgen] \u2705 Downloaded from ${base} (${buf.length} bytes)`);
-              return { buffer: buf, ct: ct || "application/pdf" };
-            }
-          }
-        } catch {
-          continue;
-        }
+        console.log(`[libgen] Found download URL: ${dlUrl}`);
+        return dlUrl;
       }
-      const directUrls = [
-        `${base}/get.php?md5=${md5}`,
-        `https://cdn1.booksdl.org/get.php?md5=${md5}`
-      ];
-      for (const dlUrl of directUrls) {
-        try {
-          const dr = await axios7.get(dlUrl, {
-            responseType: "arraybuffer",
-            timeout: 6e4,
-            maxRedirects: 5,
-            headers: { "User-Agent": UA, "Referer": referer },
-            validateStatus: (s) => s < 500
-          });
-          const buf = Buffer.from(dr.data);
-          const ct = dr.headers["content-type"] || "";
-          if (buf.length > 1e3) {
-            const magic = buf.slice(0, 4).toString("hex");
-            if (magic === "25504446" || magic === "504b0304" || buf.length > 1e5) {
-              console.log(`[libgen] \u2705 Downloaded directly from ${dlUrl.slice(0, 60)}`);
-              return { buffer: buf, ct: ct || "application/pdf" };
-            }
-          }
-        } catch {
-          continue;
-        }
-      }
-    } catch {
+    } catch (e) {
+      console.warn(`[libgen] ads.php failed for ${base}: ${e.message}`);
       continue;
     }
   }
@@ -4133,19 +4090,15 @@ app.all("/api/download", async (req, res) => {
   console.log(`[download] Proceeding with MD5: ${md5} (lang: ${requestedLang || "any"})`);
   const axiosMod = await import("axios");
   try {
-    const lgResult = await downloadFromLibGen(md5, axiosMod.default);
-    if (lgResult) {
-      const ext = (format || "pdf").toLowerCase();
-      res.setHeader("Content-Type", lgResult.ct || "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="book.${ext}"`);
-      res.setHeader("Content-Length", lgResult.buffer.length.toString());
+    const lgUrl = await getLibGenDownloadUrl(md5, axiosMod.default);
+    if (lgUrl) {
+      console.log(`[download] Redirecting to LibGen: ${lgUrl}`);
       res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader("Access-Control-Expose-Headers", "Content-Disposition, Content-Length, X-Download-Source");
       res.setHeader("X-Download-Source", "libgen");
-      return res.send(lgResult.buffer);
+      return res.redirect(302, lgUrl);
     }
   } catch (e) {
-    console.warn(`[download] LibGen download failed: ${e.message}`);
+    console.warn(`[download] LibGen URL lookup failed: ${e.message}`);
   }
   const annaJsonUrl = `https://annas-archive.li/md5/${md5}.json`;
   const annaHtmlUrl = `https://annas-archive.li/md5/${md5}`;
