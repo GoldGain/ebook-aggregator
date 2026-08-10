@@ -3797,20 +3797,162 @@ app.get("/api/libgen", async (req, res) => {
     });
   }
 });
+var LANG_MAP_SERVER = {
+  "swahili": "sw",
+  "kiswahili": "sw",
+  "sw": "sw",
+  "english": "en",
+  "en": "en",
+  "french": "fr",
+  "fran\xE7ais": "fr",
+  "fr": "fr",
+  "german": "de",
+  "deutsch": "de",
+  "de": "de",
+  "spanish": "es",
+  "espa\xF1ol": "es",
+  "es": "es",
+  "portuguese": "pt",
+  "portugu\xEAs": "pt",
+  "pt": "pt",
+  "arabic": "ar",
+  "ar": "ar",
+  "chinese": "zh",
+  "zh": "zh",
+  "russian": "ru",
+  "ru": "ru",
+  "italian": "it",
+  "italiano": "it",
+  "it": "it",
+  "japanese": "ja",
+  "ja": "ja"
+};
+function normalizeLang(lang) {
+  if (!lang) return null;
+  const l = lang.toLowerCase().trim();
+  return LANG_MAP_SERVER[l] || l.slice(0, 2) || null;
+}
+function langsMatch(expected, found) {
+  if (!expected || !found) return true;
+  return normalizeLang(expected) === normalizeLang(found);
+}
+function extractLangFromHtml(html) {
+  const lower = html.toLowerCase();
+  if (lower.includes("swahili") || lower.includes("kiswahili")) return "sw";
+  if (lower.includes("english")) return "en";
+  if (lower.includes("french") || lower.includes("fran\xE7ais")) return "fr";
+  if (lower.includes("german") || lower.includes("deutsch")) return "de";
+  if (lower.includes("spanish") || lower.includes("espa\xF1ol")) return "es";
+  if (lower.includes("portuguese") || lower.includes("portugu\xEAs")) return "pt";
+  if (lower.includes("arabic")) return "ar";
+  if (lower.includes("chinese")) return "zh";
+  if (lower.includes("russian")) return "ru";
+  return null;
+}
+async function fetchBookCover(title, author, isbn) {
+  const axiosMod = await import("axios");
+  const ax = axiosMod.default;
+  if (isbn) {
+    const clean = isbn.replace(/[^0-9X]/gi, "");
+    if (clean.length >= 10) {
+      try {
+        const r = await ax.head(`https://covers.openlibrary.org/b/isbn/${clean}-L.jpg`, { timeout: 5e3 });
+        if (r.status === 200) return `https://covers.openlibrary.org/b/isbn/${clean}-L.jpg`;
+      } catch {
+      }
+    }
+  }
+  try {
+    const q = encodeURIComponent(`${title} ${author || ""}`.trim());
+    const r = await ax.get(`https://openlibrary.org/search.json?q=${q}&limit=1&fields=isbn,cover_i`, { timeout: 8e3 });
+    const doc = r.data?.docs?.[0];
+    if (doc?.cover_i) return `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg`;
+    if (doc?.isbn?.[0]) return `https://covers.openlibrary.org/b/isbn/${doc.isbn[0]}-L.jpg`;
+  } catch {
+  }
+  try {
+    const q = encodeURIComponent(`${title} ${author || ""}`.trim());
+    const r = await ax.get(`https://www.googleapis.com/books/v1/volumes?q=${q}&maxResults=1`, { timeout: 8e3 });
+    const img = r.data?.items?.[0]?.volumeInfo?.imageLinks?.thumbnail;
+    if (img) return img.replace("http://", "https://").replace("zoom=1", "zoom=2");
+  } catch {
+  }
+  return null;
+}
+async function searchAnnasForMd5(title, author, expectedLang, axios7) {
+  const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+  const q = encodeURIComponent(`${title} ${author || ""}`.trim());
+  for (const mirror of ["https://annas-archive.li", "https://annas-archive.org"]) {
+    try {
+      const sr = await axios7.get(`${mirror}/search?q=${q}`, {
+        timeout: 15e3,
+        headers: { "User-Agent": UA, "Accept": "text/html" }
+      });
+      const html = sr.data;
+      const md5Pattern = /\/md5\/([a-f0-9]{32})/gi;
+      const seen = /* @__PURE__ */ new Set();
+      for (const m of html.matchAll(md5Pattern)) {
+        const candidateMd5 = m[1];
+        if (seen.has(candidateMd5)) continue;
+        seen.add(candidateMd5);
+        const ctx = html.slice(Math.max(0, m.index - 400), Math.min(html.length, m.index + 400)).toLowerCase();
+        const titleNorm = title.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim();
+        const words = titleNorm.split(" ").filter((w) => w.length > 2);
+        const matchCount = words.filter((w) => ctx.includes(w)).length;
+        if (words.length > 0 && matchCount / words.length < 0.3) continue;
+        try {
+          const ir = await axios7.get(`${mirror}/md5/${candidateMd5}`, {
+            timeout: 12e3,
+            headers: { "User-Agent": UA, "Accept": "text/html" }
+          });
+          const pageHtml = ir.data;
+          const detectedLang = extractLangFromHtml(pageHtml);
+          if (expectedLang && detectedLang && !langsMatch(expectedLang, detectedLang)) {
+            console.warn(`[anna] Language mismatch for MD5 ${candidateMd5}: expected=${expectedLang}, found=${detectedLang}`);
+            continue;
+          }
+          return candidateMd5;
+        } catch {
+          continue;
+        }
+      }
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
 app.all("/api/download", async (req, res) => {
   let md5;
   let format = "pdf";
   let directUrl;
+  let title;
+  let author;
+  let language;
+  let bookId;
+  let isbn;
   if (req.method === "GET") {
     md5 = req.query.md5;
     directUrl = req.query.url;
     format = req.query.format || "pdf";
+    title = req.query.title;
+    author = req.query.author;
+    language = req.query.language;
+    bookId = req.query.bookId ? parseInt(req.query.bookId) : void 0;
+    isbn = req.query.isbn;
   } else if (req.method === "POST") {
     const body = req.body || {};
     md5 = body.md5;
     directUrl = body.url;
     format = body.format || "pdf";
+    title = body.title;
+    author = body.author;
+    language = body.language;
+    bookId = body.bookId ? parseInt(String(body.bookId)) : void 0;
+    isbn = body.isbn;
   }
+  const requestedLang = normalizeLang(language);
+  console.log(`[download] Request: title="${title}", md5=${md5 || "none"}, lang=${requestedLang || "any"}`);
   if (directUrl && /^https?:\/\//i.test(directUrl)) {
     const iaItem = directUrl.match(/^https?:\/\/archive\.org\/download\/([^/?#]+)/i)?.[1];
     if (iaItem) {
@@ -3882,8 +4024,70 @@ app.all("/api/download", async (req, res) => {
     const urlMd5 = directUrl.match(/(?:md5=|\/md5\/)([a-f0-9]{32})/i)?.[1];
     md5 = md5 || urlMd5;
   }
+  if ((!md5 || !/^[a-f0-9]{32}$/i.test(md5)) && title && title.trim().length > 1) {
+    console.log(`[download] No valid MD5, searching Anna's Archive for "${title}" (lang: ${requestedLang || "any"})...`);
+    try {
+      const axiosMod = await import("axios");
+      const foundMd5 = await searchAnnasForMd5(title.trim(), author, requestedLang, axiosMod.default);
+      if (foundMd5) {
+        console.log(`[download] Found MD5 via search: ${foundMd5}`);
+        md5 = foundMd5;
+        if (bookId) {
+          const coverUrl = await fetchBookCover(title, author, isbn).catch(() => void 0);
+          try {
+            const SUPABASE_URL = process.env.SUPABASE_URL;
+            const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+            if (SUPABASE_URL && SUPABASE_KEY) {
+              const patch = {
+                formats: JSON.stringify({ pdf: `md5:${foundMd5}` }),
+                directDownloadAllowed: true,
+                rightsStatus: "open_access"
+              };
+              if (coverUrl) patch.coverUrl = coverUrl;
+              await (await import("axios")).default.patch(
+                `${SUPABASE_URL}/rest/v1/books?id=eq.${bookId}`,
+                patch,
+                { headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" }, timeout: 5e3 }
+              );
+            }
+          } catch {
+          }
+        }
+      }
+    } catch (e) {
+      console.warn(`[download] Anna's search failed: ${e.message}`);
+    }
+  }
   if (!md5 || typeof md5 !== "string" || !/^[a-f0-9]{32}$/i.test(md5)) {
-    return res.status(404).json({ success: false, error: "Download unavailable", message: "This document is not available right now. Try another result." });
+    const langMsg = requestedLang ? `Book not available in ${requestedLang.toUpperCase()} language, or could not be found.` : "This document is not available right now. Try another result.";
+    return res.status(404).json({ success: false, error: "Download unavailable", message: langMsg });
+  }
+  if (requestedLang) {
+    try {
+      const axiosMod = await import("axios");
+      const UA2 = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
+      for (const mirror of ["https://annas-archive.li", "https://annas-archive.org"]) {
+        try {
+          const ir = await axiosMod.default.get(`${mirror}/md5/${md5}`, {
+            timeout: 1e4,
+            headers: { "User-Agent": UA2, "Accept": "text/html" }
+          });
+          const detectedLang = extractLangFromHtml(ir.data);
+          if (detectedLang && !langsMatch(requestedLang, detectedLang)) {
+            console.warn(`[download] Language mismatch for MD5 ${md5}: expected=${requestedLang}, found=${detectedLang}`);
+            return res.status(404).json({
+              success: false,
+              error: "Language mismatch",
+              message: `Book not available in ${requestedLang.toUpperCase()} language. Found: ${detectedLang.toUpperCase()}`
+            });
+          }
+          break;
+        } catch {
+          continue;
+        }
+      }
+    } catch {
+    }
   }
   const annaJsonUrl = `https://annas-archive.li/md5/${md5}.json`;
   const annaHtmlUrl = `https://annas-archive.li/md5/${md5}`;

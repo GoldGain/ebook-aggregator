@@ -4,8 +4,45 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { DownloadButton } from "@/components/DownloadButton";
 import { Loader2, BookOpen, Heart, Share2, ExternalLink, Calendar, Globe, ArrowLeft, Copy, Check } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
+
+// Fetch a cover image from Open Library or Google Books
+async function fetchFallbackCover(title: string, author?: string | null, isbn?: string | null): Promise<string | null> {
+  // 1. Open Library by ISBN
+  if (isbn) {
+    const cleanIsbn = isbn.replace(/[^0-9X]/gi, '');
+    if (cleanIsbn.length >= 10) {
+      const url = `https://covers.openlibrary.org/b/isbn/${cleanIsbn}-L.jpg`;
+      try {
+        const r = await fetch(url, { method: 'HEAD' });
+        if (r.ok && (r.headers.get('content-type') || '').includes('image')) return url;
+      } catch {}
+    }
+  }
+  // 2. Open Library search
+  try {
+    const q = encodeURIComponent(`${title} ${author || ''}`.trim());
+    const r = await fetch(`https://openlibrary.org/search.json?q=${q}&limit=1&fields=isbn,cover_i`);
+    if (r.ok) {
+      const data = await r.json();
+      const doc = data?.docs?.[0];
+      if (doc?.cover_i) return `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg`;
+      if (doc?.isbn?.[0]) return `https://covers.openlibrary.org/b/isbn/${doc.isbn[0]}-L.jpg`;
+    }
+  } catch {}
+  // 3. Google Books
+  try {
+    const q = encodeURIComponent(`${title} ${author || ''}`.trim());
+    const r = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${q}&maxResults=1`);
+    if (r.ok) {
+      const data = await r.json();
+      const img = data?.items?.[0]?.volumeInfo?.imageLinks?.thumbnail;
+      if (img) return img.replace('http://', 'https://').replace('zoom=1', 'zoom=2');
+    }
+  } catch {}
+  return null;
+}
 
 export default function BookDetail() {
   const { id } = useParams<{ id: string }>();
@@ -137,6 +174,18 @@ export default function BookDetail() {
   const subjects = parseJson(book.subjects, []);
   const pdfUrl = formats?.pdf || (book as any).directDownloadUrl || book.sourceUrl || "";
 
+  // Cover image with fallback
+  const [resolvedCover, setResolvedCover] = useState<string | null>(book.coverUrl || null);
+  useEffect(() => {
+    if (!book.coverUrl && book.title) {
+      fetchFallbackCover(book.title, book.author, book.isbn)
+        .then(url => { if (url) setResolvedCover(url); })
+        .catch(() => {});
+    } else {
+      setResolvedCover(book.coverUrl || null);
+    }
+  }, [book.coverUrl, book.title, book.author, book.isbn]);
+
   const handleCopyLink = () => {
     navigator.clipboard.writeText(window.location.href);
     setCopied(true);
@@ -171,8 +220,13 @@ export default function BookDetail() {
         <div className="grid md:grid-cols-3 gap-12">
           {/* Book Cover and Actions */}
           <div className="md:col-span-1">
-            {book.coverUrl ? (
-              <img src={book.coverUrl} alt={book.title} className="w-full rounded-lg shadow-lg mb-6 neon-border" />
+            {resolvedCover ? (
+              <img
+                src={resolvedCover}
+                alt={book.title}
+                className="w-full rounded-lg shadow-lg mb-6 neon-border"
+                onError={() => setResolvedCover(null)}
+              />
             ) : (
               <div className="w-full aspect-[3/4] bg-gradient-to-br from-primary/20 to-secondary/20 rounded-lg mb-6 flex items-center justify-center neon-border">
                 <BookOpen className="w-16 h-16 text-muted-foreground" />
@@ -339,7 +393,7 @@ export default function BookDetail() {
               <h2 className="mb-4 text-2xl font-bold text-primary">Download</h2>
               <div className="card-neon max-w-xl p-4">
                 <DownloadButton
-                  md5={null}
+                  md5={formats?.pdf?.startsWith('md5:') ? formats.pdf.replace('md5:', '') : null}
                   title={book.title}
                   author={book.author || null}
                   bookId={book.id || null}
@@ -347,6 +401,7 @@ export default function BookDetail() {
                   format="pdf"
                   url={pdfUrl || null}
                   query={book.title}
+                  language={book.language || null}
                   onSuccess={() => {
                     if (user) recordDownloadMutation.mutate({ bookId, format: "pdf" });
                     toast.success("Download started!");

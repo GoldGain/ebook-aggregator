@@ -75,12 +75,11 @@ function BookCard({ book, query, onClick }: { book: any; query: string; onClick?
     ? (() => { try { return JSON.parse(book.formats); } catch { return {}; } })()
     : (book.formats || {});
   const downloadUrl = book.downloadUrl || formats.pdf || book.sourceUrl || "";
-  const hasLocalId = typeof book.id === "number";
 
   return (
     <div
       onClick={onClick}
-      className="card-neon group flex gap-4 p-4 transition-all duration-200 hover:border-primary/60"
+      className={`card-neon group flex gap-4 p-4 transition-all duration-200 hover:border-primary/60 ${onClick ? 'cursor-pointer' : ''}`}
     >
       <div className="flex min-w-0 flex-1 gap-4">
         {book.coverUrl ? (
@@ -97,8 +96,7 @@ function BookCard({ book, query, onClick }: { book: any; query: string; onClick?
         )}
         <div className="min-w-0 flex-1">
           <h3
-            className={`mb-1 line-clamp-2 text-sm font-bold leading-snug transition ${hasLocalId ? "cursor-pointer group-hover:text-primary" : ""}`}
-            onClick={hasLocalId ? onClick : undefined}
+            className={`mb-1 line-clamp-2 text-sm font-bold leading-snug transition ${onClick ? 'cursor-pointer group-hover:text-primary' : ''}`}
           >
             {book.title || "Untitled document"}
           </h3>
@@ -119,13 +117,16 @@ function BookCard({ book, query, onClick }: { book: any; query: string; onClick?
           </div>
         </div>
       </div>
-      <div className="flex shrink-0 items-end" onClick={(event) => event.stopPropagation()}>
+        <div className="flex shrink-0 items-end" onClick={(event) => event.stopPropagation()}>
         <DownloadButton
           md5={book.md5}
           title={book.title || "document"}
           format="pdf"
           url={downloadUrl}
           query={query}
+          author={book.author || null}
+          bookId={typeof book.id === "number" ? book.id : null}
+          language={book.language || null}
         />
       </div>
     </div>

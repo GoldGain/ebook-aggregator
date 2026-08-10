@@ -200,22 +200,150 @@ app.get("/api/libgen", async (req: any, res: any) => {
 });
 
 
+// ── Language helpers ────────────────────────────────────────────────────────
+const LANG_MAP_SERVER: Record<string, string> = {
+  'swahili': 'sw', 'kiswahili': 'sw', 'sw': 'sw',
+  'english': 'en', 'en': 'en',
+  'french': 'fr', 'français': 'fr', 'fr': 'fr',
+  'german': 'de', 'deutsch': 'de', 'de': 'de',
+  'spanish': 'es', 'español': 'es', 'es': 'es',
+  'portuguese': 'pt', 'português': 'pt', 'pt': 'pt',
+  'arabic': 'ar', 'ar': 'ar',
+  'chinese': 'zh', 'zh': 'zh',
+  'russian': 'ru', 'ru': 'ru',
+  'italian': 'it', 'italiano': 'it', 'it': 'it',
+  'japanese': 'ja', 'ja': 'ja',
+};
+
+function normalizeLang(lang: string | undefined | null): string | null {
+  if (!lang) return null;
+  const l = lang.toLowerCase().trim();
+  return LANG_MAP_SERVER[l] || l.slice(0, 2) || null;
+}
+
+function langsMatch(expected: string | null, found: string | null): boolean {
+  if (!expected || !found) return true;
+  return normalizeLang(expected) === normalizeLang(found);
+}
+
+function extractLangFromHtml(html: string): string | null {
+  const lower = html.toLowerCase();
+  if (lower.includes('swahili') || lower.includes('kiswahili')) return 'sw';
+  if (lower.includes('english')) return 'en';
+  if (lower.includes('french') || lower.includes('français')) return 'fr';
+  if (lower.includes('german') || lower.includes('deutsch')) return 'de';
+  if (lower.includes('spanish') || lower.includes('español')) return 'es';
+  if (lower.includes('portuguese') || lower.includes('português')) return 'pt';
+  if (lower.includes('arabic')) return 'ar';
+  if (lower.includes('chinese')) return 'zh';
+  if (lower.includes('russian')) return 'ru';
+  return null;
+}
+
+// Fetch cover from Open Library or Google Books
+async function fetchBookCover(title: string, author?: string, isbn?: string): Promise<string | null> {
+  const axiosMod = await import('axios');
+  const ax = axiosMod.default;
+  if (isbn) {
+    const clean = isbn.replace(/[^0-9X]/gi, '');
+    if (clean.length >= 10) {
+      try {
+        const r = await ax.head(`https://covers.openlibrary.org/b/isbn/${clean}-L.jpg`, { timeout: 5000 });
+        if (r.status === 200) return `https://covers.openlibrary.org/b/isbn/${clean}-L.jpg`;
+      } catch {}
+    }
+  }
+  try {
+    const q = encodeURIComponent(`${title} ${author || ''}`.trim());
+    const r = await ax.get(`https://openlibrary.org/search.json?q=${q}&limit=1&fields=isbn,cover_i`, { timeout: 8000 });
+    const doc = r.data?.docs?.[0];
+    if (doc?.cover_i) return `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg`;
+    if (doc?.isbn?.[0]) return `https://covers.openlibrary.org/b/isbn/${doc.isbn[0]}-L.jpg`;
+  } catch {}
+  try {
+    const q = encodeURIComponent(`${title} ${author || ''}`.trim());
+    const r = await ax.get(`https://www.googleapis.com/books/v1/volumes?q=${q}&maxResults=1`, { timeout: 8000 });
+    const img = r.data?.items?.[0]?.volumeInfo?.imageLinks?.thumbnail;
+    if (img) return img.replace('http://', 'https://').replace('zoom=1', 'zoom=2');
+  } catch {}
+  return null;
+}
+
+// Search Anna's Archive for a book by title+language, return MD5 if found
+async function searchAnnasForMd5(title: string, author: string | undefined, expectedLang: string | null, axios: any): Promise<string | null> {
+  const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+  const q = encodeURIComponent(`${title} ${author || ''}`.trim());
+  for (const mirror of ['https://annas-archive.li', 'https://annas-archive.org']) {
+    try {
+      const sr = await axios.get(`${mirror}/search?q=${q}`, {
+        timeout: 15000, headers: { 'User-Agent': UA, 'Accept': 'text/html' },
+      });
+      const html: string = sr.data;
+      const md5Pattern = /\/md5\/([a-f0-9]{32})/gi;
+      const seen = new Set<string>();
+      for (const m of html.matchAll(md5Pattern)) {
+        const candidateMd5 = m[1];
+        if (seen.has(candidateMd5)) continue;
+        seen.add(candidateMd5);
+        // Quick title context check
+        const ctx = html.slice(Math.max(0, m.index! - 400), Math.min(html.length, m.index! + 400)).toLowerCase();
+        const titleNorm = title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+        const words = titleNorm.split(' ').filter(w => w.length > 2);
+        const matchCount = words.filter(w => ctx.includes(w)).length;
+        if (words.length > 0 && matchCount / words.length < 0.3) continue;
+        // Get MD5 detail page for language verification
+        try {
+          const ir = await axios.get(`${mirror}/md5/${candidateMd5}`, {
+            timeout: 12000, headers: { 'User-Agent': UA, 'Accept': 'text/html' },
+          });
+          const pageHtml: string = ir.data;
+          const detectedLang = extractLangFromHtml(pageHtml);
+          if (expectedLang && detectedLang && !langsMatch(expectedLang, detectedLang)) {
+            console.warn(`[anna] Language mismatch for MD5 ${candidateMd5}: expected=${expectedLang}, found=${detectedLang}`);
+            continue;
+          }
+          return candidateMd5;
+        } catch { continue; }
+      }
+    } catch { continue; }
+  }
+  return null;
+}
+
 // Download proxy — fast-fail with aggressive timeouts + fallback URLs
 app.all("/api/download", async (req: any, res: any) => {
   let md5: string | undefined;
   let format = "pdf";
   let directUrl: string | undefined;
+  let title: string | undefined;
+  let author: string | undefined;
+  let language: string | undefined;
+  let bookId: number | undefined;
+  let isbn: string | undefined;
 
   if (req.method === "GET") {
     md5 = req.query.md5 as string | undefined;
     directUrl = req.query.url as string | undefined;
     format = (req.query.format as string) || "pdf";
+    title = req.query.title as string | undefined;
+    author = req.query.author as string | undefined;
+    language = req.query.language as string | undefined;
+    bookId = req.query.bookId ? parseInt(req.query.bookId as string) : undefined;
+    isbn = req.query.isbn as string | undefined;
   } else if (req.method === "POST") {
     const body = req.body || {};
     md5 = body.md5;
     directUrl = body.url;
     format = body.format || "pdf";
+    title = body.title;
+    author = body.author;
+    language = body.language;
+    bookId = body.bookId ? parseInt(String(body.bookId)) : undefined;
+    isbn = body.isbn;
   }
+
+  const requestedLang = normalizeLang(language);
+  console.log(`[download] Request: title="${title}", md5=${md5 || 'none'}, lang=${requestedLang || 'any'}`);
 
   // Try a provided URL first. A source page is not treated as a download; if it
   // contains an MD5, execution continues through the server-side mirror flow.
@@ -295,8 +423,72 @@ app.all("/api/download", async (req: any, res: any) => {
     md5 = md5 || urlMd5;
   }
 
+  // If no MD5 yet but we have a title, search Anna's Archive for the right MD5
+  if ((!md5 || !/^[a-f0-9]{32}$/i.test(md5)) && title && title.trim().length > 1) {
+    console.log(`[download] No valid MD5, searching Anna's Archive for "${title}" (lang: ${requestedLang || 'any'})...`);
+    try {
+      const axiosMod = await import('axios');
+      const foundMd5 = await searchAnnasForMd5(title.trim(), author, requestedLang, axiosMod.default);
+      if (foundMd5) {
+        console.log(`[download] Found MD5 via search: ${foundMd5}`);
+        md5 = foundMd5;
+        // Update DB if bookId provided
+        if (bookId) {
+          const coverUrl = await fetchBookCover(title, author, isbn).catch(() => undefined);
+          try {
+            const SUPABASE_URL = process.env.SUPABASE_URL;
+            const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+            if (SUPABASE_URL && SUPABASE_KEY) {
+              const patch: Record<string, unknown> = {
+                formats: JSON.stringify({ pdf: `md5:${foundMd5}` }),
+                directDownloadAllowed: true,
+                rightsStatus: 'open_access',
+              };
+              if (coverUrl) patch.coverUrl = coverUrl;
+              await (await import('axios')).default.patch(
+                `${SUPABASE_URL}/rest/v1/books?id=eq.${bookId}`,
+                patch,
+                { headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' }, timeout: 5000 }
+              );
+            }
+          } catch {}
+        }
+      }
+    } catch (e: any) {
+      console.warn(`[download] Anna's search failed: ${e.message}`);
+    }
+  }
+
   if (!md5 || typeof md5 !== "string" || !/^[a-f0-9]{32}$/i.test(md5)) {
-    return res.status(404).json({ success: false, error: "Download unavailable", message: "This document is not available right now. Try another result." });
+    const langMsg = requestedLang
+      ? `Book not available in ${requestedLang.toUpperCase()} language, or could not be found.`
+      : 'This document is not available right now. Try another result.';
+    return res.status(404).json({ success: false, error: "Download unavailable", message: langMsg });
+  }
+
+  // Language verification for MD5 before downloading
+  if (requestedLang) {
+    try {
+      const axiosMod = await import('axios');
+      const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
+      for (const mirror of ['https://annas-archive.li', 'https://annas-archive.org']) {
+        try {
+          const ir = await axiosMod.default.get(`${mirror}/md5/${md5}`, {
+            timeout: 10000, headers: { 'User-Agent': UA, 'Accept': 'text/html' },
+          });
+          const detectedLang = extractLangFromHtml(ir.data);
+          if (detectedLang && !langsMatch(requestedLang, detectedLang)) {
+            console.warn(`[download] Language mismatch for MD5 ${md5}: expected=${requestedLang}, found=${detectedLang}`);
+            return res.status(404).json({
+              success: false,
+              error: 'Language mismatch',
+              message: `Book not available in ${requestedLang.toUpperCase()} language. Found: ${detectedLang.toUpperCase()}`,
+            });
+          }
+          break; // verified
+        } catch { continue; }
+      }
+    } catch {}
   }
 
   // ── Anna's Archive fallback URL (most reliable, returns JSON with mirror list) ──
