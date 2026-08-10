@@ -3836,19 +3836,6 @@ function langsMatch(expected, found) {
   if (!expected || !found) return true;
   return normalizeLang(expected) === normalizeLang(found);
 }
-function extractLangFromHtml(html) {
-  const lower = html.toLowerCase();
-  if (lower.includes("swahili") || lower.includes("kiswahili")) return "sw";
-  if (lower.includes("english")) return "en";
-  if (lower.includes("french") || lower.includes("fran\xE7ais")) return "fr";
-  if (lower.includes("german") || lower.includes("deutsch")) return "de";
-  if (lower.includes("spanish") || lower.includes("espa\xF1ol")) return "es";
-  if (lower.includes("portuguese") || lower.includes("portugu\xEAs")) return "pt";
-  if (lower.includes("arabic")) return "ar";
-  if (lower.includes("chinese")) return "zh";
-  if (lower.includes("russian")) return "ru";
-  return null;
-}
 async function fetchBookCover(title, author, isbn) {
   const axiosMod = await import("axios");
   const ax = axiosMod.default;
@@ -3879,39 +3866,121 @@ async function fetchBookCover(title, author, isbn) {
   }
   return null;
 }
-async function searchAnnasForMd5(title, author, expectedLang, axios7) {
+async function searchLibGenForMd5(title, author, expectedLang, axios7) {
   const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
   const q = encodeURIComponent(`${title} ${author || ""}`.trim());
-  for (const mirror of ["https://annas-archive.li", "https://annas-archive.org"]) {
+  const mirrors = [
+    `https://libgen.li/index.php?req=${q}&lg_topic=libgen&open=0&view=simple&res=25&phrase=1&column=def`,
+    `https://libgen.rs/index.php?req=${q}&lg_topic=libgen&open=0&view=simple&res=25&phrase=1&column=def`
+  ];
+  for (const url of mirrors) {
     try {
-      const sr = await axios7.get(`${mirror}/search?q=${q}`, {
-        timeout: 15e3,
-        headers: { "User-Agent": UA, "Accept": "text/html" }
+      const sr = await axios7.get(url, {
+        timeout: 2e4,
+        headers: { "User-Agent": UA }
       });
       const html = sr.data;
-      const md5Pattern = /\/md5\/([a-f0-9]{32})/gi;
-      const seen = /* @__PURE__ */ new Set();
-      for (const m of html.matchAll(md5Pattern)) {
-        const candidateMd5 = m[1];
-        if (seen.has(candidateMd5)) continue;
-        seen.add(candidateMd5);
-        const ctx = html.slice(Math.max(0, m.index - 400), Math.min(html.length, m.index + 400)).toLowerCase();
-        const titleNorm = title.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim();
-        const words = titleNorm.split(" ").filter((w) => w.length > 2);
-        const matchCount = words.filter((w) => ctx.includes(w)).length;
-        if (words.length > 0 && matchCount / words.length < 0.3) continue;
-        try {
-          const ir = await axios7.get(`${mirror}/md5/${candidateMd5}`, {
-            timeout: 12e3,
-            headers: { "User-Agent": UA, "Accept": "text/html" }
-          });
-          const pageHtml = ir.data;
-          const detectedLang = extractLangFromHtml(pageHtml);
-          if (expectedLang && detectedLang && !langsMatch(expectedLang, detectedLang)) {
-            console.warn(`[anna] Language mismatch for MD5 ${candidateMd5}: expected=${expectedLang}, found=${detectedLang}`);
+      const rowPattern = /<tr[\s\S]*?<\/tr>/gi;
+      const rows = html.match(rowPattern) || [];
+      for (const row of rows) {
+        const md5Match = row.match(/md5=([a-f0-9]{32})/i);
+        if (!md5Match) continue;
+        const candidateMd5 = md5Match[1];
+        const titleMatch = row.match(/edition\.php[^>]*>([^<]+)</i);
+        const rowTitle = titleMatch ? titleMatch[1].trim() : "";
+        const cells = row.match(/<td[^>]*>([\s\S]*?)<\/td>/gi) || [];
+        let rowLang = "";
+        if (cells.length >= 5) {
+          rowLang = cells[4].replace(/<[^>]+>/g, "").trim();
+        }
+        const titleNorm = (s) => s.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
+        const t1 = titleNorm(title);
+        const t2 = titleNorm(rowTitle);
+        if (t1 && t2 && !t1.includes(t2.slice(0, 6)) && !t2.includes(t1.slice(0, 6))) {
+          const words1 = t1.split(" ").filter((w) => w.length > 2);
+          const words2 = new Set(t2.split(" ").filter((w) => w.length > 2));
+          const overlap = words1.filter((w) => words2.has(w)).length;
+          if (words1.length > 0 && overlap / words1.length < 0.3) continue;
+        }
+        if (expectedLang && rowLang) {
+          const rowLangNorm = normalizeLang(rowLang);
+          if (rowLangNorm && !langsMatch(expectedLang, rowLangNorm)) {
+            console.warn(`[libgen] Language mismatch: expected=${expectedLang}, found=${rowLang} for "${rowTitle}"`);
             continue;
           }
-          return candidateMd5;
+        }
+        console.log(`[libgen] Found MD5 ${candidateMd5} for "${rowTitle}" [${rowLang}]`);
+        return candidateMd5;
+      }
+    } catch (e) {
+      console.warn(`[libgen] Search failed for ${url.slice(0, 60)}: ${e.message}`);
+      continue;
+    }
+  }
+  return null;
+}
+async function downloadFromLibGen(md5, axios7) {
+  const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+  const mirrors = [
+    { ads: `https://libgen.li/ads.php?md5=${md5}`, base: "https://libgen.li", referer: "https://libgen.li/" },
+    { ads: `https://libgen.rocks/ads.php?md5=${md5}`, base: "https://libgen.rocks", referer: "https://libgen.rocks/" },
+    { ads: `https://libgen.gs/ads.php?md5=${md5}`, base: "https://libgen.gs", referer: "https://libgen.gs/" }
+  ];
+  for (const { ads, base, referer } of mirrors) {
+    try {
+      const adsResp = await axios7.get(ads, {
+        timeout: 15e3,
+        headers: { "User-Agent": UA, "Referer": referer },
+        validateStatus: (s) => s < 500
+      });
+      const adsHtml = adsResp.data;
+      const keyMatch = adsHtml.match(new RegExp(`get.php\\?md5=${md5}&key=([A-Za-z0-9]+)`, "i"));
+      if (keyMatch) {
+        const key = keyMatch[1];
+        const dlUrl = `${base}/get.php?md5=${md5}&key=${key}`;
+        try {
+          const dr = await axios7.get(dlUrl, {
+            responseType: "arraybuffer",
+            timeout: 6e4,
+            maxRedirects: 5,
+            headers: { "User-Agent": UA, "Referer": ads },
+            validateStatus: (s) => s < 500
+          });
+          const buf = Buffer.from(dr.data);
+          const ct = dr.headers["content-type"] || "";
+          if (buf.length > 1e3) {
+            const magic = buf.slice(0, 4).toString("hex");
+            if (magic === "25504446" || magic === "504b0304" || buf.length > 1e5) {
+              console.log(`[libgen] \u2705 Downloaded from ${base} (${buf.length} bytes)`);
+              return { buffer: buf, ct: ct || "application/pdf" };
+            }
+          }
+        } catch {
+          continue;
+        }
+      }
+      const directUrls = [
+        `${base}/get.php?md5=${md5}`,
+        `https://cdn1.booksdl.org/get.php?md5=${md5}`
+      ];
+      for (const dlUrl of directUrls) {
+        try {
+          const dr = await axios7.get(dlUrl, {
+            responseType: "arraybuffer",
+            timeout: 6e4,
+            maxRedirects: 5,
+            headers: { "User-Agent": UA, "Referer": referer },
+            validateStatus: (s) => s < 500
+          });
+          const buf = Buffer.from(dr.data);
+          const ct = dr.headers["content-type"] || "";
+          if (buf.length > 1e3) {
+            const magic = buf.slice(0, 4).toString("hex");
+            if (magic === "25504446" || magic === "504b0304" || buf.length > 1e5) {
+              console.log(`[libgen] \u2705 Downloaded directly from ${dlUrl.slice(0, 60)}`);
+              return { buffer: buf, ct: ct || "application/pdf" };
+            }
+          }
         } catch {
           continue;
         }
@@ -4025,73 +4094,62 @@ app.all("/api/download", async (req, res) => {
     md5 = md5 || urlMd5;
   }
   if ((!md5 || !/^[a-f0-9]{32}$/i.test(md5)) && title && title.trim().length > 1) {
-    console.log(`[download] No valid MD5, searching Anna's Archive for "${title}" (lang: ${requestedLang || "any"})...`);
+    console.log(`[download] No valid MD5, searching LibGen for "${title}" (lang: ${requestedLang || "any"})...`);
     try {
-      const axiosMod = await import("axios");
-      const foundMd5 = await searchAnnasForMd5(title.trim(), author, requestedLang, axiosMod.default);
+      const axiosMod2 = await import("axios");
+      const foundMd5 = await searchLibGenForMd5(title.trim(), author, requestedLang, axiosMod2.default);
       if (foundMd5) {
-        console.log(`[download] Found MD5 via search: ${foundMd5}`);
+        console.log(`[download] Found MD5 via LibGen search: ${foundMd5}`);
         md5 = foundMd5;
         if (bookId) {
-          const coverUrl = await fetchBookCover(title, author, isbn).catch(() => void 0);
-          try {
+          fetchBookCover(title, author, isbn).then((coverUrl) => {
             const SUPABASE_URL = process.env.SUPABASE_URL;
             const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-            if (SUPABASE_URL && SUPABASE_KEY) {
-              const patch = {
-                formats: JSON.stringify({ pdf: `md5:${foundMd5}` }),
-                directDownloadAllowed: true,
-                rightsStatus: "open_access"
-              };
-              if (coverUrl) patch.coverUrl = coverUrl;
-              await (await import("axios")).default.patch(
-                `${SUPABASE_URL}/rest/v1/books?id=eq.${bookId}`,
-                patch,
-                { headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" }, timeout: 5e3 }
-              );
-            }
-          } catch {
-          }
+            if (!SUPABASE_URL || !SUPABASE_KEY) return;
+            const patch = {
+              formats: JSON.stringify({ pdf: `md5:${foundMd5}` }),
+              directDownloadAllowed: true,
+              rightsStatus: "open_access"
+            };
+            if (coverUrl) patch.coverUrl = coverUrl;
+            import("axios").then((ax) => ax.default.patch(
+              `${SUPABASE_URL}/rest/v1/books?id=eq.${bookId}`,
+              patch,
+              { headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" }, timeout: 5e3 }
+            ).catch(() => {
+            }));
+          }).catch(() => {
+          });
         }
       }
     } catch (e) {
-      console.warn(`[download] Anna's search failed: ${e.message}`);
+      console.warn(`[download] LibGen search failed: ${e.message}`);
     }
   }
   if (!md5 || typeof md5 !== "string" || !/^[a-f0-9]{32}$/i.test(md5)) {
     const langMsg = requestedLang ? `Book not available in ${requestedLang.toUpperCase()} language, or could not be found.` : "This document is not available right now. Try another result.";
     return res.status(404).json({ success: false, error: "Download unavailable", message: langMsg });
   }
-  if (requestedLang) {
-    try {
-      const axiosMod = await import("axios");
-      const UA2 = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
-      for (const mirror of ["https://annas-archive.li", "https://annas-archive.org"]) {
-        try {
-          const ir = await axiosMod.default.get(`${mirror}/md5/${md5}`, {
-            timeout: 1e4,
-            headers: { "User-Agent": UA2, "Accept": "text/html" }
-          });
-          const detectedLang = extractLangFromHtml(ir.data);
-          if (detectedLang && !langsMatch(requestedLang, detectedLang)) {
-            console.warn(`[download] Language mismatch for MD5 ${md5}: expected=${requestedLang}, found=${detectedLang}`);
-            return res.status(404).json({
-              success: false,
-              error: "Language mismatch",
-              message: `Book not available in ${requestedLang.toUpperCase()} language. Found: ${detectedLang.toUpperCase()}`
-            });
-          }
-          break;
-        } catch {
-          continue;
-        }
-      }
-    } catch {
+  console.log(`[download] Proceeding with MD5: ${md5} (lang: ${requestedLang || "any"})`);
+  const axiosMod = await import("axios");
+  try {
+    const lgResult = await downloadFromLibGen(md5, axiosMod.default);
+    if (lgResult) {
+      const ext = (format || "pdf").toLowerCase();
+      res.setHeader("Content-Type", lgResult.ct || "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="book.${ext}"`);
+      res.setHeader("Content-Length", lgResult.buffer.length.toString());
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Expose-Headers", "Content-Disposition, Content-Length, X-Download-Source");
+      res.setHeader("X-Download-Source", "libgen");
+      return res.send(lgResult.buffer);
     }
+  } catch (e) {
+    console.warn(`[download] LibGen download failed: ${e.message}`);
   }
   const annaJsonUrl = `https://annas-archive.li/md5/${md5}.json`;
   const annaHtmlUrl = `https://annas-archive.li/md5/${md5}`;
-  const axios7 = await import("axios");
+  const axios7 = axiosMod;
   const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
   const TIMEOUT = 2e4;
   const isBinaryCt = (ct) => /application\/pdf|application\/octet-stream|application\/epub|djvu|binary/i.test(ct || "");
