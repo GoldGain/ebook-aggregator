@@ -7,36 +7,57 @@ interface DownloadButtonProps {
   format?: string;
   url?: string | null;
   query?: string;
-  directDownloadAllowed?: boolean;
-  sourceUrl?: string | null;
   onSuccess?: () => void;
-  author?: string | null;
-  bookId?: number | null;
-  rightsStatus?: string | null;
-  language?: string | null;
+}
+
+interface SearchCandidate {
+  md5?: string;
+  downloadUrl?: string;
+  sourceUrl?: string;
+  formats?: { pdf?: string };
+  title?: string;
 }
 
 function safeFilename(title: string, format: string) {
-  const name = title.replace(/[^a-z0-9]+/gi, " ").trim().slice(0, 80) || "document";
-  return `${name}.${format.toLowerCase().replace(/[^a-z0-9]/g, "") || "pdf"}`;
+  const name = title
+    .replace(/[^a-z0-9]+/gi, " ")
+    .trim()
+    .slice(0, 80) || "document";
+  const extension = format.toLowerCase().replace(/[^a-z0-9]/g, "") || "pdf";
+  return `${name}.${extension}`;
 }
 
 async function saveDownload(response: Response, filename: string) {
   const contentType = response.headers.get("content-type") || "";
+  const contentDisposition = response.headers.get("content-disposition") || "";
+
   if (!response.ok) {
-    let msg = "Download unavailable";
-    try { const d = await response.json(); msg = d?.message || d?.error || msg; } catch {}
-    throw new Error(msg);
+    let message = "Download unavailable";
+    try {
+      const data = await response.json();
+      message = data?.message || data?.error || message;
+    } catch {
+      // Keep the concise fallback message for non-JSON errors.
+    }
+    throw new Error(message);
   }
+
   if (contentType.includes("application/json") || contentType.includes("text/html") || contentType.includes("text/plain")) {
-    let msg = "Download unavailable";
-    try { const d = await response.json(); msg = d?.message || d?.error || msg; } catch {}
-    throw new Error(msg);
+    let message = "Download unavailable";
+    try {
+      const data = await response.json();
+      message = data?.message || data?.error || message;
+    } catch {
+      // The proxy may return a non-JSON error page; do not expose it in the UI.
+    }
+    throw new Error(message);
   }
+
   const blob = await response.blob();
-  if (blob.size < 1000 && !response.headers.get("content-disposition")) {
+  if (blob.size < 1000 && !contentDisposition) {
     throw new Error("The source did not return a complete document");
   }
+
   const blobUrl = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = blobUrl;
@@ -44,58 +65,88 @@ async function saveDownload(response: Response, filename: string) {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
+  window.setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
 }
 
 async function requestDownload(
-  candidate: { md5?: string | null; title: string; author?: string | null; bookId?: number | null; format: string; language?: string | null },
+  candidate: { md5?: string | null; url?: string | null; query?: string; format: string; title: string },
   onSuccess?: () => void,
 ) {
   const filename = safeFilename(candidate.title, candidate.format);
+  const attemptedMd5 = new Set<string>();
+  const attemptedUrls = new Set<string>();
 
-  // Build request body
-  const body: Record<string, unknown> = { format: candidate.format, title: candidate.title };
-  if (candidate.md5 && /^[a-f0-9]{32}$/i.test(candidate.md5)) body.md5 = candidate.md5;
-  if (candidate.author) body.author = candidate.author;
-  if (candidate.bookId) body.bookId = candidate.bookId;
-  if (candidate.language) body.language = candidate.language;
+  const tryMd5 = async (md5?: string | null) => {
+    if (!md5 || !/^[a-f0-9]{32}$/i.test(md5) || attemptedMd5.has(md5.toLowerCase())) return false;
+    attemptedMd5.add(md5.toLowerCase());
+    try {
+      const response = await fetch("/api/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/pdf,application/octet-stream,*/*" },
+        body: JSON.stringify({ md5, format: candidate.format }),
+      });
+      await saveDownload(response, filename);
+      return true;
+    } catch {
+      return false;
+    }
+  };
 
-  try {
-    const response = await fetch("/api/download", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/pdf,application/octet-stream,*/*" },
-      body: JSON.stringify(body),
-    });
-    await saveDownload(response, filename);
-    onSuccess?.();
-  } catch (e) {
-    throw e;
+  const tryUrl = async (url?: string | null) => {
+    if (!url || !/^https?:\/\//i.test(url) || attemptedUrls.has(url)) return false;
+    attemptedUrls.add(url);
+    try {
+      const response = await fetch(`/api/download?url=${encodeURIComponent(url)}`, {
+        headers: { Accept: "application/pdf,application/octet-stream,*/*" },
+      });
+      await saveDownload(response, filename);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const urlMd5 = candidate.url?.match(/(?:md5=|\/md5\/)([a-f0-9]{32})/i)?.[1] || null;
+  if (await tryMd5(candidate.md5 || urlMd5)) { onSuccess?.(); return; }
+  if (await tryUrl(candidate.url)) { onSuccess?.(); return; }
+
+  if (candidate.query && candidate.query.trim().length >= 2) {
+    try {
+      const response = await fetch(`/api/search?q=${encodeURIComponent(candidate.query.trim())}&limit=20`);
+      if (response.ok) {
+        const data = await response.json() as { books?: SearchCandidate[] };
+        for (const result of data.books || []) {
+          if (await tryMd5(result.md5)) { onSuccess?.(); return; }
+          const resultUrl = result.downloadUrl || result.formats?.pdf || result.sourceUrl;
+          if (await tryUrl(resultUrl)) { onSuccess?.(); return; }
+        }
+      }
+    } catch {
+      // Report the same helpful message for network and source failures.
+    }
   }
+
+  throw new Error("Book not available right now. Try another source.");
 }
 
-export function DownloadButton({ md5, title, format = "pdf", author, bookId, rightsStatus, language, onSuccess }: DownloadButtonProps) {
+export function DownloadButton({ md5, title, format = "pdf", url, query, onSuccess }: DownloadButtonProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [status, setStatus] = useState("");
 
   const handleDownload = async (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     if (loading) return;
+
     setLoading(true);
     setError("");
-    setStatus("Downloading...");
     try {
-      await requestDownload({ md5, title, author, bookId, format, language }, onSuccess);
+      await requestDownload({ md5, url, query, format, title }, onSuccess);
     } catch (downloadError) {
-      setError(downloadError instanceof Error ? downloadError.message : "Book not available right now.");
-      setStatus("");
+      setError(downloadError instanceof Error ? downloadError.message : "Book not available right now. Try another source.");
     } finally {
       setLoading(false);
     }
   };
-
-  // Always show "Download PDF" — never "Search & Download"
-  const label = loading ? (status || "Downloading...") : error ? "Try Again" : "Download PDF";
 
   return (
     <div className="flex min-w-0 items-center gap-2">
@@ -106,7 +157,7 @@ export function DownloadButton({ md5, title, format = "pdf", author, bookId, rig
         className="flex shrink-0 items-center gap-2 rounded-lg bg-gradient-to-r from-primary to-pink-600 px-4 py-2 text-xs font-bold text-primary-foreground shadow-md transition hover:scale-105 hover:shadow-lg hover:shadow-primary/40 disabled:cursor-not-allowed disabled:scale-100 disabled:opacity-50"
       >
         {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-        <span>{label}</span>
+        <span>{loading ? "Downloading..." : error ? "Try Again" : "Download PDF"}</span>
       </button>
       {error && <span className="min-w-0 truncate text-[10px] font-medium text-destructive" role="alert">{error}</span>}
     </div>

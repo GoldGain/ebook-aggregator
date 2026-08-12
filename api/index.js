@@ -242,7 +242,6 @@ var init_schema = __esm({
 var db_exports = {};
 __export(db_exports, {
   addToBookshelf: () => addToBookshelf,
-  countBooks: () => countBooks,
   createAggregatorLog: () => createAggregatorLog,
   createAggregatorSource: () => createAggregatorSource,
   createBook: () => createBook,
@@ -448,34 +447,15 @@ async function searchBooks(query, limit = 20, offset = 0) {
     }
   } catch {
   }
-  return db.select().from(books).where(buildSearchCondition(query)).orderBy(desc(books.downloadCount)).limit(limit).offset(offset);
-}
-function buildSearchCondition(query) {
   const searchTerm = `%${query}%`;
-  return or(
-    ilike(books.title, searchTerm),
-    ilike(books.author, searchTerm),
-    ilike(books.subjects, searchTerm),
-    ilike(books.description, searchTerm),
-    ilike(books.publisher, searchTerm),
-    ilike(books.isbn, searchTerm),
-    ilike(books.publishedDate, searchTerm)
-  );
-}
-async function countBooks(options) {
-  const db = await getDb();
-  if (!db) return 0;
-  const conditions = [];
-  if (options.genre) {
-    const genre = await getGenreBySlug(options.genre);
-    if (genre) conditions.push(eq(books.genreId, genre.id));
-  }
-  if (options.language) conditions.push(ilike(books.language, options.language));
-  if (options.educationalLevel) conditions.push(eq(books.educationalLevel, options.educationalLevel));
-  if (options.source) conditions.push(eq(books.source, options.source));
-  if (options.search) conditions.push(buildSearchCondition(options.search));
-  const result = await db.select({ count: count() }).from(books).where(conditions.length > 0 ? and(...conditions) : void 0);
-  return result[0]?.count ?? 0;
+  return db.select().from(books).where(
+    or(
+      like(books.title, searchTerm),
+      like(books.author, searchTerm),
+      like(books.subjects, searchTerm),
+      like(books.description, searchTerm)
+    )
+  ).orderBy(desc(books.downloadCount)).limit(limit).offset(offset);
 }
 async function listBooks(options) {
   const db = await getDb();
@@ -491,7 +471,14 @@ async function listBooks(options) {
   if (options.educationalLevel) conditions.push(eq(books.educationalLevel, options.educationalLevel));
   if (options.source) conditions.push(eq(books.source, options.source));
   if (options.search) {
-    conditions.push(buildSearchCondition(options.search));
+    conditions.push(
+      or(
+        ilike(books.title, `%${options.search}%`),
+        ilike(books.author, `%${options.search}%`),
+        ilike(books.subjects, `%${options.search}%`),
+        ilike(books.description, `%${options.search}%`)
+      )
+    );
   }
   if (options.pdfOnly) {
     conditions.push(like(books.formats, '%"pdf":%'));
@@ -1060,192 +1047,6 @@ var init_knec = __esm({
   }
 });
 
-// server/sources/policy.ts
-function getSourceRightsPolicy(sourceSlug) {
-  return APPROVED_SOURCE_POLICIES[sourceSlug] ?? null;
-}
-function isApprovedSource(sourceSlug) {
-  return getSourceRightsPolicy(sourceSlug) !== null;
-}
-function selectScheduledSource(now = /* @__PURE__ */ new Date()) {
-  const utcDay = Math.floor(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) / 864e5);
-  return SCHEDULED_SOURCE_SLUGS[utcDay % SCHEDULED_SOURCE_SLUGS.length];
-}
-var APPROVED_SOURCE_POLICIES, SCHEDULED_SOURCE_SLUGS;
-var init_policy = __esm({
-  "server/sources/policy.ts"() {
-    APPROVED_SOURCE_POLICIES = {
-      gutenberg: {
-        rightsStatus: "public_domain",
-        licenseName: "Project Gutenberg public-domain collection",
-        licenseUrl: "https://www.gutenberg.org/policy/license.html",
-        allowDirectDownload: true
-      },
-      doab: {
-        rightsStatus: "open_access",
-        licenseName: "Open-access book; see publisher record for license terms",
-        licenseUrl: "https://www.doabooks.org/",
-        allowDirectDownload: true
-      },
-      open_textbook: {
-        rightsStatus: "open_access",
-        licenseName: "Open textbook; see source record for license terms",
-        licenseUrl: "https://open.umn.edu/opentextbooks/",
-        allowDirectDownload: true
-      },
-      openstax: {
-        rightsStatus: "open_access",
-        licenseName: "OpenStax openly licensed textbook",
-        licenseUrl: "https://openstax.org/details/books",
-        allowDirectDownload: true
-      },
-      wikibooks: {
-        rightsStatus: "open_access",
-        licenseName: "Wikibooks free-content resource",
-        licenseUrl: "https://en.wikibooks.org/wiki/Wikibooks:Copyrights",
-        allowDirectDownload: false
-      },
-      wikisource: {
-        rightsStatus: "public_domain",
-        licenseName: "Wikisource free-content or public-domain text",
-        licenseUrl: "https://en.wikisource.org/wiki/Wikisource:Copyright_policy",
-        allowDirectDownload: false
-      },
-      doaj: {
-        rightsStatus: "open_access",
-        licenseName: "Open-access article indexed by DOAJ",
-        licenseUrl: "https://doaj.org/apply/transparency",
-        allowDirectDownload: true
-      },
-      pubmed: {
-        rightsStatus: "open_access",
-        licenseName: "Open-access article indexed by PubMed Central",
-        licenseUrl: "https://pmc.ncbi.nlm.nih.gov/about/",
-        allowDirectDownload: false
-      },
-      ajol: {
-        rightsStatus: "open_access",
-        licenseName: "Open-access article indexed by African Journals Online",
-        licenseUrl: "https://www.ajol.info/",
-        allowDirectDownload: false
-      },
-      open_library: {
-        rightsStatus: "metadata_only",
-        licenseName: "Discovery metadata; access remains subject to the source record",
-        licenseUrl: "https://openlibrary.org/developers/api",
-        allowDirectDownload: false
-      },
-      internet_archive: {
-        rightsStatus: "open_access",
-        licenseName: "Internet Archive open-access or public-domain item",
-        licenseUrl: "https://archive.org/about/terms.php",
-        allowDirectDownload: true
-      },
-      saylor: {
-        rightsStatus: "open_access",
-        licenseName: "Saylor Academy openly licensed course material",
-        licenseUrl: "https://www.saylor.org/about/",
-        allowDirectDownload: false
-      },
-      mit_ocw: {
-        rightsStatus: "open_access",
-        licenseName: "MIT OpenCourseWare CC BY-NC-SA",
-        licenseUrl: "https://ocw.mit.edu/terms/",
-        allowDirectDownload: false
-      },
-      ck12: {
-        rightsStatus: "open_access",
-        licenseName: "CK-12 openly licensed educational content",
-        licenseUrl: "https://www.ck12.org/terms/",
-        allowDirectDownload: false
-      },
-      libretexts: {
-        rightsStatus: "open_access",
-        licenseName: "LibreTexts openly licensed textbook",
-        licenseUrl: "https://libretexts.org/",
-        allowDirectDownload: false
-      },
-      oer_commons: {
-        rightsStatus: "open_access",
-        licenseName: "OER Commons open educational resource",
-        licenseUrl: "https://www.oercommons.org/",
-        allowDirectDownload: false
-      },
-      openlearn: {
-        rightsStatus: "open_access",
-        licenseName: "OpenLearn free course material from The Open University",
-        licenseUrl: "https://www.open.edu/openlearn/about-openlearn/frequently-asked-questions-on-openlearn",
-        allowDirectDownload: false
-      },
-      // Kenyan sources - government educational materials
-      kicd: {
-        rightsStatus: "open_access",
-        licenseName: "Kenya Institute of Curriculum Development - public educational resource",
-        licenseUrl: "https://kicd.ac.ke",
-        allowDirectDownload: true
-      },
-      knec: {
-        rightsStatus: "open_access",
-        licenseName: "Kenya National Examinations Council - public examination resource",
-        licenseUrl: "https://cba.knec.ac.ke",
-        allowDirectDownload: true
-      },
-      easy_elimu: {
-        rightsStatus: "open_access",
-        licenseName: "Easy Elimu - Kenyan educational resource",
-        licenseUrl: "https://www.easyelimu.com",
-        allowDirectDownload: false
-      },
-      atika_school: {
-        rightsStatus: "open_access",
-        licenseName: "Atika School - Kenyan educational resource",
-        licenseUrl: "https://www.atikaschool.org",
-        allowDirectDownload: false
-      },
-      kenyaplex: {
-        rightsStatus: "open_access",
-        licenseName: "KenyaPlex - Kenyan educational resource",
-        licenseUrl: "https://www.kenyaplex.com",
-        allowDirectDownload: false
-      },
-      schools_net: {
-        rightsStatus: "open_access",
-        licenseName: "Schools Net Kenya - Kenyan educational resource",
-        licenseUrl: "https://www.schoolsnetkenya.com",
-        allowDirectDownload: false
-      },
-      cbc_resources: {
-        rightsStatus: "open_access",
-        licenseName: "CBC Resources Kenya - Competency Based Curriculum",
-        licenseUrl: "https://cbcresources.co.ke",
-        allowDirectDownload: false
-      },
-      teachers_updates: {
-        rightsStatus: "open_access",
-        licenseName: "Teachers Updates Kenya - educational resource",
-        licenseUrl: "https://teachersupdates.net",
-        allowDirectDownload: false
-      }
-    };
-    SCHEDULED_SOURCE_SLUGS = [
-      "gutenberg",
-      "doab",
-      "open_textbook",
-      "openstax",
-      "open_library",
-      "internet_archive",
-      "wikibooks",
-      "wikisource",
-      "doaj",
-      "saylor",
-      "mit_ocw",
-      "ck12",
-      "kicd",
-      "knec"
-    ];
-  }
-});
-
 // server/sources/ajol.ts
 var ajol_exports = {};
 __export(ajol_exports, {
@@ -1344,176 +1145,6 @@ var AJOL_OAI_URL;
 var init_ajol = __esm({
   "server/sources/ajol.ts"() {
     AJOL_OAI_URL = "https://www.ajol.info/index.php/ajol/oai";
-  }
-});
-
-// server/sources/external-search.ts
-var external_search_exports = {};
-__export(external_search_exports, {
-  runExternalSearch: () => runExternalSearch,
-  searchGutenberg: () => searchGutenberg,
-  searchInternetArchive: () => searchInternetArchive,
-  searchOpenLibrary: () => searchOpenLibrary,
-  searchOpenStax: () => searchOpenStax
-});
-async function fetchJson(url, timeoutMs = 8e3) {
-  const res = await fetch(url, { headers: DEFAULT_HEADERS2, signal: AbortSignal.timeout(timeoutMs) });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
-}
-async function searchInternetArchive(query, limit = 15) {
-  if (!isApprovedSource("internet_archive")) return [];
-  try {
-    const tokens = query.trim().split(/\s+/).filter(Boolean);
-    const qTerm = tokens.length > 1 ? encodeURIComponent(`"${tokens.join(" ")}"`) : encodeURIComponent(query);
-    const url = `https://archive.org/advancedsearch.php?q=${qTerm}+AND+mediatype%3Atexts&fl[]=identifier,title,creator,description,language,subject,date,publisher,pdf&rows=${Math.min(limit, 50)}&output=json`;
-    const data = await fetchJson(url);
-    const docs = (data?.response?.docs || []).slice(0, limit);
-    const policy = getSourceRightsPolicy("internet_archive");
-    return docs.map((d) => ({
-      title: d.title || "",
-      author: Array.isArray(d.creator) ? d.creator[0] || "Internet Archive" : d.creator || "Internet Archive",
-      description: Array.isArray(d.description) ? d.description[0] || "" : d.description || "",
-      language: Array.isArray(d.language) ? d.language[0] || "en" : d.language || "en",
-      subjects: Array.isArray(d.subject) ? d.subject.slice(0, 5) : [],
-      year: d.date ? String(d.date).slice(0, 4) : void 0,
-      publisher: d.publisher || void 0,
-      pdfUrl: d.pdf ? `https://archive.org/download/${d.identifier}/${d.pdf}` : `https://archive.org/download/${d.identifier}`,
-      coverUrl: `https://archive.org/services/img/${d.identifier}`,
-      sourceUrl: `https://archive.org/details/${d.identifier}`,
-      source: "internet_archive",
-      rightsStatus: policy.rightsStatus,
-      licenseName: policy.licenseName,
-      licenseUrl: policy.licenseUrl,
-      directDownloadAllowed: policy.allowDirectDownload
-    })).filter((b) => b.title.length > 2);
-  } catch {
-    return [];
-  }
-}
-async function searchGutenberg(query, limit = 15) {
-  if (!isApprovedSource("gutenberg")) return [];
-  try {
-    const data = await fetchJson(
-      `https://gutendex.com/books?search=${encodeURIComponent(query)}&limit=${Math.min(limit, 50)}`
-    );
-    const results = (data?.results || []).slice(0, limit);
-    const policy = getSourceRightsPolicy("gutenberg");
-    return results.map((b) => ({
-      title: b.title || "",
-      author: b.authors?.[0]?.name || "Unknown",
-      description: `Public-domain title from Project Gutenberg (ID ${b.id}).`,
-      language: b.languages?.[0] || "en",
-      subjects: [...b.subjects || [], ...b.bookshelves || []].slice(0, 5),
-      coverUrl: b.cover_image || void 0,
-      pdfUrl: b.formats?.["application/pdf"] || void 0,
-      sourceUrl: `https://www.gutenberg.org/ebooks/${b.id}`,
-      source: "gutenberg",
-      rightsStatus: policy.rightsStatus,
-      licenseName: policy.licenseName,
-      licenseUrl: policy.licenseUrl,
-      directDownloadAllowed: policy.allowDirectDownload
-    })).filter((r) => r.title.length > 2);
-  } catch {
-    return [];
-  }
-}
-async function searchOpenLibrary(query, limit = 8) {
-  if (!isApprovedSource("open_library")) return [];
-  try {
-    const data = await fetchJson(
-      `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=${Math.min(limit, 20)}`
-    );
-    const docs = (data?.docs || []).slice(0, limit);
-    const policy = getSourceRightsPolicy("open_library");
-    return docs.map((b) => ({
-      title: b.title || "",
-      author: b.author_name?.[0] || "Unknown",
-      description: [
-        b.first_publish_year ? `First published ${b.first_publish_year}` : "",
-        b.language?.[0] ? `Language: ${b.language[0]}` : ""
-      ].filter(Boolean).join(". "),
-      language: b.language?.[0] || "unknown",
-      subjects: (b.subject || []).slice(0, 5),
-      year: b.first_publish_year ? String(b.first_publish_year) : void 0,
-      publisher: b.publisher?.[0] || void 0,
-      coverUrl: b.cover_edition_key ? `https://covers.openlibrary.org/b/olid/${b.cover_edition_key}-M.jpg` : b.cover_i ? `https://covers.openlibrary.org/b/id/${b.cover_i}-M.jpg` : void 0,
-      pdfUrl: void 0,
-      sourceUrl: b.key ? `https://openlibrary.org${b.key}` : "https://openlibrary.org",
-      source: "open_library",
-      rightsStatus: policy.rightsStatus,
-      licenseName: policy.licenseName,
-      licenseUrl: policy.licenseUrl,
-      directDownloadAllowed: policy.allowDirectDownload
-    })).filter((r) => r.title.length > 2);
-  } catch {
-    return [];
-  }
-}
-async function searchOpenStax(query, limit = 10) {
-  if (!isApprovedSource("openstax")) return [];
-  try {
-    const data = await fetchJson("https://openstax.org/api/v2/books/?format=json&limit=100", 8e3);
-    const books2 = (data?.items || data?.results || []).slice(0, limit);
-    const policy = getSourceRightsPolicy("openstax");
-    const needle = query.toLowerCase();
-    return books2.filter(
-      (b) => (b.title || "").toLowerCase().includes(needle) || (b.description || "").toLowerCase().includes(needle)
-    ).map((b) => ({
-      title: b.title || b.name || "",
-      author: "OpenStax",
-      description: b.description || b.short_description || `OpenStax openly licensed textbook: ${b.title}`,
-      language: "en",
-      subjects: [b.subject_name || b.subject || "Education"].filter(Boolean),
-      coverUrl: b.cover_url || b.cover?.url || void 0,
-      pdfUrl: b.high_resolution_pdf_url || b.pdf_url || void 0,
-      sourceUrl: b.webview_rex_link || `https://openstax.org/details/books/${b.slug}`,
-      publisher: "OpenStax",
-      source: "openstax",
-      rightsStatus: policy.rightsStatus,
-      licenseName: policy.licenseName,
-      licenseUrl: policy.licenseUrl,
-      directDownloadAllowed: policy.allowDirectDownload
-    }));
-  } catch {
-    return [];
-  }
-}
-async function runExternalSearch(query, limit = 15) {
-  const [internetArchive, gutenberg, openLibrary, openstax] = await Promise.allSettled([
-    withTimeout(searchInternetArchive(query, limit), 8e3),
-    withTimeout(searchGutenberg(query, limit), 8e3),
-    withTimeout(searchOpenLibrary(query, limit), 8e3),
-    withTimeout(searchOpenStax(query, limit), 8e3)
-  ]);
-  return {
-    internet_archive: internetArchive.status === "fulfilled" ? internetArchive.value : [],
-    gutenberg: gutenberg.status === "fulfilled" ? gutenberg.value : [],
-    open_library: openLibrary.status === "fulfilled" ? openLibrary.value : [],
-    openstax: openstax.status === "fulfilled" ? openstax.value : []
-  };
-}
-var DEFAULT_HEADERS2, withTimeout;
-var init_external_search = __esm({
-  "server/sources/external-search.ts"() {
-    init_policy();
-    DEFAULT_HEADERS2 = {
-      "User-Agent": "Mozilla/5.0 (compatible; ZAMIFU-E-MATERIALS/2.0; Educational Aggregator)",
-      "Accept": "application/json"
-    };
-    withTimeout = async (promise, milliseconds) => {
-      let timer;
-      try {
-        return await Promise.race([
-          promise,
-          new Promise((_, reject) => {
-            timer = setTimeout(() => reject(new Error("source timeout")), milliseconds);
-          })
-        ]);
-      } finally {
-        if (timer) clearTimeout(timer);
-      }
-    };
   }
 });
 
@@ -2591,8 +2222,188 @@ async function fetchTeachersUpdatesResources(limit = 50) {
   }
 }
 
+// server/sources/policy.ts
+var APPROVED_SOURCE_POLICIES = {
+  gutenberg: {
+    rightsStatus: "public_domain",
+    licenseName: "Project Gutenberg public-domain collection",
+    licenseUrl: "https://www.gutenberg.org/policy/license.html",
+    allowDirectDownload: true
+  },
+  doab: {
+    rightsStatus: "open_access",
+    licenseName: "Open-access book; see publisher record for license terms",
+    licenseUrl: "https://www.doabooks.org/",
+    allowDirectDownload: true
+  },
+  open_textbook: {
+    rightsStatus: "open_access",
+    licenseName: "Open textbook; see source record for license terms",
+    licenseUrl: "https://open.umn.edu/opentextbooks/",
+    allowDirectDownload: true
+  },
+  openstax: {
+    rightsStatus: "open_access",
+    licenseName: "OpenStax openly licensed textbook",
+    licenseUrl: "https://openstax.org/details/books",
+    allowDirectDownload: true
+  },
+  wikibooks: {
+    rightsStatus: "open_access",
+    licenseName: "Wikibooks free-content resource",
+    licenseUrl: "https://en.wikibooks.org/wiki/Wikibooks:Copyrights",
+    allowDirectDownload: false
+  },
+  wikisource: {
+    rightsStatus: "public_domain",
+    licenseName: "Wikisource free-content or public-domain text",
+    licenseUrl: "https://en.wikisource.org/wiki/Wikisource:Copyright_policy",
+    allowDirectDownload: false
+  },
+  doaj: {
+    rightsStatus: "open_access",
+    licenseName: "Open-access article indexed by DOAJ",
+    licenseUrl: "https://doaj.org/apply/transparency",
+    allowDirectDownload: true
+  },
+  pubmed: {
+    rightsStatus: "open_access",
+    licenseName: "Open-access article indexed by PubMed Central",
+    licenseUrl: "https://pmc.ncbi.nlm.nih.gov/about/",
+    allowDirectDownload: false
+  },
+  ajol: {
+    rightsStatus: "open_access",
+    licenseName: "Open-access article indexed by African Journals Online",
+    licenseUrl: "https://www.ajol.info/",
+    allowDirectDownload: false
+  },
+  open_library: {
+    rightsStatus: "metadata_only",
+    licenseName: "Discovery metadata; access remains subject to the source record",
+    licenseUrl: "https://openlibrary.org/developers/api",
+    allowDirectDownload: false
+  },
+  internet_archive: {
+    rightsStatus: "open_access",
+    licenseName: "Internet Archive open-access or public-domain item",
+    licenseUrl: "https://archive.org/about/terms.php",
+    allowDirectDownload: true
+  },
+  saylor: {
+    rightsStatus: "open_access",
+    licenseName: "Saylor Academy openly licensed course material",
+    licenseUrl: "https://www.saylor.org/about/",
+    allowDirectDownload: false
+  },
+  mit_ocw: {
+    rightsStatus: "open_access",
+    licenseName: "MIT OpenCourseWare CC BY-NC-SA",
+    licenseUrl: "https://ocw.mit.edu/terms/",
+    allowDirectDownload: false
+  },
+  ck12: {
+    rightsStatus: "open_access",
+    licenseName: "CK-12 openly licensed educational content",
+    licenseUrl: "https://www.ck12.org/terms/",
+    allowDirectDownload: false
+  },
+  libretexts: {
+    rightsStatus: "open_access",
+    licenseName: "LibreTexts openly licensed textbook",
+    licenseUrl: "https://libretexts.org/",
+    allowDirectDownload: false
+  },
+  oer_commons: {
+    rightsStatus: "open_access",
+    licenseName: "OER Commons open educational resource",
+    licenseUrl: "https://www.oercommons.org/",
+    allowDirectDownload: false
+  },
+  openlearn: {
+    rightsStatus: "open_access",
+    licenseName: "OpenLearn free course material from The Open University",
+    licenseUrl: "https://www.open.edu/openlearn/about-openlearn/frequently-asked-questions-on-openlearn",
+    allowDirectDownload: false
+  },
+  // Kenyan sources - government educational materials
+  kicd: {
+    rightsStatus: "open_access",
+    licenseName: "Kenya Institute of Curriculum Development - public educational resource",
+    licenseUrl: "https://kicd.ac.ke",
+    allowDirectDownload: true
+  },
+  knec: {
+    rightsStatus: "open_access",
+    licenseName: "Kenya National Examinations Council - public examination resource",
+    licenseUrl: "https://cba.knec.ac.ke",
+    allowDirectDownload: true
+  },
+  easy_elimu: {
+    rightsStatus: "open_access",
+    licenseName: "Easy Elimu - Kenyan educational resource",
+    licenseUrl: "https://www.easyelimu.com",
+    allowDirectDownload: false
+  },
+  atika_school: {
+    rightsStatus: "open_access",
+    licenseName: "Atika School - Kenyan educational resource",
+    licenseUrl: "https://www.atikaschool.org",
+    allowDirectDownload: false
+  },
+  kenyaplex: {
+    rightsStatus: "open_access",
+    licenseName: "KenyaPlex - Kenyan educational resource",
+    licenseUrl: "https://www.kenyaplex.com",
+    allowDirectDownload: false
+  },
+  schools_net: {
+    rightsStatus: "open_access",
+    licenseName: "Schools Net Kenya - Kenyan educational resource",
+    licenseUrl: "https://www.schoolsnetkenya.com",
+    allowDirectDownload: false
+  },
+  cbc_resources: {
+    rightsStatus: "open_access",
+    licenseName: "CBC Resources Kenya - Competency Based Curriculum",
+    licenseUrl: "https://cbcresources.co.ke",
+    allowDirectDownload: false
+  },
+  teachers_updates: {
+    rightsStatus: "open_access",
+    licenseName: "Teachers Updates Kenya - educational resource",
+    licenseUrl: "https://teachersupdates.net",
+    allowDirectDownload: false
+  }
+};
+var SCHEDULED_SOURCE_SLUGS = [
+  "gutenberg",
+  "doab",
+  "open_textbook",
+  "openstax",
+  "open_library",
+  "internet_archive",
+  "wikibooks",
+  "wikisource",
+  "doaj",
+  "saylor",
+  "mit_ocw",
+  "ck12",
+  "kicd",
+  "knec"
+];
+function getSourceRightsPolicy(sourceSlug) {
+  return APPROVED_SOURCE_POLICIES[sourceSlug] ?? null;
+}
+function isApprovedSource(sourceSlug) {
+  return getSourceRightsPolicy(sourceSlug) !== null;
+}
+function selectScheduledSource(now = /* @__PURE__ */ new Date()) {
+  const utcDay = Math.floor(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) / 864e5);
+  return SCHEDULED_SOURCE_SLUGS[utcDay % SCHEDULED_SOURCE_SLUGS.length];
+}
+
 // server/sources/aggregator.ts
-init_policy();
 init_db();
 var DEFAULT_SOURCES = [
   // Core open-access sources (reliable JSON APIs - fast)
@@ -3085,7 +2896,6 @@ async function aggregateAjol() {
 }
 
 // server/routers.ts
-init_policy();
 init_db();
 import { sql as sql2 } from "drizzle-orm";
 var appRouter = router({
@@ -3797,246 +3607,21 @@ app.get("/api/libgen", async (req, res) => {
     });
   }
 });
-var LANG_MAP_SERVER = {
-  "swahili": "sw",
-  "kiswahili": "sw",
-  "sw": "sw",
-  "english": "en",
-  "en": "en",
-  "french": "fr",
-  "fran\xE7ais": "fr",
-  "fr": "fr",
-  "german": "de",
-  "deutsch": "de",
-  "de": "de",
-  "spanish": "es",
-  "espa\xF1ol": "es",
-  "es": "es",
-  "portuguese": "pt",
-  "portugu\xEAs": "pt",
-  "pt": "pt",
-  "arabic": "ar",
-  "ar": "ar",
-  "chinese": "zh",
-  "zh": "zh",
-  "russian": "ru",
-  "ru": "ru",
-  "italian": "it",
-  "italiano": "it",
-  "it": "it",
-  "japanese": "ja",
-  "ja": "ja"
-};
-function normalizeLang(lang) {
-  if (!lang) return null;
-  const l = lang.toLowerCase().trim();
-  return LANG_MAP_SERVER[l] || l.slice(0, 2) || null;
-}
-function langsMatch(expected, found) {
-  if (!expected || !found) return true;
-  return normalizeLang(expected) === normalizeLang(found);
-}
-async function fetchBookCover(title, author, isbn) {
-  const axiosMod = await import("axios");
-  const ax = axiosMod.default;
-  if (isbn) {
-    const clean = isbn.replace(/[^0-9X]/gi, "");
-    if (clean.length >= 10) {
-      try {
-        const r = await ax.head(`https://covers.openlibrary.org/b/isbn/${clean}-L.jpg`, { timeout: 5e3 });
-        if (r.status === 200) return `https://covers.openlibrary.org/b/isbn/${clean}-L.jpg`;
-      } catch {
-      }
-    }
-  }
-  try {
-    const q = encodeURIComponent(`${title} ${author || ""}`.trim());
-    const r = await ax.get(`https://openlibrary.org/search.json?q=${q}&limit=1&fields=isbn,cover_i`, { timeout: 8e3 });
-    const doc = r.data?.docs?.[0];
-    if (doc?.cover_i) return `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg`;
-    if (doc?.isbn?.[0]) return `https://covers.openlibrary.org/b/isbn/${doc.isbn[0]}-L.jpg`;
-  } catch {
-  }
-  try {
-    const q = encodeURIComponent(`${title} ${author || ""}`.trim());
-    const r = await ax.get(`https://www.googleapis.com/books/v1/volumes?q=${q}&maxResults=1`, { timeout: 8e3 });
-    const img = r.data?.items?.[0]?.volumeInfo?.imageLinks?.thumbnail;
-    if (img) return img.replace("http://", "https://").replace("zoom=1", "zoom=2");
-  } catch {
-  }
-  return null;
-}
-async function searchLibGenForMd5(title, author, expectedLang, axios7) {
-  const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
-  const q = encodeURIComponent(`${title} ${author || ""}`.trim());
-  const mirrors = [
-    `https://libgen.li/index.php?req=${q}&lg_topic=libgen&open=0&view=simple&res=25&phrase=1&column=def`,
-    `https://libgen.rs/index.php?req=${q}&lg_topic=libgen&open=0&view=simple&res=25&phrase=1&column=def`
-  ];
-  const formatScore = (fmt) => {
-    const f = fmt.toLowerCase();
-    if (f === "pdf") return 10;
-    if (f === "epub") return 8;
-    if (f === "djvu") return 6;
-    if (f === "mobi" || f === "azw3") return 4;
-    if (f === "fb2") return 2;
-    return 1;
-  };
-  for (const url of mirrors) {
-    try {
-      const sr = await axios7.get(url, {
-        timeout: 2e4,
-        headers: { "User-Agent": UA }
-      });
-      const html = sr.data;
-      const rowPattern = /<tr[\s\S]*?<\/tr>/gi;
-      const rows = html.match(rowPattern) || [];
-      const candidates = [];
-      for (const row of rows) {
-        const md5Match = row.match(/md5=([a-f0-9]{32})/i);
-        if (!md5Match) continue;
-        const candidateMd5 = md5Match[1];
-        const titleMatch = row.match(/edition\.php[^>]*>([^<]+)</i);
-        const rowTitle = titleMatch ? titleMatch[1].trim() : "";
-        const cells = row.match(/<td[^>]*>([\s\S]*?)<\/td>/gi) || [];
-        const cleanCell = (c) => c.replace(/<[^>]+>/g, "").trim();
-        const rowLang = cells.length >= 5 ? cleanCell(cells[4]) : "";
-        const rowFormat = cells.length >= 8 ? cleanCell(cells[7]) : "";
-        const titleNorm = (s) => s.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
-        const t1 = titleNorm(title);
-        const t2 = titleNorm(rowTitle);
-        if (t1 && t2 && !t1.includes(t2.slice(0, 6)) && !t2.includes(t1.slice(0, 6))) {
-          const words1 = t1.split(" ").filter((w) => w.length > 2);
-          const words2 = new Set(t2.split(" ").filter((w) => w.length > 2));
-          const overlap = words1.filter((w) => words2.has(w)).length;
-          if (words1.length > 0 && overlap / words1.length < 0.3) continue;
-        }
-        if (expectedLang && rowLang) {
-          const rowLangNorm = normalizeLang(rowLang);
-          if (rowLangNorm && !langsMatch(expectedLang, rowLangNorm)) {
-            continue;
-          }
-        }
-        candidates.push({
-          md5: candidateMd5,
-          title: rowTitle,
-          lang: rowLang,
-          format: rowFormat,
-          score: formatScore(rowFormat)
-        });
-      }
-      if (candidates.length > 0) {
-        candidates.sort((a, b) => b.score - a.score);
-        const best = candidates[0];
-        console.log(`[libgen] Best match: MD5=${best.md5} title="${best.title}" format=${best.format} lang=${best.lang} (${candidates.length} candidates)`);
-        return best.md5;
-      }
-    } catch (e) {
-      console.warn(`[libgen] Search failed for ${url.slice(0, 60)}: ${e.message}`);
-      continue;
-    }
-  }
-  return null;
-}
-async function getLibGenDownloadUrl(md5, axios7) {
-  const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
-  const mirrors = [
-    { ads: `https://libgen.li/ads.php?md5=${md5}`, base: "https://libgen.li", referer: "https://libgen.li/" },
-    { ads: `https://libgen.rocks/ads.php?md5=${md5}`, base: "https://libgen.rocks", referer: "https://libgen.rocks/" },
-    { ads: `https://libgen.gs/ads.php?md5=${md5}`, base: "https://libgen.gs", referer: "https://libgen.gs/" }
-  ];
-  for (const { ads, base } of mirrors) {
-    try {
-      const adsResp = await axios7.get(ads, {
-        timeout: 8e3,
-        headers: { "User-Agent": UA },
-        validateStatus: (s) => s < 500
-      });
-      const adsHtml = adsResp.data;
-      const keyMatch = adsHtml.match(new RegExp(`get.php\\?md5=${md5}&key=([A-Za-z0-9]+)`, "i"));
-      if (keyMatch) {
-        const key = keyMatch[1];
-        const dlUrl = `${base}/get.php?md5=${md5}&key=${key}`;
-        console.log(`[libgen] Found download URL: ${dlUrl}`);
-        return dlUrl;
-      }
-    } catch (e) {
-      console.warn(`[libgen] ads.php failed for ${base}: ${e.message}`);
-      continue;
-    }
-  }
-  return null;
-}
 app.all("/api/download", async (req, res) => {
   let md5;
   let format = "pdf";
   let directUrl;
-  let title;
-  let author;
-  let language;
-  let bookId;
-  let isbn;
   if (req.method === "GET") {
     md5 = req.query.md5;
     directUrl = req.query.url;
     format = req.query.format || "pdf";
-    title = req.query.title;
-    author = req.query.author;
-    language = req.query.language;
-    bookId = req.query.bookId ? parseInt(req.query.bookId) : void 0;
-    isbn = req.query.isbn;
   } else if (req.method === "POST") {
     const body = req.body || {};
     md5 = body.md5;
     directUrl = body.url;
     format = body.format || "pdf";
-    title = body.title;
-    author = body.author;
-    language = body.language;
-    bookId = body.bookId ? parseInt(String(body.bookId)) : void 0;
-    isbn = body.isbn;
   }
-  const requestedLang = normalizeLang(language);
-  console.log(`[download] Request: title="${title}", md5=${md5 || "none"}, lang=${requestedLang || "any"}`);
   if (directUrl && /^https?:\/\//i.test(directUrl)) {
-    const iaItem = directUrl.match(/^https?:\/\/archive\.org\/download\/([^/?#]+)/i)?.[1];
-    if (iaItem) {
-      try {
-        const axios8 = await import("axios");
-        const meta = await axios8.default.get(`https://archive.org/metadata/${encodeURIComponent(iaItem)}`, {
-          timeout: 2e4,
-          validateStatus: (s) => s < 500
-        });
-        const files = meta?.data?.files || [];
-        const pdfName = files.find((f) => /\.pdf$/i.test(f.name || "") && f.source !== "metadata")?.name;
-        if (pdfName) {
-          const fileUrl = `https://archive.org/download/${encodeURIComponent(iaItem)}/${encodeURIComponent(pdfName)}`;
-          const r = await axios8.default.get(fileUrl, {
-            responseType: "arraybuffer",
-            timeout: 12e4,
-            maxRedirects: 8,
-            headers: {
-              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-              Accept: "*/*"
-            },
-            validateStatus: (s) => s < 500
-          });
-          const buf = Buffer.from(r.data);
-          const ct = r.headers["content-type"] || "";
-          if (buf.length > 1e3 && !/text\/html|text\/xml|application\/json/i.test(ct)) {
-            const magic = buf.slice(0, 4).toString("hex");
-            const isPdf = magic === "25504446" || magic === "41542654" || magic === "0000001c" || /pdf/i.test(ct);
-            res.setHeader("Content-Type", isPdf ? "application/pdf" : ct || "application/octet-stream");
-            res.setHeader("Content-Disposition", `attachment; filename="${pdfName}"`);
-            res.setHeader("Content-Length", buf.length.toString());
-            res.setHeader("Access-Control-Allow-Origin", "*");
-            res.setHeader("Access-Control-Expose-Headers", "Content-Disposition, Content-Length");
-            return res.send(buf);
-          }
-        }
-      } catch {
-      }
-    }
     try {
       const axios8 = await import("axios");
       const r = await axios8.default.get(directUrl, {
@@ -4069,59 +3654,12 @@ app.all("/api/download", async (req, res) => {
     const urlMd5 = directUrl.match(/(?:md5=|\/md5\/)([a-f0-9]{32})/i)?.[1];
     md5 = md5 || urlMd5;
   }
-  if ((!md5 || !/^[a-f0-9]{32}$/i.test(md5)) && title && title.trim().length > 1) {
-    console.log(`[download] No valid MD5, searching LibGen for "${title}" (lang: ${requestedLang || "any"})...`);
-    try {
-      const axiosMod2 = await import("axios");
-      const foundMd5 = await searchLibGenForMd5(title.trim(), author, requestedLang, axiosMod2.default);
-      if (foundMd5) {
-        console.log(`[download] Found MD5 via LibGen search: ${foundMd5}`);
-        md5 = foundMd5;
-        if (bookId) {
-          fetchBookCover(title, author, isbn).then((coverUrl) => {
-            const SUPABASE_URL = process.env.SUPABASE_URL;
-            const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-            if (!SUPABASE_URL || !SUPABASE_KEY) return;
-            const patch = {
-              formats: JSON.stringify({ pdf: `md5:${foundMd5}` }),
-              directDownloadAllowed: true,
-              rightsStatus: "open_access"
-            };
-            if (coverUrl) patch.coverUrl = coverUrl;
-            import("axios").then((ax) => ax.default.patch(
-              `${SUPABASE_URL}/rest/v1/books?id=eq.${bookId}`,
-              patch,
-              { headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json", "Prefer": "return=minimal" }, timeout: 5e3 }
-            ).catch(() => {
-            }));
-          }).catch(() => {
-          });
-        }
-      }
-    } catch (e) {
-      console.warn(`[download] LibGen search failed: ${e.message}`);
-    }
-  }
   if (!md5 || typeof md5 !== "string" || !/^[a-f0-9]{32}$/i.test(md5)) {
-    const langMsg = requestedLang ? `Book not available in ${requestedLang.toUpperCase()} language, or could not be found.` : "This document is not available right now. Try another result.";
-    return res.status(404).json({ success: false, error: "Download unavailable", message: langMsg });
-  }
-  console.log(`[download] Proceeding with MD5: ${md5} (lang: ${requestedLang || "any"})`);
-  const axiosMod = await import("axios");
-  try {
-    const lgUrl = await getLibGenDownloadUrl(md5, axiosMod.default);
-    if (lgUrl) {
-      console.log(`[download] Redirecting to LibGen: ${lgUrl}`);
-      res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader("X-Download-Source", "libgen");
-      return res.redirect(302, lgUrl);
-    }
-  } catch (e) {
-    console.warn(`[download] LibGen URL lookup failed: ${e.message}`);
+    return res.status(404).json({ success: false, error: "Download unavailable", message: "This document is not available right now. Try another result." });
   }
   const annaJsonUrl = `https://annas-archive.li/md5/${md5}.json`;
   const annaHtmlUrl = `https://annas-archive.li/md5/${md5}`;
-  const axios7 = axiosMod;
+  const axios7 = await import("axios");
   const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
   const TIMEOUT = 2e4;
   const isBinaryCt = (ct) => /application\/pdf|application\/octet-stream|application\/epub|djvu|binary/i.test(ct || "");
@@ -4279,76 +3817,167 @@ app.get("/api/search", async (req, res) => {
     return res.status(400).json({ error: 'Query parameter "q" or a catalog filter is required' });
   }
   try {
-    const db = await Promise.resolve().then(() => (init_db(), db_exports));
+    const axios7 = await import("axios");
+    const cheerioModule = await import("cheerio");
+    const cheerio5 = cheerioModule.default || cheerioModule;
     const queryTokens = q.toLowerCase().split(/\s+/).filter(Boolean);
-    const localCount = q || source || level || language || genre ? await db.countBooks({ search: q || void 0, source: source || void 0, educationalLevel: level || void 0, language: language || void 0, genre: genre || void 0 }) : 0;
-    const localBooks = await db.listBooks({
-      limit: offset + limit,
-      offset: 0,
-      search: q || void 0,
-      genre: genre || void 0,
-      language: language || void 0,
-      educationalLevel: level || void 0,
-      source: source || void 0,
-      sort
-    }).then((rows) => rows.map((book) => {
-      const parseFormats = (value) => {
-        if (value && typeof value === "object") return value;
-        if (typeof value === "string") {
-          try {
-            return JSON.parse(value);
-          } catch {
-            return {};
-          }
+    const requestedLimit = Math.min(100, Math.max(50, offset + limit));
+    const matchesQuery = (book) => {
+      if (queryTokens.length === 0) return true;
+      const subjects2 = Array.isArray(book.subjects) ? book.subjects : book.subjects ? [book.subjects] : [];
+      const searchable = [book.title, book.author, book.description, ...subjects2].filter(Boolean).join(" ").toLowerCase();
+      return queryTokens.every((token) => searchable.includes(token));
+    };
+    const matchesFilters = (book) => (!source || String(book.source || "").toLowerCase() === source) && (!level || String(book.educationalLevel || "").toLowerCase() === level) && (!language || String(book.language || "").toLowerCase() === language) && matchesQuery(book);
+    const withTimeout = async (promise, milliseconds) => {
+      let timer;
+      try {
+        return await Promise.race([
+          promise,
+          new Promise((_, reject) => {
+            timer = setTimeout(() => reject(new Error("source timeout")), milliseconds);
+          })
+        ]);
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    };
+    const libgenPromise = (async () => {
+      const books3 = [];
+      if (q.length < 2) return books3;
+      try {
+        const url = `https://libgen.li/index.php?req=${encodeURIComponent(q)}&lg_topic=libgen&open=0&view=simple&res=100&phrase=1&column=def`;
+        const response = await axios7.default.get(url, {
+          timeout: 2e4,
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; ZAMIFU-E-MATERIALS/2.0; Educational Aggregator)" }
+        });
+        const $ = cheerio5.load(response.data);
+        $("#tablelibgen tr").each((_i, row) => {
+          const cells = $(row).find("td");
+          if (cells.length < 9) return;
+          const editionLinks = cells.eq(0).find('a[href*="edition.php"]');
+          const titleLink = editionLinks.length > 1 ? editionLinks.last() : editionLinks.first();
+          const title = titleLink.text().trim();
+          const format = cells.eq(7).text().trim().toLowerCase();
+          const annaLink = cells.eq(8).find('a[href*="annas-archive"]').first();
+          const libgenLink = cells.eq(8).find('a[title="libgen"], a[href*="/get.php"]').first();
+          const md5Href = libgenLink.attr("href") || annaLink.attr("href") || "";
+          const md5Match = md5Href.match(/md5=([a-f0-9]{32})/i);
+          const md5 = md5Match ? md5Match[1] : "";
+          if (!title || !md5 || format !== "pdf" || /^[\d\s;:.,-]+$/.test(title)) return;
+          const sourceUrl = annaLink.attr("href") || `https://annas-archive.li/md5/${md5}`;
+          books3.push({
+            title: title.slice(0, 255),
+            author: cells.eq(1).text().trim() || "Unknown",
+            publisher: cells.eq(2).text().trim(),
+            year: cells.eq(3).text().trim(),
+            language: cells.eq(4).text().trim() || "en",
+            pages: cells.eq(5).text().trim(),
+            filesize: cells.eq(6).text().trim(),
+            format,
+            md5,
+            source: "libgen",
+            sourceUrl,
+            downloadUrl: "",
+            annaUrl: sourceUrl,
+            formats: { pdf: sourceUrl }
+          });
+        });
+      } catch {
+      }
+      return books3;
+    })();
+    const annaPromise = (async () => {
+      const books3 = [];
+      if (q.length < 2) return books3;
+      try {
+        const response = await axios7.default.get(`https://annas-archive.li/search?q=${encodeURIComponent(q)}`, {
+          timeout: 15e3,
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; ZAMIFU-E-MATERIALS/2.0; Educational Aggregator)" }
+        });
+        const $ = cheerio5.load(response.data);
+        $("a[href*='/md5/']").each((_i, element) => {
+          if (books3.length >= 50) return false;
+          const href = $(element).attr("href") || "";
+          const md5Match = href.match(/\/md5\/([a-f0-9]{32})/i);
+          if (!md5Match) return;
+          const md5 = md5Match[1];
+          const parent = $(element).closest("div, li, tr");
+          const title = (parent.find("h3, h4, .text-lg, .font-bold").first().text().trim() || $(element).text().trim()).slice(0, 255);
+          const author = parent.find(".text-gray-500, .text-sm, .italic").first().text().trim() || "Unknown";
+          const format = parent.find('span:contains("pdf"), span:contains("epub"), span:contains("mobi")').first().text().trim().toLowerCase();
+          if (!title || format && format !== "pdf") return;
+          const sourceUrl = `https://annas-archive.li/md5/${md5}`;
+          books3.push({ title, author, publisher: "", year: "", language: "en", pages: "", filesize: "", format: "pdf", md5, source: "annas_archive", sourceUrl, downloadUrl: "", annaUrl: sourceUrl, formats: { pdf: sourceUrl } });
+        });
+      } catch {
+      }
+      return books3;
+    })();
+    const [localResult, libgenResult, annaResult, kicdResult, knecResult] = await Promise.allSettled([
+      Promise.resolve().then(() => (init_db(), db_exports)).then(({ listBooks: listBooks2 }) => listBooks2({
+        limit: requestedLimit,
+        offset: 0,
+        search: q || void 0,
+        genre: genre || void 0,
+        language: language || void 0,
+        educationalLevel: level || void 0,
+        source: source || void 0
+      })),
+      libgenPromise,
+      annaPromise,
+      Promise.resolve().then(() => (init_kicd(), kicd_exports)).then(async ({ fetchKicdResources: fetchKicdResources2 }) => {
+        const rows = await withTimeout(fetchKicdResources2(Math.min(50, requestedLimit)), 8e3);
+        return rows.filter(matchesFilters).map((book) => ({ ...book, source: "kicd", year: book.publishedDate ? String(book.publishedDate).slice(0, 4) : "", format: "pdf", formats: { pdf: book.downloadUrl || book.sourceUrl || "" } }));
+      }),
+      Promise.resolve().then(() => (init_knec(), knec_exports)).then(async ({ fetchKnecResources: fetchKnecResources2 }) => {
+        const rows = await withTimeout(fetchKnecResources2(Math.min(50, requestedLimit)), 8e3);
+        return rows.filter(matchesFilters).map((book) => ({ ...book, source: "knec", year: book.publishedDate ? String(book.publishedDate).slice(0, 4) : "", format: "pdf", formats: { pdf: book.downloadUrl || book.sourceUrl || "" } }));
+      })
+    ]);
+    const parseFormats = (value) => {
+      if (value && typeof value === "object") return value;
+      if (typeof value === "string") {
+        try {
+          return JSON.parse(value);
+        } catch {
+          return {};
         }
-        return {};
-      };
+      }
+      return {};
+    };
+    const localBooks = localResult.status === "fulfilled" ? localResult.value.map((book) => {
       const formats = parseFormats(book.formats);
       return {
         ...book,
         formats,
         downloadUrl: book.downloadUrl || formats.pdf || book.sourceUrl || "",
         format: "pdf",
-        year: book.publishedDate || ""
+        year: book.publishedDate || "",
+        md5: book.md5 || ""
       };
-    }));
-    let externalResults = {};
-    if (q.length >= 2) {
-      const { runExternalSearch: runExternalSearch2 } = await Promise.resolve().then(() => (init_external_search(), external_search_exports));
-      const aggregate = await runExternalSearch2(q, 10);
-      externalResults = Object.fromEntries(
-        Object.entries(aggregate).map(([provider, items]) => [provider, items])
-      );
-    }
-    const externalBooks = Object.entries(externalResults).flatMap(
-      ([provider, items]) => items.map((item) => ({
-        ...item,
-        source: item.source || provider,
-        downloadUrl: item.pdfUrl || item.sourceUrl || "",
-        format: "pdf",
-        publishedDate: item.year || "",
-        author: item.author || "Unknown",
-        downloadedFrom: item.sourceUrl,
-        id: null
-      }))
-    );
-    const matchesFilters = (book) => {
-      if (queryTokens.length === 0) return true;
-      const subjects2 = Array.isArray(book.subjects) ? book.subjects : book.subjects ? [book.subjects] : [];
-      const searchable = [book.title, book.author, book.description, ...subjects2].filter(Boolean).join(" ").toLowerCase();
-      const matchesQuery = queryTokens.every((token) => searchable.includes(token));
-      const matchesSource = !source || String(book.source || "").toLowerCase() === source;
-      const matchesLevel = !level || String(book.educationalLevel || "").toLowerCase() === level;
-      const matchesLanguage = !language || String(book.language || "").toLowerCase().startsWith(language);
-      return matchesQuery && matchesSource && matchesLevel && matchesLanguage;
-    };
+    }) : [];
+    const libgenBooks = libgenResult.status === "fulfilled" ? libgenResult.value : [];
+    const annaBooks = annaResult.status === "fulfilled" ? annaResult.value : [];
+    const kicdBooks = kicdResult.status === "fulfilled" ? kicdResult.value : [];
+    const knecBooks = knecResult.status === "fulfilled" ? knecResult.value : [];
+    const candidates = [...localBooks, ...libgenBooks, ...annaBooks, ...kicdBooks, ...knecBooks].filter(matchesFilters);
     const merged = /* @__PURE__ */ new Map();
-    for (const book of [...localBooks, ...externalBooks].filter(matchesFilters)) {
+    for (const book of candidates) {
       const title = String(book.title || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
       const author = String(book.author || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-      const key = typeof book.id === "number" ? `local:${book.id}` : `title:${title}|author:${author}`;
-      if (merged.has(key)) continue;
-      merged.set(key, book);
+      const key = book.md5 ? `md5:${String(book.md5).toLowerCase()}` : `title:${title}|author:${author}`;
+      const existing = merged.get(key);
+      if (!existing) {
+        merged.set(key, book);
+        continue;
+      }
+      const combined = { ...existing, ...book, id: typeof existing.id === "number" ? existing.id : book.id };
+      combined.md5 = existing.md5 || book.md5 || "";
+      combined.downloadUrl = existing.downloadUrl || book.downloadUrl || "";
+      combined.sourceUrl = existing.sourceUrl || book.sourceUrl || "";
+      combined.formats = { ...book.formats || {}, ...existing.formats || {} };
+      merged.set(key, combined);
     }
     const relevance = (book) => {
       if (!q) return 0;
@@ -4372,13 +4001,11 @@ app.get("/api/search", async (req, res) => {
       if (sort === "newest") return String(b.publishedDate || b.year || b.importedAt || "").localeCompare(String(a.publishedDate || a.year || a.importedAt || ""));
       return relevance(b) - relevance(a) || String(a.title || "").localeCompare(String(b.title || ""));
     });
-    const externalHits = Math.max(0, books2.length - Math.min(localBooks.filter(matchesFilters).length, localBooks.length));
-    const total = Math.max(localCount, books2.length) + externalHits - Math.max(0, externalHits - (books2.length - localBooks.filter(matchesFilters).length));
     return res.status(200).json({
       success: true,
       query: q,
-      total: localCount + externalHits,
-      sources: { local: localBooks.filter(matchesFilters).length, ...Object.fromEntries(Object.entries(externalResults).map(([k, v]) => [k, v.filter(matchesFilters).length])) },
+      total: books2.length,
+      sources: { local: localBooks.length, libgen: libgenBooks.filter(matchesFilters).length, annas_archive: annaBooks.filter(matchesFilters).length, kicd: kicdBooks.length, knec: knecBooks.length },
       books: books2.slice(offset, offset + limit)
     });
   } catch (error) {
