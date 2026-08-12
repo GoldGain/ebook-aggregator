@@ -268,9 +268,10 @@ app.all("/api/download", async (req: any, res: any) => {
     return res.status(404).json({ success: false, error: "Download unavailable", message: "This document is not available right now. Try another result." });
   }
 
-  // ── Anna's Archive fallback URL (most reliable, returns JSON with mirror list) ──
-  const annaJsonUrl = `https://annas-archive.gd/md5/${md5}.json`;
-  const annaHtmlUrl = `https://annas-archive.gd/md5/${md5}`;
+  // ── Anna's Archive fallback URLs (most reliable, returns JSON with mirror list) ──
+  const annaDomains = ["annas-archive.gd", "annas-archive.gl", "annas-archive.pk"];
+  const annaHtmlUrls = annaDomains.map(d => `https://${d}/md5/${md5}`);
+  const annaJsonUrls = annaDomains.map(d => `https://${d}/md5/${md5}.json`);
 
   const axios = await import("axios");
   const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
@@ -338,20 +339,48 @@ app.all("/api/download", async (req: any, res: any) => {
 
   // Attempt 0: Anna's Archive .json endpoint — returns direct mirror URLs
   console.log(`[download] Attempt 0: Anna's Archive JSON for ${md5}`);
-  try {
-    const jsonResp = await axios.default.get(annaJsonUrl, {
-      timeout: 10000,
-      maxRedirects: 5,
-      headers: { "User-Agent": UA, "Referer": annaHtmlUrl, Accept: "application/json" },
-    });
-    if (jsonResp.data && jsonResp.data?.mirrors?.length) {
-      const mirrors = jsonResp.data.mirrors;
-      for (const m of mirrors) {
-        const url = typeof m === "string" ? m : m?.url;
-        if (url && await tryDownload(url, annaHtmlUrl)) return;
+  for (let i = 0; i < annaJsonUrls.length; i++) {
+    try {
+      const jsonResp = await axios.default.get(annaJsonUrls[i], {
+        timeout: 5000,
+        maxRedirects: 5,
+        headers: { "User-Agent": UA, "Referer": annaHtmlUrls[i], Accept: "application/json" },
+      });
+      if (jsonResp.data && jsonResp.data?.mirrors?.length) {
+        const mirrors = jsonResp.data.mirrors;
+        for (const m of mirrors) {
+          const url = typeof m === "string" ? m : m?.url;
+          if (url && await tryDownload(url, annaHtmlUrls[i])) return;
+        }
       }
-    }
-  } catch {}
+    } catch {}
+  }
+
+  // Attempt 0.5: Try scraping Anna's Archive HTML for slow download links
+  console.log(`[download] Attempt 0.5: Anna's Archive HTML scraping for ${md5}`);
+  for (let i = 0; i < annaHtmlUrls.length; i++) {
+    try {
+      const htmlResp = await axios.default.get(annaHtmlUrls[i], {
+        timeout: 5000,
+        headers: { "User-Agent": UA },
+      });
+      const $ = cheerio.load(htmlResp.data);
+      const downloadLinks: string[] = [];
+      
+      $("a.js-download-link").each((_, el) => {
+        const href = $(el).attr("href");
+        if (href && href.startsWith("http")) {
+          downloadLinks.push(href);
+        } else if (href && href.startsWith("/")) {
+          downloadLinks.push(`https://${annaDomains[i]}${href}`);
+        }
+      });
+
+      for (const url of downloadLinks) {
+        if (await tryDownload(url, annaHtmlUrls[i])) return;
+      }
+    } catch {}
+  }
 
   // Attempt 1: Scrape library.lol for a direct download link
   console.log(`[download] Attempt 1: library.lol for ${md5}`);

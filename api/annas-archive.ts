@@ -1,8 +1,8 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
 
-const ANNA_BASE_URL = "annas-archive.gd";
-const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+const ANNA_DOMAINS = ["annas-archive.gd", "annas-archive.gl", "annas-archive.pk"];
+const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36";
 
 export interface AnnaBook {
   title: string;
@@ -50,66 +50,78 @@ function extractMetaInformation(meta: string) {
 }
 
 export async function searchAnnasArchive(query: string, limit: number = 20): Promise<AnnaBook[]> {
-  try {
-    const encodedQuery = encodeURIComponent(query);
-    const url = `https://${ANNA_BASE_URL}/search?q=${encodedQuery}&content=book_any`;
+  const encodedQuery = encodeURIComponent(query);
+  let lastError: any = null;
 
-    const response = await axios.get(url, {
-      timeout: 20000,
-      headers: {
-        "User-Agent": UA,
-      },
-    });
+  for (const domain of ANNA_DOMAINS) {
+    try {
+      const url = `https://${domain}/search?q=${encodedQuery}`;
+      console.log(`[annas] Searching ${url}`);
 
-    const $ = cheerio.load(response.data);
-    const books: AnnaBook[] = [];
-
-    // The selector from the Go code: a[href^='/md5/'] with specific class
-    // In the HTML, it's often inside a container with class "h-[125] flex flex-col justify-center" or similar
-    // Let's use a more general approach and filter
-    $("a[href^='/md5/']").each((_, el) => {
-      const $el = $(el);
-      
-      // Look for the main container that holds title and metadata
-      // Usually it's a link containing the title text
-      const href = $el.attr("href") || "";
-      const md5Match = href.match(/\/md5\/([a-f0-9]{32})/i);
-      if (!md5Match) return;
-      const md5 = md5Match[1];
-
-      // If we've already seen this MD5, skip it (results often have multiple links for same book)
-      if (books.some(b => b.md5 === md5)) return;
-
-      const container = $el.closest("div, li, tr");
-      const title = (container.find("h3, h4, .text-lg, .font-bold").first().text().trim() || $el.text().trim()).slice(0, 255);
-      if (!title || title.length < 2) return;
-
-      const author = container.find(".text-gray-500, .text-sm, .italic").first().text().trim() || "Unknown";
-      const meta = container.find(".text-gray-800, .text-xs, .opacity-80").text().trim();
-      const { language, format, filesize } = extractMetaInformation(meta);
-
-      books.push({
-        title,
-        author,
-        publisher: "",
-        language: language || "en",
-        format: format || "pdf",
-        filesize: filesize || "Unknown",
-        md5,
-        source: "annas_archive",
-        sourceUrl: `https://${ANNA_BASE_URL}${href}`,
-        annaUrl: `https://${ANNA_BASE_URL}/md5/${md5}`,
-        mirrors: [
-          `https://${ANNA_BASE_URL}/md5/${md5}`,
-          `https://libgen.li/get.php?md5=${md5}`,
-          `https://libgen.rs/get.php?md5=${md5}`,
-        ],
+      const response = await axios.get(url, {
+        timeout: 10000,
+        headers: { "User-Agent": UA },
       });
-    });
 
-    return books.slice(0, limit);
-  } catch (error) {
-    console.error("Anna's Archive search error:", error);
-    throw error;
+      const $ = cheerio.load(response.data);
+      const books: AnnaBook[] = [];
+
+      $("a[href*='/md5/']").each((_, el) => {
+        const $el = $(el);
+        const href = $el.attr("href") || "";
+        const md5Match = href.match(/\/md5\/([a-f0-9]{32})/i);
+        if (!md5Match) return;
+        const md5 = md5Match[1];
+
+        if (books.some(b => b.md5 === md5)) return;
+
+        const container = $el.closest("div, li, tr");
+        // Improved title extraction: check several possible selectors
+        let title = container.find("h3, h4, .text-lg, .font-bold, .line-clamp-2").first().text().trim();
+        if (!title) {
+          // Fallback: if the link itself has text and it's not just a metadata link
+          const linkText = $el.text().trim();
+          if (linkText.length > 5 && !linkText.includes("·")) {
+            title = linkText;
+          }
+        }
+        
+        if (!title || title.length < 2) return;
+        title = title.slice(0, 255);
+
+        const author = container.find(".text-gray-500, .text-sm, .italic, a[href*='author']").first().text().trim() || "Unknown";
+        const meta = container.find(".text-gray-800, .text-xs, .opacity-80").text().trim();
+        const { language, format, filesize } = extractMetaInformation(meta);
+
+        books.push({
+          title,
+          author,
+          publisher: "",
+          language: language || "en",
+          format: format || "pdf",
+          filesize: filesize || "Unknown",
+          md5,
+          source: "annas_archive",
+          sourceUrl: `https://${domain}/md5/${md5}`,
+          annaUrl: `https://${domain}/md5/${md5}`,
+          mirrors: [
+            `https://${domain}/md5/${md5}`,
+            `https://libgen.li/get.php?md5=${md5}`,
+            `https://libgen.rs/get.php?md5=${md5}`,
+          ],
+        });
+      });
+
+      if (books.length > 0) {
+        return books.slice(0, limit);
+      }
+    } catch (error: any) {
+      console.error(`[annas] Error with domain ${domain}:`, error.message);
+      lastError = error;
+      continue; // Try next domain
+    }
   }
+
+  if (lastError) throw lastError;
+  return [];
 }

@@ -863,7 +863,7 @@ __export(kicd_exports, {
   searchKicdResources: () => searchKicdResources
 });
 import axios3 from "axios";
-import * as cheerio from "cheerio";
+import * as cheerio2 from "cheerio";
 async function fetchKicdResources(limit = 50) {
   try {
     let response = null;
@@ -885,7 +885,7 @@ async function fetchKicdResources(limit = 50) {
       }
     }
     if (!response) return [];
-    const $ = cheerio.load(response.data);
+    const $ = cheerio2.load(response.data);
     const resources = [];
     const seen = /* @__PURE__ */ new Set();
     const allLinks = $('a[href*="/sdm_downloads/"], a[href*="/downloads/"], a[href*=".pdf"], a[href*=".epub"], a[href*=".docx"], a[href*=".pptx"]');
@@ -937,7 +937,7 @@ async function searchKicdResources(category) {
       }
     });
     if (response.status !== 200) return [];
-    const $ = cheerio.load(response.data);
+    const $ = cheerio2.load(response.data);
     const resources = [];
     $("tr, .download-item, article").each((_idx, el) => {
       const $el = $(el);
@@ -979,7 +979,7 @@ __export(knec_exports, {
   searchKnecResources: () => searchKnecResources
 });
 import axios4 from "axios";
-import * as cheerio2 from "cheerio";
+import * as cheerio3 from "cheerio";
 async function fetchKnecResources(limit = 50) {
   try {
     const https = await import("https");
@@ -993,7 +993,7 @@ async function fetchKnecResources(limit = 50) {
       }
     });
     if (response.status !== 200) return [];
-    const $ = cheerio2.load(response.data);
+    const $ = cheerio3.load(response.data);
     const resources = [];
     $('a[href*=".pdf"], a[href*=".doc"], a.download, .resource-item, li a').each((_idx, el) => {
       const $el = $(el);
@@ -1031,7 +1031,7 @@ async function searchKnecResources(query) {
       }
     });
     if (response.status !== 200) return [];
-    const $ = cheerio2.load(response.data);
+    const $ = cheerio3.load(response.data);
     const resources = [];
     $("article a, .result a, li a").each((_idx, el) => {
       const $el = $(el);
@@ -1073,7 +1073,7 @@ __export(ajol_exports, {
   fetchAjolFeatured: () => fetchAjolFeatured
 });
 import axios6 from "axios";
-import * as cheerio4 from "cheerio";
+import * as cheerio5 from "cheerio";
 async function fetchAjolBooks(limit = 30) {
   try {
     const url = `${AJOL_OAI_URL}?verb=ListRecords&metadataPrefix=oai_dc&set=openaccess`;
@@ -1084,7 +1084,7 @@ async function fetchAjolBooks(limit = 30) {
         "Accept": "application/xml,text/xml,*/*"
       }
     });
-    const $ = cheerio4.load(res.data, { xmlMode: true });
+    const $ = cheerio5.load(res.data, { xmlMode: true });
     const books2 = [];
     $("record").each((_, el) => {
       if (books2.length >= limit) return false;
@@ -1134,7 +1134,7 @@ async function fetchAjolFeatured(limit = 20) {
         "User-Agent": "Mozilla/5.0 (compatible; LuminaBooks/2.0)"
       }
     });
-    const $ = cheerio4.load(res.data);
+    const $ = cheerio5.load(res.data);
     const books2 = [];
     $("article, .article-summary, .obj_article_summary").each((_, el) => {
       if (books2.length >= limit) return false;
@@ -1627,7 +1627,7 @@ init_knec();
 
 // server/sources/multi-source.ts
 import axios5 from "axios";
-import * as cheerio3 from "cheerio";
+import * as cheerio4 from "cheerio";
 var DEFAULT_HEADERS = {
   "User-Agent": "Mozilla/5.0 (compatible; LuminaBooks/2.0; Educational Aggregator)",
   "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -1698,7 +1698,7 @@ async function fetchOpenStaxBooks(limit = 50) {
   } catch {
     try {
       const res = await axios5.get("https://openstax.org/subjects", { timeout: 2e4, headers: DEFAULT_HEADERS });
-      const $ = cheerio3.load(res.data);
+      const $ = cheerio4.load(res.data);
       const books2 = [];
       $("a[href*='/details/books/']").each((_, el) => {
         const title = $(el).find("h3, .title, [class*='title']").first().text().trim() || $(el).attr("title") || "";
@@ -1735,7 +1735,7 @@ async function fetchLibreTextsBooks(limit = 30) {
     if (books2.length >= limit) break;
     try {
       const res = await axios5.get(`${lib.url}/Bookshelves`, { timeout: 15e3, headers: DEFAULT_HEADERS });
-      const $ = cheerio3.load(res.data);
+      const $ = cheerio4.load(res.data);
       $("a.mt-icon-book, a[href*='/Bookshelves/']").each((_, el) => {
         if (books2.length >= limit) return false;
         const title = $(el).text().trim() || $(el).attr("title") || "";
@@ -1853,7 +1853,7 @@ async function fetchSaylorCourses(limit = 50) {
       timeout: 2e4,
       headers: DEFAULT_HEADERS
     });
-    const $ = cheerio3.load(res.data);
+    const $ = cheerio4.load(res.data);
     const books2 = [];
     $(".coursebox, .course-card, a[href*='/course/view.php']").each((_, el) => {
       if (books2.length >= limit) return false;
@@ -1899,7 +1899,7 @@ async function fetchOerCommonsResources(limit = 50) {
       timeout: 2e4,
       headers: DEFAULT_HEADERS
     });
-    const $ = cheerio3.load(pageRes.data);
+    const $ = cheerio4.load(pageRes.data);
     const books2 = [];
     $(".item-detail, .resource-item, article.item").each((_, el) => {
       if (books2.length >= limit) return false;
@@ -1929,7 +1929,7 @@ async function fetchMitOcwCourses(limit = 50) {
       timeout: 2e4,
       headers: DEFAULT_HEADERS
     });
-    const $ = cheerio3.load(res.data);
+    const $ = cheerio4.load(res.data);
     const books2 = [];
     $(".course-card, .learning-resource-card, article.card").each((_, el) => {
       if (books2.length >= limit) return false;
@@ -1977,7 +1977,7 @@ async function fetchCk12Books(limit = 50) {
       timeout: 2e4,
       headers: DEFAULT_HEADERS
     });
-    const $ = cheerio3.load(pageRes.data);
+    const $ = cheerio4.load(pageRes.data);
     const result = [];
     $("a[href*='/book/'], .book-card, .resource-card").each((_, el) => {
       if (result.length >= limit) return false;
@@ -2007,7 +2007,7 @@ async function fetchOpenLearnCourses(limit = 50) {
       timeout: 2e4,
       headers: DEFAULT_HEADERS
     });
-    const $ = cheerio3.load(res.data);
+    const $ = cheerio4.load(res.data);
     const books2 = [];
     $(".course-card, .oucontent-item, article.course").each((_, el) => {
       if (books2.length >= limit) return false;
@@ -2044,7 +2044,7 @@ async function fetchEasyElimuResources(limit = 50) {
       if (books2.length >= limit) break;
       try {
         const res = await axios5.get(pageUrl, { timeout: 15e3, headers: DEFAULT_HEADERS });
-        const $ = cheerio3.load(res.data);
+        const $ = cheerio4.load(res.data);
         $("a[href*='.pdf'], a[href*='download'], .resource-item, article, .post").each((_, el) => {
           if (books2.length >= limit) return false;
           const title = $(el).find("h2, h3, h4, .title").first().text().trim() || $(el).text().trim().substring(0, 100);
@@ -2084,7 +2084,7 @@ async function fetchAtikaSchoolResources(limit = 50) {
       if (books2.length >= limit) break;
       try {
         const res = await axios5.get(pageUrl, { timeout: 15e3, headers: DEFAULT_HEADERS });
-        const $ = cheerio3.load(res.data);
+        const $ = cheerio4.load(res.data);
         $("a, .resource-item, article, li").each((_, el) => {
           if (books2.length >= limit) return false;
           const $el = $(el);
@@ -2119,7 +2119,7 @@ async function fetchKenyaplexResources(limit = 50) {
       timeout: 15e3,
       headers: DEFAULT_HEADERS
     });
-    const $ = cheerio3.load(res.data);
+    const $ = cheerio4.load(res.data);
     const books2 = [];
     $("a, .resource, article, .post").each((_, el) => {
       if (books2.length >= limit) return false;
@@ -2150,7 +2150,7 @@ async function fetchSchoolsNetResources(limit = 50) {
       timeout: 15e3,
       headers: DEFAULT_HEADERS
     });
-    const $ = cheerio3.load(res.data);
+    const $ = cheerio4.load(res.data);
     const books2 = [];
     $("article, .post, .resource-item, a[href*='.pdf']").each((_, el) => {
       if (books2.length >= limit) return false;
@@ -2182,7 +2182,7 @@ async function fetchCbcResourcesKe(limit = 50) {
       timeout: 15e3,
       headers: DEFAULT_HEADERS
     });
-    const $ = cheerio3.load(res.data);
+    const $ = cheerio4.load(res.data);
     const books2 = [];
     $("article, .post, a[href*='.pdf'], .resource").each((_, el) => {
       if (books2.length >= limit) return false;
@@ -2214,7 +2214,7 @@ async function fetchTeachersUpdatesResources(limit = 50) {
       timeout: 15e3,
       headers: DEFAULT_HEADERS
     });
-    const $ = cheerio3.load(res.data);
+    const $ = cheerio4.load(res.data);
     const books2 = [];
     $("article, .post, a[href*='.pdf']").each((_, el) => {
       if (books2.length >= limit) return false;
@@ -3559,14 +3559,14 @@ app.get("/api/libgen", async (req, res) => {
     const url = `https://libgen.li/index.php?req=${encodedQuery}&lg_topic=libgen&open=0&view=simple&res=100&phrase=1&column=def${langParam}`;
     const axios7 = await import("axios");
     const cheerioModule = await import("cheerio");
-    const cheerio5 = cheerioModule.default || cheerioModule;
+    const cheerio6 = cheerioModule.default || cheerioModule;
     const response = await axios7.default.get(url, {
       timeout: 3e4,
       headers: {
         "User-Agent": "Mozilla/5.0 (compatible; ZAMIFU-E-MATERIALS/2.0; Educational Aggregator)"
       }
     });
-    const $ = cheerio5.load(response.data);
+    const $ = cheerio6.load(response.data);
     const books2 = [];
     $("#tablelibgen tr").each((_i, row) => {
       const cells = $(row).find("td");
@@ -3685,8 +3685,9 @@ app.all("/api/download", async (req, res) => {
   if (!md5 || typeof md5 !== "string" || !/^[a-f0-9]{32}$/i.test(md5)) {
     return res.status(404).json({ success: false, error: "Download unavailable", message: "This document is not available right now. Try another result." });
   }
-  const annaJsonUrl = `https://annas-archive.gd/md5/${md5}.json`;
-  const annaHtmlUrl = `https://annas-archive.gd/md5/${md5}`;
+  const annaDomains = ["annas-archive.gd", "annas-archive.gl", "annas-archive.pk"];
+  const annaHtmlUrls = annaDomains.map((d) => `https://${d}/md5/${md5}`);
+  const annaJsonUrls = annaDomains.map((d) => `https://${d}/md5/${md5}.json`);
   const axios7 = await import("axios");
   const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
   const TIMEOUT = 1e4;
@@ -3736,20 +3737,45 @@ app.all("/api/download", async (req, res) => {
     return false;
   };
   console.log(`[download] Attempt 0: Anna's Archive JSON for ${md5}`);
-  try {
-    const jsonResp = await axios7.default.get(annaJsonUrl, {
-      timeout: 1e4,
-      maxRedirects: 5,
-      headers: { "User-Agent": UA, "Referer": annaHtmlUrl, Accept: "application/json" }
-    });
-    if (jsonResp.data && jsonResp.data?.mirrors?.length) {
-      const mirrors = jsonResp.data.mirrors;
-      for (const m of mirrors) {
-        const url = typeof m === "string" ? m : m?.url;
-        if (url && await tryDownload(url, annaHtmlUrl)) return;
+  for (let i = 0; i < annaJsonUrls.length; i++) {
+    try {
+      const jsonResp = await axios7.default.get(annaJsonUrls[i], {
+        timeout: 5e3,
+        maxRedirects: 5,
+        headers: { "User-Agent": UA, "Referer": annaHtmlUrls[i], Accept: "application/json" }
+      });
+      if (jsonResp.data && jsonResp.data?.mirrors?.length) {
+        const mirrors = jsonResp.data.mirrors;
+        for (const m of mirrors) {
+          const url = typeof m === "string" ? m : m?.url;
+          if (url && await tryDownload(url, annaHtmlUrls[i])) return;
+        }
       }
+    } catch {
     }
-  } catch {
+  }
+  console.log(`[download] Attempt 0.5: Anna's Archive HTML scraping for ${md5}`);
+  for (let i = 0; i < annaHtmlUrls.length; i++) {
+    try {
+      const htmlResp = await axios7.default.get(annaHtmlUrls[i], {
+        timeout: 5e3,
+        headers: { "User-Agent": UA }
+      });
+      const $ = cheerio.load(htmlResp.data);
+      const downloadLinks = [];
+      $("a.js-download-link").each((_, el) => {
+        const href = $(el).attr("href");
+        if (href && href.startsWith("http")) {
+          downloadLinks.push(href);
+        } else if (href && href.startsWith("/")) {
+          downloadLinks.push(`https://${annaDomains[i]}${href}`);
+        }
+      });
+      for (const url of downloadLinks) {
+        if (await tryDownload(url, annaHtmlUrls[i])) return;
+      }
+    } catch {
+    }
   }
   console.log(`[download] Attempt 1: library.lol for ${md5}`);
   try {
@@ -3856,7 +3882,7 @@ app.get("/api/search", async (req, res) => {
   try {
     const axios7 = await import("axios");
     const cheerioModule = await import("cheerio");
-    const cheerio5 = cheerioModule.default || cheerioModule;
+    const cheerio6 = cheerioModule.default || cheerioModule;
     const queryTokens = q.toLowerCase().split(/\s+/).filter(Boolean);
     const requestedLimit = Math.min(100, Math.max(50, offset + limit));
     const matchesQuery = (book) => {
@@ -3888,7 +3914,7 @@ app.get("/api/search", async (req, res) => {
           timeout: 2e4,
           headers: { "User-Agent": "Mozilla/5.0 (compatible; ZAMIFU-E-MATERIALS/2.0; Educational Aggregator)" }
         });
-        const $ = cheerio5.load(response.data);
+        const $ = cheerio6.load(response.data);
         $("#tablelibgen tr").each((_i, row) => {
           const cells = $(row).find("td");
           if (cells.length < 9) return;
