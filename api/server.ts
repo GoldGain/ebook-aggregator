@@ -47,6 +47,16 @@ app.use(
 
 
 // URL health check — returns live status and fallback suggestions
+app.get("/api/debug-env", (req: any, res: any) => {
+  return res.json({
+    hasDbUrl: !!process.env.DATABASE_URL,
+    nodeEnv: process.env.NODE_ENV,
+    appId: process.env.VITE_APP_ID,
+    // Do not leak the full URL for security
+    dbUrlPrefix: process.env.DATABASE_URL ? process.env.DATABASE_URL.split("@")[1] : null
+  });
+});
+
 app.get("/api/check-url", async (req: any, res: any) => {
   const url = req.query.url as string | undefined;
   if (!url) return res.status(400).json({ error: "url param required" });
