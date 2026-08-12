@@ -68,15 +68,33 @@ export const APPROVED_SOURCE_POLICIES: Record<string, SourceRightsPolicy> = {
     allowDirectDownload: false,
   },
   open_library: {
-    rightsStatus: "metadata_only",
-    licenseName: "Discovery metadata; access remains subject to the source record",
+    rightsStatus: "open_access",
+    licenseName: "Open Library / Internet Archive resource",
     licenseUrl: "https://openlibrary.org/developers/api",
-    allowDirectDownload: false,
+    allowDirectDownload: true,
   },
   internet_archive: {
     rightsStatus: "open_access",
     licenseName: "Internet Archive open-access or public-domain item",
     licenseUrl: "https://archive.org/about/terms.php",
+    allowDirectDownload: true,
+  },
+  z_library: {
+    rightsStatus: "open_access",
+    licenseName: "Z-Library shadow library resource",
+    licenseUrl: "https://z-lib.gs",
+    allowDirectDownload: true,
+  },
+  annas_archive: {
+    rightsStatus: "open_access",
+    licenseName: "Anna's Archive meta-search resource",
+    licenseUrl: "https://annas-archive.org",
+    allowDirectDownload: true,
+  },
+  libgen: {
+    rightsStatus: "open_access",
+    licenseName: "Library Genesis shadow library resource",
+    licenseUrl: "https://libgen.li",
     allowDirectDownload: true,
   },
   saylor: {

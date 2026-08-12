@@ -269,7 +269,7 @@ app.all("/api/download", async (req: any, res: any) => {
   }
 
   // ── Anna's Archive fallback URLs (most reliable, returns JSON with mirror list) ──
-  const annaDomains = ["annas-archive.gd", "annas-archive.gl", "annas-archive.pk"];
+  const annaDomains = ["annas-archive.li", "annas-archive.se", "annas-archive.org", "annas-archive.gd", "annas-archive.gl", "annas-archive.pk"];
   const annaHtmlUrls = annaDomains.map(d => `https://${d}/md5/${md5}`);
   const annaJsonUrls = annaDomains.map(d => `https://${d}/md5/${md5}.json`);
 
@@ -419,12 +419,15 @@ app.all("/api/download", async (req: any, res: any) => {
     }
   } catch {}
 
-  // Attempt 3: Try direct download from multiple libgen mirrors
+  // Attempt 3: Try direct download from multiple libgen and z-library mirrors
   const directUrls = [
     `https://libgen.rocks/get.php?md5=${md5}`,
     `https://libgen.is/get.php?md5=${md5}`,
     `https://libgen.gs/get.php?md5=${md5}`,
     `https://libgen.li/get.php?md5=${md5}`,
+    `https://z-lib.gs/get.php?md5=${md5}`,
+    `https://z-lib.is/get.php?md5=${md5}`,
+    `https://z-lib.se/get.php?md5=${md5}`,
   ];
 
   for (const url of directUrls) {
@@ -580,31 +583,25 @@ app.get("/api/search", async (req: any, res: any) => {
       return books;
     })();
 
-    const annaPromise = (async () => {
-      if (q.length < 2) return [];
+    const externalPromise = (async () => {
+      if (q.length < 2) return { internet_archive: [], gutenberg: [], open_library: [], openstax: [], z_library: [], annas_archive: [] };
       try {
-        const books = await withTimeout(searchAnnasArchive(q, 30), 15000);
-        return books.map(b => ({
-          ...b,
-          source: "annas_archive",
-          year: "",
-          pages: "",
-          downloadUrl: "",
-          formats: { pdf: b.sourceUrl }
-        }));
-      } catch {
-        return [];
+        const { runExternalSearch } = await import("../server/sources/external-search");
+        return await withTimeout(runExternalSearch(q, 30), 20000);
+      } catch (err) {
+        console.error("External search error:", err);
+        return { internet_archive: [], gutenberg: [], open_library: [], openstax: [], z_library: [], annas_archive: [] };
       }
     })();
 
-    const [localResult, libgenResult, annaResult, kicdResult, knecResult] = await Promise.allSettled([
+    const [localResult, libgenResult, externalResult, kicdResult, knecResult] = await Promise.allSettled([
       import("../server/db").then(({ listBooks }) => listBooks({
         limit: requestedLimit, offset: 0, search: q || undefined,
         genre: genre || undefined, language: language || undefined,
         educationalLevel: level || undefined, source: source || undefined,
       })),
       libgenPromise,
-      annaPromise,
+      externalPromise,
       import("../server/sources/kicd").then(async ({ fetchKicdResources }) => {
         const rows = await withTimeout(fetchKicdResources(Math.min(50, requestedLimit)), 8000);
         return rows.filter(matchesFilters).map((book: any) => ({ ...book, source: "kicd", year: book.publishedDate ? String(book.publishedDate).slice(0, 4) : "", format: "pdf", formats: { pdf: book.downloadUrl || book.sourceUrl || "" } }));
@@ -635,12 +632,25 @@ app.get("/api/search", async (req: any, res: any) => {
     }) : [];
     const localError = localResult.status === "rejected" ? localResult.reason : null;
     const libgenBooks = libgenResult.status === "fulfilled" ? libgenResult.value : [];
-    const annaBooks = annaResult.status === "fulfilled" ? annaResult.value : [];
+    const externalData = externalResult.status === "fulfilled" ? externalResult.value : { internet_archive: [], gutenberg: [], open_library: [], openstax: [], z_library: [], annas_archive: [] };
+    const iaBooks = externalData.internet_archive || [];
+    const olBooks = externalData.open_library || [];
+    const zLibBooks = externalData.z_library || [];
+    const annaBooks = externalData.annas_archive || [];
     const kicdBooks = kicdResult.status === "fulfilled" ? kicdResult.value : [];
     const knecBooks = knecResult.status === "fulfilled" ? knecResult.value : [];
     
-    // Prioritize Anna's Archive results by putting them first in the candidates list
-    const candidates = [...annaBooks, ...localBooks, ...libgenBooks, ...kicdBooks, ...knecBooks].filter(matchesFilters);
+    // Prioritize Anna's Archive and Z-Library results
+    const candidates = [
+      ...annaBooks, 
+      ...zLibBooks, 
+      ...localBooks, 
+      ...libgenBooks, 
+      ...iaBooks, 
+      ...olBooks, 
+      ...kicdBooks, 
+      ...knecBooks
+    ].filter(matchesFilters);
 
     const merged = new Map<string, any>();
     for (const book of candidates) {
@@ -679,7 +689,16 @@ app.get("/api/search", async (req: any, res: any) => {
 
     return res.status(200).json({
       success: true, query: q, total: books.length,
-      sources: { local: localBooks.length, libgen: libgenBooks.filter(matchesFilters).length, annas_archive: annaBooks.filter(matchesFilters).length, kicd: kicdBooks.length, knec: knecBooks.length },
+      sources: { 
+        local: localBooks.length, 
+        libgen: libgenBooks.filter(matchesFilters).length, 
+        annas_archive: annaBooks.filter(matchesFilters).length, 
+        z_library: zLibBooks.filter(matchesFilters).length,
+        internet_archive: iaBooks.filter(matchesFilters).length,
+        open_library: olBooks.filter(matchesFilters).length,
+        kicd: kicdBooks.length, 
+        knec: knecBooks.length 
+      },
       localError: localError ? (localError instanceof Error ? localError.message : String(localError)) : null,
       books: books.slice(offset, offset + limit),
     });

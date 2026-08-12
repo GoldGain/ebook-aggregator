@@ -7,6 +7,7 @@
  */
 
 import { isApprovedSource, getSourceRightsPolicy } from "./policy";
+import { searchAnnasArchive } from "../../api/annas-archive";
 
 const DEFAULT_HEADERS = {
   "User-Agent": "Mozilla/5.0 (compatible; ZAMIFU-E-MATERIALS/2.0; Educational Aggregator)",
@@ -155,7 +156,7 @@ export async function searchOpenLibrary(query: string, limit = 8): Promise<Exter
           : b.cover_i
             ? `https://covers.openlibrary.org/b/id/${b.cover_i}-M.jpg`
             : undefined,
-        pdfUrl: undefined,
+        pdfUrl: b.ia?.[0] ? `https://archive.org/download/${b.ia[0]}/${b.ia[0]}.pdf` : undefined,
         sourceUrl: b.key ? `https://openlibrary.org${b.key}` : "https://openlibrary.org",
         source: "open_library",
         rightsStatus: policy.rightsStatus,
@@ -205,11 +206,44 @@ export async function searchOpenStax(query: string, limit = 10): Promise<Externa
   }
 }
 
+/**
+ * Z-Library search (via Anna's Archive with Z-Lib filter or direct mirror if possible).
+ * For now, we use Anna's Archive results and tag them as Z-Library if the source matches.
+ */
+export async function searchZLibrary(query: string, limit = 10): Promise<ExternalSearchResult[]> {
+  if (!isApprovedSource("z_library")) return [];
+  try {
+    const books = await searchAnnasArchive(`${query} source:zlibrary`, limit);
+    const policy = getSourceRightsPolicy("z_library")!;
+    return books.map(b => ({
+      title: b.title,
+      author: b.author,
+      description: `Z-Library resource (via Anna's Archive). Format: ${b.format}, Size: ${b.filesize}`,
+      language: b.language,
+      subjects: [],
+      year: undefined,
+      publisher: b.publisher,
+      pdfUrl: b.sourceUrl,
+      coverUrl: undefined,
+      sourceUrl: b.sourceUrl,
+      source: "z_library",
+      rightsStatus: policy.rightsStatus,
+      licenseName: policy.licenseName,
+      licenseUrl: policy.licenseUrl,
+      directDownloadAllowed: policy.allowDirectDownload,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 export interface ExternalSearchAggregate {
   internet_archive: ExternalSearchResult[];
   gutenberg: ExternalSearchResult[];
   open_library: ExternalSearchResult[];
   openstax: ExternalSearchResult[];
+  z_library: ExternalSearchResult[];
+  annas_archive: ExternalSearchResult[];
 }
 
 /**
@@ -218,16 +252,35 @@ export interface ExternalSearchAggregate {
  * catalog.
  */
 export async function runExternalSearch(query: string, limit = 15): Promise<ExternalSearchAggregate> {
-  const [internetArchive, gutenberg, openLibrary, openstax] = await Promise.allSettled([
+  const [internetArchive, gutenberg, openLibrary, openstax, zLibrary, annasArchive] = await Promise.allSettled([
     withTimeout(searchInternetArchive(query, limit), 8000),
     withTimeout(searchGutenberg(query, limit), 8000),
     withTimeout(searchOpenLibrary(query, limit), 8000),
     withTimeout(searchOpenStax(query, limit), 8000),
+    withTimeout(searchZLibrary(query, limit), 8000),
+    withTimeout(searchAnnasArchive(query, limit).then(books => {
+      const policy = getSourceRightsPolicy("annas_archive")!;
+      return books.map(b => ({
+        title: b.title,
+        author: b.author,
+        description: `Anna's Archive resource. Format: ${b.format}, Size: ${b.filesize}`,
+        language: b.language,
+        subjects: [],
+        pdfUrl: b.sourceUrl,
+        sourceUrl: b.sourceUrl,
+        source: "annas_archive",
+        rightsStatus: policy.rightsStatus,
+        licenseName: policy.licenseName,
+        directDownloadAllowed: policy.allowDirectDownload,
+      } as ExternalSearchResult));
+    }), 12000),
   ]);
   return {
     internet_archive: internetArchive.status === "fulfilled" ? internetArchive.value : [],
     gutenberg: gutenberg.status === "fulfilled" ? gutenberg.value : [],
     open_library: openLibrary.status === "fulfilled" ? openLibrary.value : [],
     openstax: openstax.status === "fulfilled" ? openstax.value : [],
+    z_library: zLibrary.status === "fulfilled" ? zLibrary.value : [],
+    annas_archive: annasArchive.status === "fulfilled" ? annasArchive.value : [],
   };
 }
