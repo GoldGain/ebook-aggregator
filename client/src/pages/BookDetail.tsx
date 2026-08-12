@@ -112,6 +112,27 @@ export default function BookDetail() {
     { enabled: !!bookId }
   );
 
+  // This hook must stay above all conditional returns. React error #310 occurs when
+  // hooks are added or removed between renders while the book query is loading.
+  const [resolvedCover, setResolvedCover] = useState<string | null>(null);
+  useEffect(() => {
+    if (!book) {
+      setResolvedCover(null);
+      return;
+    }
+    if (book.coverUrl) {
+      setResolvedCover(book.coverUrl);
+      return;
+    }
+    if (book.title) {
+      fetchFallbackCover(book.title, book.author, book.isbn)
+        .then(url => { if (url) setResolvedCover(url); })
+        .catch(() => {});
+    } else {
+      setResolvedCover(null);
+    }
+  }, [book?.coverUrl, book?.title, book?.author, book?.isbn]);
+
   const handleToggleBookshelf = () => {
     if (!user) {
       toast.error("Please sign in first");
@@ -173,18 +194,6 @@ export default function BookDetail() {
   const formats = parseJson(book.formats, {});
   const subjects = parseJson(book.subjects, []);
   const pdfUrl = formats?.pdf || (book as any).directDownloadUrl || book.sourceUrl || "";
-
-  // Cover image with fallback
-  const [resolvedCover, setResolvedCover] = useState<string | null>(book.coverUrl || null);
-  useEffect(() => {
-    if (!book.coverUrl && book.title) {
-      fetchFallbackCover(book.title, book.author, book.isbn)
-        .then(url => { if (url) setResolvedCover(url); })
-        .catch(() => {});
-    } else {
-      setResolvedCover(book.coverUrl || null);
-    }
-  }, [book.coverUrl, book.title, book.author, book.isbn]);
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(window.location.href);
