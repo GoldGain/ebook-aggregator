@@ -136,6 +136,7 @@ var init_schema = __esm({
       licenseName: varchar("licenseName", { length: 255 }),
       licenseUrl: text("licenseUrl"),
       directDownloadAllowed: boolean("directDownloadAllowed").default(false).notNull(),
+      md5: varchar("md5", { length: 32 }),
       provenanceCheckedAt: timestamp("provenanceCheckedAt"),
       isbn: varchar("isbn", { length: 20 }),
       pages: integer("pages"),
@@ -242,6 +243,7 @@ var init_schema = __esm({
 var db_exports = {};
 __export(db_exports, {
   addToBookshelf: () => addToBookshelf,
+  countBooks: () => countBooks,
   createAggregatorLog: () => createAggregatorLog,
   createAggregatorSource: () => createAggregatorSource,
   createBook: () => createBook,
@@ -303,8 +305,13 @@ import { and, eq, like, ilike, or, desc, asc, sql, count } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 async function getDb() {
-  if (!_db && ENV.databaseUrl) {
+  if (!_db) {
+    if (!ENV.databaseUrl) {
+      console.error("[Database] DATABASE_URL is missing in ENV!");
+      return null;
+    }
     try {
+      console.log("[Database] Initializing new connection...");
       const client = postgres(ENV.databaseUrl, {
         ssl: "require",
         max: 4,
@@ -447,15 +454,34 @@ async function searchBooks(query, limit = 20, offset = 0) {
     }
   } catch {
   }
+  return db.select().from(books).where(buildSearchCondition(query)).orderBy(desc(books.downloadCount)).limit(limit).offset(offset);
+}
+function buildSearchCondition(query) {
   const searchTerm = `%${query}%`;
-  return db.select().from(books).where(
-    or(
-      like(books.title, searchTerm),
-      like(books.author, searchTerm),
-      like(books.subjects, searchTerm),
-      like(books.description, searchTerm)
-    )
-  ).orderBy(desc(books.downloadCount)).limit(limit).offset(offset);
+  return or(
+    ilike(books.title, searchTerm),
+    ilike(books.author, searchTerm),
+    ilike(books.subjects, searchTerm),
+    ilike(books.description, searchTerm),
+    ilike(books.publisher, searchTerm),
+    ilike(books.isbn, searchTerm),
+    ilike(books.publishedDate, searchTerm)
+  );
+}
+async function countBooks(options) {
+  const db = await getDb();
+  if (!db) return 0;
+  const conditions = [];
+  if (options.genre) {
+    const genre = await getGenreBySlug(options.genre);
+    if (genre) conditions.push(eq(books.genreId, genre.id));
+  }
+  if (options.language) conditions.push(ilike(books.language, options.language));
+  if (options.educationalLevel) conditions.push(eq(books.educationalLevel, options.educationalLevel));
+  if (options.source) conditions.push(eq(books.source, options.source));
+  if (options.search) conditions.push(buildSearchCondition(options.search));
+  const result = await db.select({ count: count() }).from(books).where(conditions.length > 0 ? and(...conditions) : void 0);
+  return result[0]?.count ?? 0;
 }
 async function listBooks(options) {
   const db = await getDb();
@@ -471,14 +497,7 @@ async function listBooks(options) {
   if (options.educationalLevel) conditions.push(eq(books.educationalLevel, options.educationalLevel));
   if (options.source) conditions.push(eq(books.source, options.source));
   if (options.search) {
-    conditions.push(
-      or(
-        ilike(books.title, `%${options.search}%`),
-        ilike(books.author, `%${options.search}%`),
-        ilike(books.subjects, `%${options.search}%`),
-        ilike(books.description, `%${options.search}%`)
-      )
-    );
+    conditions.push(buildSearchCondition(options.search));
   }
   if (options.pdfOnly) {
     conditions.push(like(books.formats, '%"pdf":%'));
@@ -3502,6 +3521,15 @@ app.use(
     createContext
   })
 );
+app.get("/api/debug-env", (req, res) => {
+  return res.json({
+    hasDbUrl: !!process.env.DATABASE_URL,
+    nodeEnv: process.env.NODE_ENV,
+    appId: process.env.VITE_APP_ID,
+    // Do not leak the full URL for security
+    dbUrlPrefix: process.env.DATABASE_URL ? process.env.DATABASE_URL.split("@")[1] : null
+  });
+});
 app.get("/api/check-url", async (req, res) => {
   const url = req.query.url;
   if (!url) return res.status(400).json({ error: "url param required" });
@@ -3661,45 +3689,53 @@ app.all("/api/download", async (req, res) => {
   const annaHtmlUrl = `https://annas-archive.li/md5/${md5}`;
   const axios7 = await import("axios");
   const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
-  const TIMEOUT = 2e4;
+  const TIMEOUT = 1e4;
   const isBinaryCt = (ct) => /application\/pdf|application\/octet-stream|application\/epub|djvu|binary/i.test(ct || "");
-  const sendFile = (data, ct) => {
-    const ext = (format || "pdf").toLowerCase();
-    res.setHeader("Content-Type", ct || "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="book.${ext}"`);
-    res.setHeader("Content-Length", data.length.toString());
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Expose-Headers", "Content-Disposition, Content-Length");
-    return res.send(data);
-  };
   const tryDownload = async (url, referer) => {
+    console.log(`[download] Trying: ${url}`);
     try {
-      const r = await axios7.default.get(url, {
-        responseType: "arraybuffer",
-        timeout: TIMEOUT,
+      const head = await axios7.default.head(url, {
+        timeout: 5e3,
         maxRedirects: 8,
         headers: { "User-Agent": UA, "Referer": referer || "https://annas-archive.li/", "Accept": "*/*" },
         validateStatus: (s) => s < 500
-        // try to keep working even on 4xx edge cases
       });
-      const ct = r.headers["content-type"] || "";
-      if (/text\/html|application\/json/.test(ct) && r.data && r.data.length < 5e4) return false;
-      const buf = Buffer.from(r.data);
-      if (buf.length > 1e3) {
-        const magic = buf.slice(0, 4).toString("hex");
-        if (magic === "25504446" || magic === "504b0304" || magic === "41542654" || magic === "d0cf11e0" || magic === "0000001c") {
-          sendFile(buf, isBinaryCt(ct) ? ct : "application/pdf");
-          return true;
-        }
-        if (buf.length > 1e5 && !/text\/html/.test(ct)) {
-          sendFile(buf, ct || "application/pdf");
-          return true;
-        }
+      const ct = head.headers["content-type"] || "";
+      const cl = parseInt(head.headers["content-length"] || "0", 10);
+      if (/text\/html|application\/json/.test(ct) && cl < 5e4) {
+        const check = await axios7.default.get(url, {
+          timeout: 5e3,
+          maxRedirects: 8,
+          headers: { "User-Agent": UA, "Referer": referer || "https://annas-archive.li/", "Accept": "*/*" }
+        });
+        const checkCt = check.headers["content-type"] || "";
+        if (/text\/html|application\/json/.test(checkCt) && check.data.length < 5e4) return false;
       }
-    } catch {
+      const response = await axios7.default.get(url, {
+        responseType: "stream",
+        timeout: 3e4,
+        maxRedirects: 8,
+        headers: { "User-Agent": UA, "Referer": referer || "https://annas-archive.li/", "Accept": "*/*" }
+      });
+      const finalCt = response.headers["content-type"] || ct || "application/pdf";
+      const finalCl = response.headers["content-length"] || cl;
+      const ext = (format || "pdf").toLowerCase();
+      res.setHeader("Content-Type", isBinaryCt(finalCt) ? finalCt : "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="book.${ext}"`);
+      if (finalCl) res.setHeader("Content-Length", finalCl);
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Expose-Headers", "Content-Disposition, Content-Length");
+      response.data.pipe(res);
+      return new Promise((resolve, reject) => {
+        response.data.on("end", () => resolve(true));
+        response.data.on("error", (err) => reject(err));
+      });
+    } catch (err) {
+      console.error(`[download] Failed ${url}: ${err.message}`);
     }
     return false;
   };
+  console.log(`[download] Attempt 0: Anna's Archive JSON for ${md5}`);
   try {
     const jsonResp = await axios7.default.get(annaJsonUrl, {
       timeout: 1e4,
@@ -3708,14 +3744,14 @@ app.all("/api/download", async (req, res) => {
     });
     if (jsonResp.data && jsonResp.data?.mirrors?.length) {
       const mirrors = jsonResp.data.mirrors;
-      const results2 = await Promise.allSettled(mirrors.map((m) => {
+      for (const m of mirrors) {
         const url = typeof m === "string" ? m : m?.url;
-        return url ? tryDownload(url, annaHtmlUrl) : Promise.resolve(false);
-      }));
-      if (results2.some((r) => r.status === "fulfilled" && r.value)) return;
+        if (url && await tryDownload(url, annaHtmlUrl)) return;
+      }
     }
   } catch {
   }
+  console.log(`[download] Attempt 1: library.lol for ${md5}`);
   try {
     const lolResp = await axios7.default.get(`https://library.lol/main/${md5}`, {
       timeout: TIMEOUT,
@@ -3733,6 +3769,7 @@ app.all("/api/download", async (req, res) => {
     }
   } catch {
   }
+  console.log(`[download] Attempt 2: libgen.li ads.php for ${md5}`);
   try {
     const adsResp = await axios7.default.get(`https://libgen.li/ads.php?md5=${md5}`, {
       timeout: TIMEOUT,
@@ -3753,9 +3790,9 @@ app.all("/api/download", async (req, res) => {
     `https://libgen.gs/get.php?md5=${md5}`,
     `https://libgen.li/get.php?md5=${md5}`
   ];
-  const results = await Promise.allSettled(directUrls.map((url) => tryDownload(url)));
-  const anySuccess = results.some((r) => r.status === "fulfilled" && r.value);
-  if (anySuccess) return;
+  for (const url of directUrls) {
+    if (await tryDownload(url)) return;
+  }
   return res.status(200).json({
     success: false,
     error: "Download unavailable",
@@ -3957,6 +3994,7 @@ app.get("/api/search", async (req, res) => {
         md5: book.md5 || ""
       };
     }) : [];
+    const localError = localResult.status === "rejected" ? localResult.reason : null;
     const libgenBooks = libgenResult.status === "fulfilled" ? libgenResult.value : [];
     const annaBooks = annaResult.status === "fulfilled" ? annaResult.value : [];
     const kicdBooks = kicdResult.status === "fulfilled" ? kicdResult.value : [];
@@ -4006,6 +4044,7 @@ app.get("/api/search", async (req, res) => {
       query: q,
       total: books2.length,
       sources: { local: localBooks.length, libgen: libgenBooks.filter(matchesFilters).length, annas_archive: annaBooks.filter(matchesFilters).length, kicd: kicdBooks.length, knec: knecBooks.length },
+      localError: localError ? localError instanceof Error ? localError.message : String(localError) : null,
       books: books2.slice(offset, offset + limit)
     });
   } catch (error) {
