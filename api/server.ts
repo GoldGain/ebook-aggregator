@@ -177,14 +177,14 @@ app.get("/api/libgen", async (req: any, res: any) => {
           source: "libgen",
           // Primary: Anna's Archive (most reliable); fallback to libgen mirrors
           sourceUrl: annaUrl || `https://libgen.li/get.php?md5=${md5}`,
-          annaUrl: annaUrl || `https://annas-archive.li/md5/${md5}`,
+          annaUrl: annaUrl || `https://annas-archive.gd/md5/${md5}`,
           mirrors: [
-            annaUrl || `https://annas-archive.li/md5/${md5}`,
+            annaUrl || `https://annas-archive.gd/md5/${md5}`,
             `https://libgen.li/get.php?md5=${md5}`,
             `https://libgen.rs/get.php?md5=${md5}`,
           ],
           formats: {
-            pdf: annaUrl || `https://annas-archive.li/md5/${md5}`,
+            pdf: annaUrl || `https://annas-archive.gd/md5/${md5}`,
           },
         });
       }
@@ -269,8 +269,8 @@ app.all("/api/download", async (req: any, res: any) => {
   }
 
   // ── Anna's Archive fallback URL (most reliable, returns JSON with mirror list) ──
-  const annaJsonUrl = `https://annas-archive.li/md5/${md5}.json`;
-  const annaHtmlUrl = `https://annas-archive.li/md5/${md5}`;
+  const annaJsonUrl = `https://annas-archive.gd/md5/${md5}.json`;
+  const annaHtmlUrl = `https://annas-archive.gd/md5/${md5}`;
 
   const axios = await import("axios");
   const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
@@ -288,7 +288,7 @@ app.all("/api/download", async (req: any, res: any) => {
       const head = await axios.default.head(url, {
         timeout: 5000,
         maxRedirects: 8,
-        headers: { "User-Agent": UA, "Referer": referer || "https://annas-archive.li/", "Accept": "*/*" },
+        headers: { "User-Agent": UA, "Referer": referer || "https://annas-archive.gd/", "Accept": "*/*" },
         validateStatus: (s: number) => s < 500,
       });
 
@@ -300,7 +300,7 @@ app.all("/api/download", async (req: any, res: any) => {
         const check = await axios.default.get(url, {
           timeout: 5000,
           maxRedirects: 8,
-          headers: { "User-Agent": UA, "Referer": referer || "https://annas-archive.li/", "Accept": "*/*" },
+          headers: { "User-Agent": UA, "Referer": referer || "https://annas-archive.gd/", "Accept": "*/*" },
         });
         const checkCt = check.headers["content-type"] || "";
         if (/text\/html|application\/json/.test(checkCt) && check.data.length < 50000) return false;
@@ -311,7 +311,7 @@ app.all("/api/download", async (req: any, res: any) => {
         responseType: "stream",
         timeout: 30000,
         maxRedirects: 8,
-        headers: { "User-Agent": UA, "Referer": referer || "https://annas-archive.li/", "Accept": "*/*" },
+        headers: { "User-Agent": UA, "Referer": referer || "https://annas-archive.gd/", "Accept": "*/*" },
       });
 
       const finalCt = response.headers["content-type"] || ct || "application/pdf";
@@ -536,7 +536,7 @@ app.get("/api/search", async (req: any, res: any) => {
           const md5Match = md5Href.match(/md5=([a-f0-9]{32})/i);
           const md5 = md5Match ? md5Match[1] : "";
           if (!title || !md5 || format !== "pdf" || /^[\d\s;:.,-]+$/.test(title)) return;
-          const sourceUrl = annaLink.attr("href") || `https://annas-archive.li/md5/${md5}`;
+          const sourceUrl = annaLink.attr("href") || `https://annas-archive.gd/md5/${md5}`;
           books.push({
             title: title.slice(0, 255), author: cells.eq(1).text().trim() || "Unknown",
             publisher: cells.eq(2).text().trim(), year: cells.eq(3).text().trim(),
@@ -552,32 +552,20 @@ app.get("/api/search", async (req: any, res: any) => {
     })();
 
     const annaPromise = (async () => {
-      const books: any[] = [];
-      if (q.length < 2) return books;
+      if (q.length < 2) return [];
       try {
-        const response = await axios.default.get(`https://annas-archive.li/search?q=${encodeURIComponent(q)}`, {
-          timeout: 15000,
-          headers: { "User-Agent": "Mozilla/5.0 (compatible; ZAMIFU-E-MATERIALS/2.0; Educational Aggregator)" },
-        });
-        const $ = cheerio.load(response.data);
-        $("a[href*='/md5/']").each((_i: number, element: any) => {
-          if (books.length >= 50) return false;
-          const href = $(element).attr("href") || "";
-          const md5Match = href.match(/\/md5\/([a-f0-9]{32})/i);
-          if (!md5Match) return;
-          const md5 = md5Match[1];
-          const parent = $(element).closest("div, li, tr");
-          const title = (parent.find("h3, h4, .text-lg, .font-bold").first().text().trim() || $(element).text().trim()).slice(0, 255);
-          const author = parent.find(".text-gray-500, .text-sm, .italic").first().text().trim() || "Unknown";
-          const format = parent.find('span:contains("pdf"), span:contains("epub"), span:contains("mobi")').first().text().trim().toLowerCase();
-          if (!title || (format && format !== "pdf")) return;
-          const sourceUrl = `https://annas-archive.li/md5/${md5}`;
-          books.push({ title, author, publisher: "", year: "", language: "en", pages: "", filesize: "", format: "pdf", md5, source: "annas_archive", sourceUrl, downloadUrl: "", annaUrl: sourceUrl, formats: { pdf: sourceUrl } });
-        });
+        const books = await withTimeout(searchAnnasArchive(q, 30), 15000);
+        return books.map(b => ({
+          ...b,
+          source: "annas_archive",
+          year: "",
+          pages: "",
+          downloadUrl: "",
+          formats: { pdf: b.sourceUrl }
+        }));
       } catch {
-        // Continue with other sources.
+        return [];
       }
-      return books;
     })();
 
     const [localResult, libgenResult, annaResult, kicdResult, knecResult] = await Promise.allSettled([
@@ -621,7 +609,9 @@ app.get("/api/search", async (req: any, res: any) => {
     const annaBooks = annaResult.status === "fulfilled" ? annaResult.value : [];
     const kicdBooks = kicdResult.status === "fulfilled" ? kicdResult.value : [];
     const knecBooks = knecResult.status === "fulfilled" ? knecResult.value : [];
-    const candidates = [...localBooks, ...libgenBooks, ...annaBooks, ...kicdBooks, ...knecBooks].filter(matchesFilters);
+    
+    // Prioritize Anna's Archive results by putting them first in the candidates list
+    const candidates = [...annaBooks, ...localBooks, ...libgenBooks, ...kicdBooks, ...knecBooks].filter(matchesFilters);
 
     const merged = new Map<string, any>();
     for (const book of candidates) {

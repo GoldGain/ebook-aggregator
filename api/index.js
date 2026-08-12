@@ -3606,14 +3606,14 @@ app.get("/api/libgen", async (req, res) => {
           source: "libgen",
           // Primary: Anna's Archive (most reliable); fallback to libgen mirrors
           sourceUrl: annaUrl || `https://libgen.li/get.php?md5=${md5}`,
-          annaUrl: annaUrl || `https://annas-archive.li/md5/${md5}`,
+          annaUrl: annaUrl || `https://annas-archive.gd/md5/${md5}`,
           mirrors: [
-            annaUrl || `https://annas-archive.li/md5/${md5}`,
+            annaUrl || `https://annas-archive.gd/md5/${md5}`,
             `https://libgen.li/get.php?md5=${md5}`,
             `https://libgen.rs/get.php?md5=${md5}`
           ],
           formats: {
-            pdf: annaUrl || `https://annas-archive.li/md5/${md5}`
+            pdf: annaUrl || `https://annas-archive.gd/md5/${md5}`
           }
         });
       }
@@ -3685,8 +3685,8 @@ app.all("/api/download", async (req, res) => {
   if (!md5 || typeof md5 !== "string" || !/^[a-f0-9]{32}$/i.test(md5)) {
     return res.status(404).json({ success: false, error: "Download unavailable", message: "This document is not available right now. Try another result." });
   }
-  const annaJsonUrl = `https://annas-archive.li/md5/${md5}.json`;
-  const annaHtmlUrl = `https://annas-archive.li/md5/${md5}`;
+  const annaJsonUrl = `https://annas-archive.gd/md5/${md5}.json`;
+  const annaHtmlUrl = `https://annas-archive.gd/md5/${md5}`;
   const axios7 = await import("axios");
   const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
   const TIMEOUT = 1e4;
@@ -3697,7 +3697,7 @@ app.all("/api/download", async (req, res) => {
       const head = await axios7.default.head(url, {
         timeout: 5e3,
         maxRedirects: 8,
-        headers: { "User-Agent": UA, "Referer": referer || "https://annas-archive.li/", "Accept": "*/*" },
+        headers: { "User-Agent": UA, "Referer": referer || "https://annas-archive.gd/", "Accept": "*/*" },
         validateStatus: (s) => s < 500
       });
       const ct = head.headers["content-type"] || "";
@@ -3706,7 +3706,7 @@ app.all("/api/download", async (req, res) => {
         const check = await axios7.default.get(url, {
           timeout: 5e3,
           maxRedirects: 8,
-          headers: { "User-Agent": UA, "Referer": referer || "https://annas-archive.li/", "Accept": "*/*" }
+          headers: { "User-Agent": UA, "Referer": referer || "https://annas-archive.gd/", "Accept": "*/*" }
         });
         const checkCt = check.headers["content-type"] || "";
         if (/text\/html|application\/json/.test(checkCt) && check.data.length < 5e4) return false;
@@ -3715,7 +3715,7 @@ app.all("/api/download", async (req, res) => {
         responseType: "stream",
         timeout: 3e4,
         maxRedirects: 8,
-        headers: { "User-Agent": UA, "Referer": referer || "https://annas-archive.li/", "Accept": "*/*" }
+        headers: { "User-Agent": UA, "Referer": referer || "https://annas-archive.gd/", "Accept": "*/*" }
       });
       const finalCt = response.headers["content-type"] || ct || "application/pdf";
       const finalCl = response.headers["content-length"] || cl;
@@ -3902,7 +3902,7 @@ app.get("/api/search", async (req, res) => {
           const md5Match = md5Href.match(/md5=([a-f0-9]{32})/i);
           const md5 = md5Match ? md5Match[1] : "";
           if (!title || !md5 || format !== "pdf" || /^[\d\s;:.,-]+$/.test(title)) return;
-          const sourceUrl = annaLink.attr("href") || `https://annas-archive.li/md5/${md5}`;
+          const sourceUrl = annaLink.attr("href") || `https://annas-archive.gd/md5/${md5}`;
           books3.push({
             title: title.slice(0, 255),
             author: cells.eq(1).text().trim() || "Unknown",
@@ -3925,31 +3925,20 @@ app.get("/api/search", async (req, res) => {
       return books3;
     })();
     const annaPromise = (async () => {
-      const books3 = [];
-      if (q.length < 2) return books3;
+      if (q.length < 2) return [];
       try {
-        const response = await axios7.default.get(`https://annas-archive.li/search?q=${encodeURIComponent(q)}`, {
-          timeout: 15e3,
-          headers: { "User-Agent": "Mozilla/5.0 (compatible; ZAMIFU-E-MATERIALS/2.0; Educational Aggregator)" }
-        });
-        const $ = cheerio5.load(response.data);
-        $("a[href*='/md5/']").each((_i, element) => {
-          if (books3.length >= 50) return false;
-          const href = $(element).attr("href") || "";
-          const md5Match = href.match(/\/md5\/([a-f0-9]{32})/i);
-          if (!md5Match) return;
-          const md5 = md5Match[1];
-          const parent = $(element).closest("div, li, tr");
-          const title = (parent.find("h3, h4, .text-lg, .font-bold").first().text().trim() || $(element).text().trim()).slice(0, 255);
-          const author = parent.find(".text-gray-500, .text-sm, .italic").first().text().trim() || "Unknown";
-          const format = parent.find('span:contains("pdf"), span:contains("epub"), span:contains("mobi")').first().text().trim().toLowerCase();
-          if (!title || format && format !== "pdf") return;
-          const sourceUrl = `https://annas-archive.li/md5/${md5}`;
-          books3.push({ title, author, publisher: "", year: "", language: "en", pages: "", filesize: "", format: "pdf", md5, source: "annas_archive", sourceUrl, downloadUrl: "", annaUrl: sourceUrl, formats: { pdf: sourceUrl } });
-        });
+        const books3 = await withTimeout(searchAnnasArchive(q, 30), 15e3);
+        return books3.map((b) => ({
+          ...b,
+          source: "annas_archive",
+          year: "",
+          pages: "",
+          downloadUrl: "",
+          formats: { pdf: b.sourceUrl }
+        }));
       } catch {
+        return [];
       }
-      return books3;
     })();
     const [localResult, libgenResult, annaResult, kicdResult, knecResult] = await Promise.allSettled([
       Promise.resolve().then(() => (init_db(), db_exports)).then(({ listBooks: listBooks2 }) => listBooks2({
@@ -3999,7 +3988,7 @@ app.get("/api/search", async (req, res) => {
     const annaBooks = annaResult.status === "fulfilled" ? annaResult.value : [];
     const kicdBooks = kicdResult.status === "fulfilled" ? kicdResult.value : [];
     const knecBooks = knecResult.status === "fulfilled" ? knecResult.value : [];
-    const candidates = [...localBooks, ...libgenBooks, ...annaBooks, ...kicdBooks, ...knecBooks].filter(matchesFilters);
+    const candidates = [...annaBooks, ...localBooks, ...libgenBooks, ...kicdBooks, ...knecBooks].filter(matchesFilters);
     const merged = /* @__PURE__ */ new Map();
     for (const book of candidates) {
       const title = String(book.title || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
