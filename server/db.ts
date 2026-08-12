@@ -40,8 +40,13 @@ const DATABASE_MAX_LIFETIME_SECONDS = 60;
 // compatible with Supabase's transaction pooler and prevent a stalled connection
 // attempt from consuming the full Vercel function timeout.
 export async function getDb() {
-  if (!_db && ENV.databaseUrl) {
+  if (!_db) {
+    if (!ENV.databaseUrl) {
+      console.error("[Database] DATABASE_URL is missing in ENV!");
+      return null;
+    }
     try {
+      console.log("[Database] Initializing new connection...");
       const client = postgres(ENV.databaseUrl, {
         ssl: "require",
         max: 4,

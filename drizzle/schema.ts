@@ -90,6 +90,7 @@ export const books = pgTable("books", {
   licenseName: varchar("licenseName", { length: 255 }),
   licenseUrl: text("licenseUrl"),
   directDownloadAllowed: boolean("directDownloadAllowed").default(false).notNull(),
+  md5: varchar("md5", { length: 32 }),
   provenanceCheckedAt: timestamp("provenanceCheckedAt"),
   isbn: varchar("isbn", { length: 20 }),
   pages: integer("pages"),
