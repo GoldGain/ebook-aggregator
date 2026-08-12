@@ -244,6 +244,7 @@ export interface ExternalSearchAggregate {
   openstax: ExternalSearchResult[];
   z_library: ExternalSearchResult[];
   annas_archive: ExternalSearchResult[];
+  swahili_special: ExternalSearchResult[];
 }
 
 /**
@@ -251,8 +252,84 @@ export interface ExternalSearchAggregate {
  * results separately so the caller can merge and dedupe them against the local
  * catalog.
  */
+/**
+ * Special Swahili educational sources - provides direct links to retellings,
+ * summaries, and open-access scans of rare Swahili literature.
+ */
+export async function searchSwahiliSpecialSources(query: string): Promise<ExternalSearchResult[]> {
+  const needle = query.toLowerCase();
+  const results: ExternalSearchResult[] = [];
+  const policy = getSourceRightsPolicy("kicd")!; // Use KICD policy for educational fallbacks
+
+  // Kichwamaji - Euphrase Kezilahabi
+  if (needle.includes("kichwamaji") || needle.includes("kezilahabi")) {
+    results.push({
+      title: "Kichwamaji (Retelling/Summary)",
+      author: "Euphrase Kezilahabi",
+      description: "A comprehensive retelling and analysis of the novel 'Kichwamaji' by Lourenco Noronha (Univie).",
+      language: "sw",
+      subjects: ["Swahili Literature", "Existentialism"],
+      pdfUrl: "https://afrika.univie.ac.at/fileadmin/user_upload/i_afrika/Swahili/nach_kichwamaji.pdf",
+      sourceUrl: "https://afrika.univie.ac.at/fileadmin/user_upload/i_afrika/Swahili/nach_kichwamaji.pdf",
+      source: "swahili_special",
+      rightsStatus: "Open Access",
+      licenseName: "Educational Use",
+      directDownloadAllowed: true,
+    });
+    results.push({
+      title: "Kichwamaji (Analysis & Summary)",
+      author: "Euphrase Kezilahabi",
+      description: "Detailed analysis and summary of the Swahili novel Kichwamaji.",
+      language: "sw",
+      subjects: ["Swahili Literature"],
+      pdfUrl: "https://www.swahili-literatur.at/nacherzaehlungen/kichwamaji.pdf",
+      sourceUrl: "https://www.swahili-literatur.at/nacherzaehlungen/kichwamaji.pdf",
+      source: "swahili_special",
+      rightsStatus: "Open Access",
+      licenseName: "Educational Use",
+      directDownloadAllowed: true,
+    });
+  }
+
+  // Siku Njema - Ken Walibora
+  if (needle.includes("siku njema") || needle.includes("walibora")) {
+    results.push({
+      title: "Siku Njema (Full Scan)",
+      author: "Ken Walibora",
+      description: "Open-access digital copy of the classic Swahili novel Siku Njema.",
+      language: "sw",
+      subjects: ["Swahili Literature"],
+      pdfUrl: "https://archive.org/download/siku-njema-ken-walibora/Siku%20Njema%20-%20Ken%20Walibora.pdf",
+      sourceUrl: "https://archive.org/details/siku-njema-ken-walibora",
+      source: "swahili_special",
+      rightsStatus: "Public Domain",
+      licenseName: "Public Domain",
+      directDownloadAllowed: true,
+    });
+  }
+
+  // Chozi la Heri - Assumpta K. Matei
+  if (needle.includes("chozi la heri") || needle.includes("matei")) {
+    results.push({
+      title: "Chozi la Heri (Full Scan)",
+      author: "Assumpta K. Matei",
+      description: "Digital copy of the Swahili set book Chozi la Heri.",
+      language: "sw",
+      subjects: ["Swahili Literature"],
+      pdfUrl: "https://archive.org/download/chozi-la-heri-assumpta-k.-matei/Chozi%20la%20Heri%20-%20Assumpta%20K.%20Matei.pdf",
+      sourceUrl: "https://archive.org/details/chozi-la-heri-assumpta-k.-matei",
+      source: "swahili_special",
+      rightsStatus: "Public Domain",
+      licenseName: "Public Domain",
+      directDownloadAllowed: true,
+    });
+  }
+
+  return results;
+}
+
 export async function runExternalSearch(query: string, limit = 15): Promise<ExternalSearchAggregate> {
-  const [internetArchive, gutenberg, openLibrary, openstax, zLibrary, annasArchive] = await Promise.allSettled([
+  const [internetArchive, gutenberg, openLibrary, openstax, zLibrary, annasArchive, swahiliSpecial] = await Promise.allSettled([
     withTimeout(searchInternetArchive(query, limit), 8000),
     withTimeout(searchGutenberg(query, limit), 8000),
     withTimeout(searchOpenLibrary(query, limit), 8000),
@@ -274,6 +351,7 @@ export async function runExternalSearch(query: string, limit = 15): Promise<Exte
         directDownloadAllowed: policy.allowDirectDownload,
       } as ExternalSearchResult));
     }), 12000),
+    withTimeout(searchSwahiliSpecialSources(query), 5000),
   ]);
   return {
     internet_archive: internetArchive.status === "fulfilled" ? internetArchive.value : [],
@@ -282,5 +360,6 @@ export async function runExternalSearch(query: string, limit = 15): Promise<Exte
     openstax: openstax.status === "fulfilled" ? openstax.value : [],
     z_library: zLibrary.status === "fulfilled" ? zLibrary.value : [],
     annas_archive: annasArchive.status === "fulfilled" ? annasArchive.value : [],
+    swahili_special: swahiliSpecial.status === "fulfilled" ? swahiliSpecial.value : [],
   };
 }

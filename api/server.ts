@@ -632,16 +632,18 @@ app.get("/api/search", async (req: any, res: any) => {
     }) : [];
     const localError = localResult.status === "rejected" ? localResult.reason : null;
     const libgenBooks = libgenResult.status === "fulfilled" ? libgenResult.value : [];
-    const externalData = externalResult.status === "fulfilled" ? externalResult.value : { internet_archive: [], gutenberg: [], open_library: [], openstax: [], z_library: [], annas_archive: [] };
+    const externalData = externalResult.status === "fulfilled" ? externalResult.value : { internet_archive: [], gutenberg: [], open_library: [], openstax: [], z_library: [], annas_archive: [], swahili_special: [] };
     const iaBooks = externalData.internet_archive || [];
     const olBooks = externalData.open_library || [];
     const zLibBooks = externalData.z_library || [];
     const annaBooks = externalData.annas_archive || [];
+    const swahiliSpecialBooks = externalData.swahili_special || [];
     const kicdBooks = kicdResult.status === "fulfilled" ? kicdResult.value : [];
     const knecBooks = knecResult.status === "fulfilled" ? knecResult.value : [];
     
-    // Prioritize Anna's Archive and Z-Library results
+    // Prioritize Special Sources, Anna's Archive, and Z-Library results
     const candidates = [
+      ...swahiliSpecialBooks,
       ...annaBooks, 
       ...zLibBooks, 
       ...localBooks, 
@@ -696,6 +698,7 @@ app.get("/api/search", async (req: any, res: any) => {
         z_library: zLibBooks.filter(matchesFilters).length,
         internet_archive: iaBooks.filter(matchesFilters).length,
         open_library: olBooks.filter(matchesFilters).length,
+        swahili_special: swahiliSpecialBooks.filter(matchesFilters).length,
         kicd: kicdBooks.length, 
         knec: knecBooks.length 
       },
