@@ -274,7 +274,7 @@ app.all("/api/download", async (req: any, res: any) => {
 
   const axios = await import("axios");
   const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
-  const TIMEOUT = 20000; // 20 seconds per attempt — servers can be slow
+  const TIMEOUT = 10000; // 10 seconds per attempt to fit within Vercel timeout
 
   const isBinaryCt = (ct: string) =>
     /application\/pdf|application\/octet-stream|application\/epub|djvu|binary/i.test(ct || "");
@@ -290,6 +290,7 @@ app.all("/api/download", async (req: any, res: any) => {
   };
 
   const tryDownload = async (url: string, referer?: string): Promise<boolean> => {
+    console.log(`[download] Trying: ${url}`);
     try {
       const r = await axios.default.get(url, {
         responseType: "arraybuffer",
@@ -319,6 +320,7 @@ app.all("/api/download", async (req: any, res: any) => {
   };
 
   // Attempt 0: Anna's Archive .json endpoint — returns direct mirror URLs
+  console.log(`[download] Attempt 0: Anna's Archive JSON for ${md5}`);
   try {
     const jsonResp = await axios.default.get(annaJsonUrl, {
       timeout: 10000,
@@ -336,6 +338,7 @@ app.all("/api/download", async (req: any, res: any) => {
   } catch {}
 
   // Attempt 1: Scrape library.lol for a direct download link
+  console.log(`[download] Attempt 1: library.lol for ${md5}`);
   try {
     const lolResp = await axios.default.get(`https://library.lol/main/${md5}`, {
       timeout: TIMEOUT,
@@ -356,6 +359,7 @@ app.all("/api/download", async (req: any, res: any) => {
   } catch {}
 
   // Attempt 2: Try to get key from libgen.li, then download
+  console.log(`[download] Attempt 2: libgen.li ads.php for ${md5}`);
   try {
     const adsResp = await axios.default.get(`https://libgen.li/ads.php?md5=${md5}`, {
       timeout: TIMEOUT,
