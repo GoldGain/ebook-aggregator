@@ -598,6 +598,7 @@ app.get("/api/search", async (req: any, res: any) => {
         md5: book.md5 || "",
       };
     }) : [];
+    const localError = localResult.status === "rejected" ? localResult.reason : null;
     const libgenBooks = libgenResult.status === "fulfilled" ? libgenResult.value : [];
     const annaBooks = annaResult.status === "fulfilled" ? annaResult.value : [];
     const kicdBooks = kicdResult.status === "fulfilled" ? kicdResult.value : [];
@@ -642,6 +643,7 @@ app.get("/api/search", async (req: any, res: any) => {
     return res.status(200).json({
       success: true, query: q, total: books.length,
       sources: { local: localBooks.length, libgen: libgenBooks.filter(matchesFilters).length, annas_archive: annaBooks.filter(matchesFilters).length, kicd: kicdBooks.length, knec: knecBooks.length },
+      localError: localError ? (localError instanceof Error ? localError.message : String(localError)) : null,
       books: books.slice(offset, offset + limit),
     });
   } catch (error: any) {
