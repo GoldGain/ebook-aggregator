@@ -279,43 +279,60 @@ app.all("/api/download", async (req: any, res: any) => {
   const isBinaryCt = (ct: string) =>
     /application\/pdf|application\/octet-stream|application\/epub|djvu|binary/i.test(ct || "");
 
-  const sendFile = (data: Buffer, ct: string) => {
-    const ext = (format || "pdf").toLowerCase();
-    res.setHeader("Content-Type", ct || "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="book.${ext}"`);
-    res.setHeader("Content-Length", data.length.toString());
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Expose-Headers", "Content-Disposition, Content-Length");
-    return res.send(data);
-  };
+
 
   const tryDownload = async (url: string, referer?: string): Promise<boolean> => {
     console.log(`[download] Trying: ${url}`);
     try {
-      const r = await axios.default.get(url, {
-        responseType: "arraybuffer",
-        timeout: TIMEOUT,
+      // First, do a HEAD request or a partial GET to check the content type and size
+      const head = await axios.default.head(url, {
+        timeout: 5000,
         maxRedirects: 8,
         headers: { "User-Agent": UA, "Referer": referer || "https://annas-archive.li/", "Accept": "*/*" },
-        validateStatus: (s: number) => s < 500, // try to keep working even on 4xx edge cases
+        validateStatus: (s: number) => s < 500,
       });
-      const ct = r.headers["content-type"] || "";
-      // Skip HTML/JSON error pages
-      if (/text\/html|application\/json/.test(ct) && r.data && r.data.length < 50000) return false;
-      // Verify binary magic bytes
-      const buf = Buffer.from(r.data);
-      if (buf.length > 1000) {
-        const magic = buf.slice(0, 4).toString("hex");
-        if (magic === "25504446" || magic === "504b0304" || magic === "41542654" || magic === "d0cf11e0" || magic === "0000001c") {
-          sendFile(buf, isBinaryCt(ct) ? ct : "application/pdf");
-          return true;
-        }
-        if (buf.length > 100000 && !/text\/html/.test(ct)) {
-          sendFile(buf, ct || "application/pdf");
-          return true;
-        }
+
+      const ct = head.headers["content-type"] || "";
+      const cl = parseInt(head.headers["content-length"] || "0", 10);
+
+      if (/text\/html|application\/json/.test(ct) && cl < 50000) {
+        // If it's a small HTML/JSON, it's probably an error page, but let's double check with a GET
+        const check = await axios.default.get(url, {
+          timeout: 5000,
+          maxRedirects: 8,
+          headers: { "User-Agent": UA, "Referer": referer || "https://annas-archive.li/", "Accept": "*/*" },
+        });
+        const checkCt = check.headers["content-type"] || "";
+        if (/text\/html|application\/json/.test(checkCt) && check.data.length < 50000) return false;
       }
-    } catch {}
+
+      // If we are here, it's likely a file. Let's stream it.
+      const response = await axios.default.get(url, {
+        responseType: "stream",
+        timeout: 30000,
+        maxRedirects: 8,
+        headers: { "User-Agent": UA, "Referer": referer || "https://annas-archive.li/", "Accept": "*/*" },
+      });
+
+      const finalCt = response.headers["content-type"] || ct || "application/pdf";
+      const finalCl = response.headers["content-length"] || cl;
+      const ext = (format || "pdf").toLowerCase();
+
+      res.setHeader("Content-Type", isBinaryCt(finalCt) ? finalCt : "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="book.${ext}"`);
+      if (finalCl) res.setHeader("Content-Length", finalCl);
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Expose-Headers", "Content-Disposition, Content-Length");
+
+      response.data.pipe(res);
+      
+      return new Promise((resolve, reject) => {
+        response.data.on('end', () => resolve(true));
+        response.data.on('error', (err: any) => reject(err));
+      });
+    } catch (err: any) {
+      console.error(`[download] Failed ${url}: ${err.message}`);
+    }
     return false;
   };
 
@@ -329,11 +346,10 @@ app.all("/api/download", async (req: any, res: any) => {
     });
     if (jsonResp.data && jsonResp.data?.mirrors?.length) {
       const mirrors = jsonResp.data.mirrors;
-      const results = await Promise.allSettled(mirrors.map((m: any) => {
+      for (const m of mirrors) {
         const url = typeof m === "string" ? m : m?.url;
-        return url ? tryDownload(url, annaHtmlUrl) : Promise.resolve(false);
-      }));
-      if (results.some(r => r.status === "fulfilled" && r.value)) return;
+        if (url && await tryDownload(url, annaHtmlUrl)) return;
+      }
     }
   } catch {}
 
@@ -382,11 +398,9 @@ app.all("/api/download", async (req: any, res: any) => {
     `https://libgen.li/get.php?md5=${md5}`,
   ];
 
-  const results = await Promise.allSettled(directUrls.map(url => tryDownload(url)));
-
-  // If any succeeded, the response was already sent
-  const anySuccess = results.some(r => r.status === "fulfilled" && r.value);
-  if (anySuccess) return;
+  for (const url of directUrls) {
+    if (await tryDownload(url)) return;
+  }
 
   // All server-side attempts failed — give the browser a direct mirror URL
   // that it can download itself (avoids leaving the user with a 404).
