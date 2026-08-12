@@ -74,7 +74,9 @@ function BookCard({ book, query, onClick }: { book: any; query: string; onClick?
   const formats = typeof book.formats === "string"
     ? (() => { try { return JSON.parse(book.formats); } catch { return {}; } })()
     : (book.formats || {});
-  const downloadUrl = book.downloadUrl || formats.pdf || book.sourceUrl || "";
+  // Prefer an actual PDF/EPUB file over a source landing page so the request
+  // can be proxied through Zamifu without redirecting the student elsewhere.
+  const downloadUrl = formats.pdf || book.downloadUrl || book.sourceUrl || "";
 
   return (
     <div
