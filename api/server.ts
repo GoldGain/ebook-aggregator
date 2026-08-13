@@ -11,6 +11,43 @@ import { runScheduledAggregator } from "../server/sources/aggregator";
 
 const app = express();
 
+// Only proxy URLs from the open-access and educational providers used by the
+// catalog. The browser never receives these upstream URLs as a navigation target.
+const DOWNLOAD_HOST_ALLOWLIST = new Set([
+  "archive.org",
+  "www.archive.org",
+  "afrika.univie.ac.at",
+  "www.swahili-literatur.at",
+  "swahili-literatur.at",
+  "etd.ohiolink.edu",
+  "www.gutenberg.org",
+  "openstax.org",
+  "www.openstax.org",
+  "kicd.ac.ke",
+  "cba.knec.ac.ke",
+]);
+
+function decodeDownloadToken(token: unknown): string | undefined {
+  if (typeof token !== "string" || token.length < 8 || token.length > 4096) return undefined;
+  try {
+    const decoded = Buffer.from(token, "base64url").toString("utf8");
+    const url = new URL(decoded);
+    if (url.protocol !== "https:" || !DOWNLOAD_HOST_ALLOWLIST.has(url.hostname.toLowerCase())) return undefined;
+    return url.toString();
+  } catch {
+    return undefined;
+  }
+}
+
+function isAllowedDownloadUrl(rawUrl: string): boolean {
+  try {
+    const url = new URL(rawUrl);
+    return url.protocol === "https:" && DOWNLOAD_HOST_ALLOWLIST.has(url.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
 // Configure body parser
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
@@ -221,18 +258,21 @@ app.all("/api/download", async (req: any, res: any) => {
 
   if (req.method === "GET") {
     md5 = req.query.md5 as string | undefined;
-    directUrl = req.query.url as string | undefined;
+    directUrl = decodeDownloadToken(req.query.token) || req.query.url as string | undefined;
     format = (req.query.format as string) || "pdf";
   } else if (req.method === "POST") {
     const body = req.body || {};
     md5 = body.md5;
-    directUrl = body.url;
+    directUrl = decodeDownloadToken(body.token) || body.url;
     format = body.format || "pdf";
   }
 
   // Try a provided URL first. A source page is not treated as a download; if it
   // contains an MD5, execution continues through the server-side mirror flow.
   if (directUrl && /^https?:\/\//i.test(directUrl)) {
+    if (!isAllowedDownloadUrl(directUrl)) {
+      return res.status(403).json({ success: false, error: "Download source not approved", message: "This file can only be downloaded from an approved open-access source." });
+    }
     try {
       const axios = await import("axios");
       const r = await axios.default.get(directUrl, {
