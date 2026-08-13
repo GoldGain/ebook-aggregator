@@ -24,18 +24,18 @@ const EDUCATIONAL_LEVELS = [
 ];
 
 const FEATURES = [
-  { icon: <Globe className="w-6 h-6" />, title: "Global Access", desc: "Aggregated from the world's best open-access repositories" },
-  { icon: <Zap className="w-6 h-6" />, title: "Instant Search", desc: "Full-text search powered by PostgreSQL tsvector" },
-  { icon: <GraduationCap className="w-6 h-6" />, title: "All Levels", desc: "Primary to PhD — CBC, KCSE, and beyond" },
-  { icon: <Download className="w-6 h-6" />, title: "Free Downloads", desc: "PDF, EPUB, TXT — no subscription required" },
-  { icon: <Shield className="w-6 h-6" />, title: "Open Access", desc: "Only legally free and open-licensed content" },
-  { icon: <BookMarked className="w-6 h-6" />, title: "Personal Library", desc: "Save books, track reading, get recommendations" },
+  { icon: <Globe className="w-6 h-6" />, title: "Global Access", desc: "Access the world's best educational resources in one place" },
+  { icon: <Zap className="w-6 h-6" />, title: "Instant Search", desc: "Find exactly what you need with our powerful search engine" },
+  { icon: <GraduationCap className="w-6 h-6" />, title: "All Levels", desc: "Resources for all educational levels — from primary to university" },
+  { icon: <Download className="w-6 h-6" />, title: "Free Downloads", desc: "PDF, EPUB, TXT — available for offline study" },
+  { icon: <Shield className="w-6 h-6" />, title: "Verified Content", desc: "High-quality educational materials for students and teachers" },
+  { icon: <BookMarked className="w-6 h-6" />, title: "Personal Library", desc: "Save books, track reading, and organize your studies" },
 ];
 
 const TESTIMONIALS = [
-  { name: "Amina K.", role: "University Student", text: "ZAMIFU E-MATERIALS saved me hundreds of dollars on textbooks. I found everything I needed for my engineering degree.", avatar: "AK" },
-  { name: "Mr. Odhiambo", role: "Secondary School Teacher", text: "The KICD and KNEC resources are exactly what my students need. This platform is a game-changer for Kenyan education.", avatar: "MO" },
-  { name: "Dr. Njeri W.", role: "Researcher", text: "Having DOAJ, PubMed, and AJOL all in one place has transformed my research workflow.", avatar: "NW" },
+  { name: "Amina K.", role: "University Student", text: "ZAMIFU E-MATERIALS saved me so much on textbooks. I found everything I needed for my engineering degree.", avatar: "AK" },
+  { name: "Mr. Odhiambo", role: "Secondary School Teacher", text: "These educational resources are exactly what my students need. This platform is a game-changer for our school.", avatar: "MO" },
+  { name: "Dr. Njeri W.", role: "Researcher", text: "Having all these research materials in one place has transformed my workflow. Truly an amazing library.", avatar: "NW" },
 ];
 
 function BookCard({ book, onClick }: { book: any; onClick: () => void }) {

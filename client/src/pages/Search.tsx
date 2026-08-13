@@ -76,9 +76,9 @@ function BookCard({ book, query, onClick }: { book: any; query: string; onClick?
             {book.title || "Untitled document"}
           </h3>
           <p className="mb-1 line-clamp-1 text-xs text-muted-foreground">{book.author || "Unknown Author"}</p>
-          {(book.year || book.publishedDate || book.publisher) && (
+          {(book.year || book.publishedDate) && (
             <p className="mb-2 line-clamp-1 text-[11px] text-muted-foreground/70">
-              {book.year || book.publishedDate || ""}{book.publisher ? ` · ${book.publisher}` : ""}
+              {book.year || book.publishedDate || ""}
             </p>
           )}
           {book.description && (

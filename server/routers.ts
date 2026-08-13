@@ -59,6 +59,20 @@ import { runAggregator } from "./sources/aggregator";
 import { isApprovedSource } from "./sources/policy";
 import { getDb } from "./db";
 import { sql, eq } from "drizzle-orm";
+import { cleanMetadata } from "./sources/external-search";
+
+const cleanBook = (book: any) => {
+  if (!book) return book;
+  return {
+    ...book,
+    author: cleanMetadata(book.author || ""),
+    description: cleanMetadata(book.description || ""),
+    publisher: undefined,
+    source: undefined,
+    sourceUrl: undefined,
+    annaUrl: undefined,
+  };
+};
 
 export const appRouter = router({
   system: systemRouter,
@@ -176,19 +190,22 @@ export const appRouter = router({
         })
       )
       .query(async ({ input }) => {
-        return listBooks(input);
+        const results = await listBooks(input);
+        return results.map(cleanBook);
       }),
 
     recent: publicProcedure
       .input(z.object({ limit: z.number().int().min(1).max(50).default(12) }))
       .query(async ({ input }) => {
-        return getRecentBooks(input.limit);
+        const results = await getRecentBooks(input.limit);
+        return results.map(cleanBook);
       }),
 
     popular: publicProcedure
       .input(z.object({ limit: z.number().int().min(1).max(50).default(12) }))
       .query(async ({ input }) => {
-        return getPopularBooks(input.limit);
+        const results = await getPopularBooks(input.limit);
+        return results.map(cleanBook);
       }),
 
     byEducationalLevel: publicProcedure
@@ -220,7 +237,7 @@ export const appRouter = router({
         if (!book) {
           throw new TRPCError({ code: "NOT_FOUND", message: "Book not found" });
         }
-        return book;
+        return cleanBook(book);
       }),
 
     getByGutenbergId: publicProcedure
@@ -244,8 +261,9 @@ export const appRouter = router({
       )
       .query(async ({ input }) => {
         // Use listBooks with search for filtered results
+        let results;
         if (input.source || input.educationalLevel || input.genre || input.language || input.sort) {
-          return listBooks({
+          results = await listBooks({
             limit: input.limit,
             offset: input.offset,
             search: input.query || undefined,
@@ -255,8 +273,10 @@ export const appRouter = router({
             language: input.language,
             sort: input.sort,
           });
+        } else {
+          results = input.query ? await searchBooks(input.query, input.limit, input.offset) : [];
         }
-        return input.query ? searchBooks(input.query, input.limit, input.offset) : [];
+        return results.map(cleanBook);
       }),
 
     autocomplete: publicProcedure

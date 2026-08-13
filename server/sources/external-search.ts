@@ -34,6 +34,26 @@ export interface ExternalSearchResult {
   md5?: string;
 }
 
+const SOURCE_NAMES = [
+  "Internet Archive", "Open Library", "Project Gutenberg", "OpenStax", "Z-Library", "Anna's Archive",
+  "Teacher.co.ke", "KICD", "KNEC", "AJOLE", "Easy Elimu", "Atika School", "KenyaPlex",
+  "Schools Net Kenya", "CBC Resources", "Teachers Updates", "Mutuku", "Makau", "GoldGain", "Zamifu"
+];
+
+export function cleanMetadata(text: string): string {
+  if (!text) return "";
+  let cleaned = text;
+  for (const name of SOURCE_NAMES) {
+    const regex = new RegExp(`\\b${name}\\b`, "gi");
+    cleaned = cleaned.replace(regex, "").trim();
+  }
+  // Remove trailing "by ", "from ", etc.
+  cleaned = cleaned.replace(/\s*(by|from|source|via)\s*$/i, "").trim();
+  // Remove starting "by ", "from ", etc.
+  cleaned = cleaned.replace(/^\s*(by|from|source|via)\s*/i, "").trim();
+  return cleaned || "Educational Resource";
+}
+
 const withTimeout = async <T,>(promise: Promise<T>, milliseconds: number): Promise<T> => {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -71,23 +91,27 @@ export async function searchInternetArchive(query: string, limit = 15): Promise<
     const data = await fetchJson(url);
     const docs = (data?.response?.docs || []).slice(0, limit);
     const policy = getSourceRightsPolicy("internet_archive")!;
-    return docs.map((d: any) => ({
-      title: d.title || "",
-      author: Array.isArray(d.creator) ? (d.creator[0] || "Internet Archive") : (d.creator || "Internet Archive"),
-      description: Array.isArray(d.description) ? (d.description[0] || "") : (d.description || ""),
-      language: Array.isArray(d.language) ? (d.language[0] || "en") : (d.language || "en"),
-      subjects: Array.isArray(d.subject) ? d.subject.slice(0, 5) : [],
-      year: d.date ? String(d.date).slice(0, 4) : undefined,
-      publisher: d.publisher || undefined,
-      pdfUrl: d.pdf ? `https://archive.org/download/${d.identifier}/${d.pdf}` : `https://archive.org/download/${d.identifier}`,
-      coverUrl: `https://archive.org/services/img/${d.identifier}`,
-      sourceUrl: `https://archive.org/details/${d.identifier}`,
-      source: "internet_archive",
-      rightsStatus: policy.rightsStatus,
-      licenseName: policy.licenseName,
-      licenseUrl: policy.licenseUrl,
-      directDownloadAllowed: policy.allowDirectDownload,
-    })).filter((b: ExternalSearchResult) => b.title.length > 2);
+    return docs.map((d: any) => {
+      const rawAuthor = Array.isArray(d.creator) ? (d.creator[0] || "") : (d.creator || "");
+      const rawDesc = Array.isArray(d.description) ? (d.description[0] || "") : (d.description || "");
+      return {
+        title: d.title || "",
+        author: cleanMetadata(rawAuthor),
+        description: cleanMetadata(rawDesc),
+        language: Array.isArray(d.language) ? (d.language[0] || "en") : (d.language || "en"),
+        subjects: Array.isArray(d.subject) ? d.subject.slice(0, 5) : [],
+        year: d.date ? String(d.date).slice(0, 4) : undefined,
+        publisher: d.publisher || undefined,
+        pdfUrl: d.pdf ? `https://archive.org/download/${d.identifier}/${d.pdf}` : `https://archive.org/download/${d.identifier}`,
+        coverUrl: `https://archive.org/services/img/${d.identifier}`,
+        sourceUrl: `https://archive.org/details/${d.identifier}`,
+        source: "internet_archive",
+        rightsStatus: policy.rightsStatus,
+        licenseName: policy.licenseName,
+        licenseUrl: policy.licenseUrl,
+        directDownloadAllowed: policy.allowDirectDownload,
+      };
+    }).filter((b: ExternalSearchResult) => b.title.length > 2);
   } catch {
     return [];
   }
@@ -106,8 +130,8 @@ export async function searchGutenberg(query: string, limit = 15): Promise<Extern
     const policy = getSourceRightsPolicy("gutenberg")!;
     return results.map((b: any) => ({
       title: b.title || "",
-      author: b.authors?.[0]?.name || "Unknown",
-      description: `Public-domain educational title (ID ${b.id}).`,
+      author: cleanMetadata(b.authors?.[0]?.name || ""),
+      description: `Public-domain educational title.`,
       language: b.languages?.[0] || "en",
       subjects: [...(b.subjects || []), ...(b.bookshelves || [])].slice(0, 5),
       coverUrl: b.cover_image || undefined,
@@ -141,7 +165,7 @@ export async function searchOpenLibrary(query: string, limit = 8): Promise<Exter
     return docs
       .map((b: any) => ({
         title: b.title || "",
-        author: b.author_name?.[0] || "Unknown",
+        author: cleanMetadata(b.author_name?.[0] || ""),
         description: [
           (b.first_publish_year ? `First published ${b.first_publish_year}` : ""),
           b.language?.[0] ? `Language: ${b.language[0]}` : "",
@@ -151,7 +175,7 @@ export async function searchOpenLibrary(query: string, limit = 8): Promise<Exter
         language: b.language?.[0] || "unknown",
         subjects: (b.subject || []).slice(0, 5),
         year: b.first_publish_year ? String(b.first_publish_year) : undefined,
-        publisher: b.publisher?.[0] || undefined,
+        publisher: undefined, // Hide publisher
         coverUrl: b.cover_edition_key
           ? `https://covers.openlibrary.org/b/olid/${b.cover_edition_key}-M.jpg`
           : b.cover_i
@@ -188,14 +212,14 @@ export async function searchOpenStax(query: string, limit = 10): Promise<Externa
       )
       .map((b: any) => ({
         title: b.title || b.name || "",
-        author: "OpenStax",
-        description: b.description || b.short_description || `OpenStax openly licensed textbook: ${b.title}`,
+        author: "Educational Author",
+        description: cleanMetadata(b.description || b.short_description || `Openly licensed textbook: ${b.title}`),
         language: "en",
         subjects: [b.subject_name || b.subject || "Education"].filter(Boolean),
         coverUrl: b.cover_url || b.cover?.url || undefined,
         pdfUrl: b.high_resolution_pdf_url || b.pdf_url || undefined,
         sourceUrl: b.webview_rex_link || `https://openstax.org/details/books/${b.slug}`,
-        publisher: "OpenStax",
+        publisher: undefined,
         source: "openstax",
         rightsStatus: policy.rightsStatus,
         licenseName: policy.licenseName,
@@ -218,12 +242,12 @@ export async function searchZLibrary(query: string, limit = 10): Promise<Externa
     const policy = getSourceRightsPolicy("z_library")!;
     return books.map(b => ({
       title: b.title,
-      author: b.author,
+      author: cleanMetadata(b.author),
       description: `Educational resource. Format: ${b.format}, Size: ${b.filesize}`,
       language: b.language,
       subjects: [],
       year: undefined,
-      publisher: b.publisher,
+      publisher: undefined,
       pdfUrl: b.sourceUrl,
       coverUrl: undefined,
       sourceUrl: b.sourceUrl,
@@ -358,7 +382,7 @@ export async function runExternalSearch(query: string, limit = 15): Promise<Exte
       const policy = getSourceRightsPolicy("annas_archive")!;
       return books.map(b => ({
         title: b.title,
-        author: b.author,
+        author: cleanMetadata(b.author),
         description: `Educational resource. Format: ${b.format}, Size: ${b.filesize}`,
         language: b.language,
         subjects: [],

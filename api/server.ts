@@ -701,21 +701,21 @@ app.get("/api/search", async (req: any, res: any) => {
       return relevance(b) - relevance(a) || String(a.title || "").localeCompare(String(b.title || ""));
     });
 
+    const { cleanMetadata } = await import("../server/sources/external-search");
+    const finalBooks = books.slice(offset, offset + limit).map((book: any) => ({
+      ...book,
+      author: cleanMetadata(book.author || ""),
+      description: cleanMetadata(book.description || ""),
+      publisher: undefined,
+      source: undefined,
+      sourceUrl: undefined, // Hide source URL
+      annaUrl: undefined,
+    }));
+
     return res.status(200).json({
       success: true, query: q, total: books.length,
-      sources: { 
-        local: localBooks.length, 
-        libgen: libgenBooks.filter(matchesFilters).length, 
-        annas_archive: annaBooks.filter(matchesFilters).length, 
-        z_library: zLibBooks.filter(matchesFilters).length,
-        internet_archive: iaBooks.filter(matchesFilters).length,
-        open_library: olBooks.filter(matchesFilters).length,
-        swahili_special: swahiliSpecialBooks.filter(matchesFilters).length,
-        kicd: kicdBooks.length, 
-        knec: knecBooks.length 
-      },
       localError: localError ? (localError instanceof Error ? localError.message : String(localError)) : null,
-      books: books.slice(offset, offset + limit),
+      books: finalBooks,
     });
   } catch (error: any) {
     console.error("Unified search error:", error);

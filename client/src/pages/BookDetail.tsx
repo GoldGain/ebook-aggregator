@@ -322,12 +322,7 @@ export default function BookDetail() {
                   <p className="font-semibold">{book.pages}</p>
                 </div>
               )}
-              {book.publisher && (
-                <div>
-                  <p className="text-sm text-muted-foreground">Publisher</p>
-                  <p className="font-semibold">{book.publisher}</p>
-                </div>
-              )}
+              {/* Publisher hidden */}
 {/* Source hidden */}
               {book.isbn && (
                 <div>
@@ -413,18 +408,7 @@ export default function BookDetail() {
                 />
                 <p className="mt-3 text-xs text-muted-foreground">The download stays on ZAMIFU while it tries the available document paths.</p>
               </div>
-              <div className="mt-4 space-y-1 text-xs text-muted-foreground">
-                {book.rightsStatus && book.rightsStatus !== 'metadata_only' && (
-                  <p className="font-semibold uppercase tracking-wide text-accent">{String(book.rightsStatus).replace(/_/g, " ")}</p>
-                )}
-                <p>{book.licenseName || "Rights information has not yet been verified for this record."}</p>
-                {book.licenseUrl && (
-                  <a href={book.licenseUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-accent hover:text-primary transition">
-                    <ExternalLink className="w-3 h-3" /> License and access terms
-                  </a>
-                )}
-{/* Source URL hidden */}
-              </div>
+              {/* Rights and License hidden */}
             </div>
 
             {/* Source URL hidden */}
@@ -433,12 +417,7 @@ export default function BookDetail() {
             <div className="card-neon p-6">
               <h3 className="font-bold text-primary mb-4">Book Information</h3>
               <div className="grid grid-cols-2 gap-4 text-sm">
-                {book.gutenbergId && (
-                  <div>
-                    <p className="text-muted-foreground">Gutenberg ID</p>
-                    <p className="font-semibold">{book.gutenbergId}</p>
-                  </div>
-                )}
+                {/* ID hidden */}
                 <div>
                   <p className="text-muted-foreground">Added</p>
                   <p className="font-semibold">{new Date(book.importedAt).toLocaleDateString()}</p>
