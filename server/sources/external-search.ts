@@ -10,6 +10,13 @@ import { isApprovedSource, getSourceRightsPolicy } from "./policy";
 import { searchAnnasArchive } from "../../api/annas-archive";
 import { searchResearchSources } from "./research-search";
 
+const RIGHTS_UNVERIFIED_FULL_BOOKS = [
+  /^siku\s+njema$/i,
+  /^chozi\s+la\s+heri$/i,
+  /^tumbo\s+lisiloshiba(?:\s+na\s+hadithi\s+nyingine)?$/i,
+  /^(?:the\s+)?48\s+laws\s+of\s+power$/i,
+];
+
 const DEFAULT_HEADERS = {
   "User-Agent": "Mozilla/5.0 (compatible; ZAMIFU-E-MATERIALS/2.0; Educational Aggregator)",
   "Accept": "application/json",
@@ -100,6 +107,8 @@ async function fetchJson(url: string, timeoutMs = 8000): Promise<any> {
  */
 export async function searchInternetArchive(query: string, limit = 15): Promise<ExternalSearchResult[]> {
   if (!isApprovedSource("internet_archive")) return [];
+  const normalizedQuery = query.trim().replace(/\s+/g, " ");
+  if (RIGHTS_UNVERIFIED_FULL_BOOKS.some((pattern) => pattern.test(normalizedQuery))) return [];
   try {
     // Quote multiword phrases so "chozi la heri" matches as a phrase rather
     // than an AND-across-words clause; broaden the rights-safe collection
@@ -133,7 +142,7 @@ export async function searchInternetArchive(query: string, limit = 15): Promise<
         licenseUrl: policy.licenseUrl,
         directDownloadAllowed: policy.allowDirectDownload,
       };
-    }).filter((b: ExternalSearchResult) => b.title.length > 2);
+    }).filter((b: ExternalSearchResult) => b.title.length > 2 && !RIGHTS_UNVERIFIED_FULL_BOOKS.some((pattern) => pattern.test(b.title)));
   } catch {
     return [];
   }
@@ -345,15 +354,15 @@ export async function searchSwahiliSpecialSources(query: string): Promise<Extern
     results.push({
       title: "Siku Njema (Educational Copy)",
       author: "Ken Walibora",
-      description: "Digital copy of the classic Swahili novel Siku Njema.",
+      description: "Bibliographic record for the Swahili novel Siku Njema; no verified authorized full-text file is currently available.",
       language: "sw",
       subjects: ["Swahili Literature"],
       pdfUrl: "https://archive.org/download/siku-njema-ken-walibora/Siku%20Njema%20-%20Ken%20Walibora.pdf",
       sourceUrl: "https://archive.org/details/siku-njema-ken-walibora",
       source: "swahili_special",
-      rightsStatus: "Public Domain",
-      licenseName: "Public Domain",
-      directDownloadAllowed: true,
+      rightsStatus: "metadata_only",
+      licenseName: "Rights not verified; discovery record only",
+      directDownloadAllowed: false,
     });
   }
 
@@ -362,15 +371,15 @@ export async function searchSwahiliSpecialSources(query: string): Promise<Extern
     results.push({
       title: "Chozi la Heri (Educational Copy)",
       author: "Assumpta K. Matei",
-      description: "Digital copy of the Swahili set book Chozi la Heri.",
+      description: "Bibliographic record for the Swahili set book Chozi la Heri; no verified authorized full-text file is currently available.",
       language: "sw",
       subjects: ["Swahili Literature"],
       pdfUrl: "https://archive.org/download/chozi-la-heri-assumpta-k.-matei/Chozi%20la%20Heri%20-%20Assumpta%20K.%20Matei.pdf",
       sourceUrl: "https://archive.org/details/chozi-la-heri-assumpta-k.-matei",
       source: "swahili_special",
-      rightsStatus: "Public Domain",
-      licenseName: "Public Domain",
-      directDownloadAllowed: true,
+      rightsStatus: "metadata_only",
+      licenseName: "Rights not verified; discovery record only",
+      directDownloadAllowed: false,
     });
   }
 

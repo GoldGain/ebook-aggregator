@@ -1136,10 +1136,10 @@ var init_policy = __esm({
         allowDirectDownload: false
       },
       open_library: {
-        rightsStatus: "open_access",
-        licenseName: "Open Library / Internet Archive resource",
+        rightsStatus: "metadata_only",
+        licenseName: "Open Library bibliographic record; borrow/download rights vary by edition",
         licenseUrl: "https://openlibrary.org/developers/api",
-        allowDirectDownload: true
+        allowDirectDownload: false
       },
       internet_archive: {
         rightsStatus: "open_access",
@@ -1148,22 +1148,22 @@ var init_policy = __esm({
         allowDirectDownload: true
       },
       z_library: {
-        rightsStatus: "open_access",
-        licenseName: "Z-Library shadow library resource",
+        rightsStatus: "metadata_only",
+        licenseName: "Restricted discovery source; no direct redistribution",
         licenseUrl: "https://z-lib.gs",
-        allowDirectDownload: true
+        allowDirectDownload: false
       },
       annas_archive: {
-        rightsStatus: "open_access",
-        licenseName: "Anna's Archive meta-search resource",
+        rightsStatus: "metadata_only",
+        licenseName: "Restricted discovery source; no direct redistribution",
         licenseUrl: "https://annas-archive.org",
-        allowDirectDownload: true
+        allowDirectDownload: false
       },
       libgen: {
-        rightsStatus: "open_access",
-        licenseName: "Library Genesis shadow library resource",
+        rightsStatus: "metadata_only",
+        licenseName: "Restricted discovery source; no direct redistribution",
         licenseUrl: "https://libgen.li",
-        allowDirectDownload: true
+        allowDirectDownload: false
       },
       saylor: {
         rightsStatus: "open_access",
@@ -1698,6 +1698,8 @@ async function fetchJson(url, timeoutMs = 8e3) {
 }
 async function searchInternetArchive(query, limit = 15) {
   if (!isApprovedSource("internet_archive")) return [];
+  const normalizedQuery = query.trim().replace(/\s+/g, " ");
+  if (RIGHTS_UNVERIFIED_FULL_BOOKS.some((pattern) => pattern.test(normalizedQuery))) return [];
   try {
     const tokens = query.trim().split(/\s+/).filter(Boolean);
     const qTerm = tokens.length > 1 ? encodeURIComponent(`"${tokens.join(" ")}"`) : encodeURIComponent(query);
@@ -1725,7 +1727,7 @@ async function searchInternetArchive(query, limit = 15) {
         licenseUrl: policy2.licenseUrl,
         directDownloadAllowed: policy2.allowDirectDownload
       };
-    }).filter((b) => b.title.length > 2);
+    }).filter((b) => b.title.length > 2 && !RIGHTS_UNVERIFIED_FULL_BOOKS.some((pattern) => pattern.test(b.title)));
   } catch {
     return [];
   }
@@ -1882,30 +1884,30 @@ async function searchSwahiliSpecialSources(query) {
     results.push({
       title: "Siku Njema (Educational Copy)",
       author: "Ken Walibora",
-      description: "Digital copy of the classic Swahili novel Siku Njema.",
+      description: "Bibliographic record for the Swahili novel Siku Njema; no verified authorized full-text file is currently available.",
       language: "sw",
       subjects: ["Swahili Literature"],
       pdfUrl: "https://archive.org/download/siku-njema-ken-walibora/Siku%20Njema%20-%20Ken%20Walibora.pdf",
       sourceUrl: "https://archive.org/details/siku-njema-ken-walibora",
       source: "swahili_special",
-      rightsStatus: "Public Domain",
-      licenseName: "Public Domain",
-      directDownloadAllowed: true
+      rightsStatus: "metadata_only",
+      licenseName: "Rights not verified; discovery record only",
+      directDownloadAllowed: false
     });
   }
   if (needle.includes("chozi la heri") || needle.includes("matei")) {
     results.push({
       title: "Chozi la Heri (Educational Copy)",
       author: "Assumpta K. Matei",
-      description: "Digital copy of the Swahili set book Chozi la Heri.",
+      description: "Bibliographic record for the Swahili set book Chozi la Heri; no verified authorized full-text file is currently available.",
       language: "sw",
       subjects: ["Swahili Literature"],
       pdfUrl: "https://archive.org/download/chozi-la-heri-assumpta-k.-matei/Chozi%20la%20Heri%20-%20Assumpta%20K.%20Matei.pdf",
       sourceUrl: "https://archive.org/details/chozi-la-heri-assumpta-k.-matei",
       source: "swahili_special",
-      rightsStatus: "Public Domain",
-      licenseName: "Public Domain",
-      directDownloadAllowed: true
+      rightsStatus: "metadata_only",
+      licenseName: "Rights not verified; discovery record only",
+      directDownloadAllowed: false
     });
   }
   if (needle.includes("kidagaa") || needle.includes("kimemwozea")) {
@@ -1963,12 +1965,18 @@ async function runExternalSearch(query, limit = 15) {
     research: research.status === "fulfilled" ? research.value : []
   };
 }
-var DEFAULT_HEADERS2, SOURCE_NAMES, withTimeout;
+var RIGHTS_UNVERIFIED_FULL_BOOKS, DEFAULT_HEADERS2, SOURCE_NAMES, withTimeout;
 var init_external_search = __esm({
   "server/sources/external-search.ts"() {
     init_policy();
     init_annas_archive();
     init_research_search();
+    RIGHTS_UNVERIFIED_FULL_BOOKS = [
+      /^siku\s+njema$/i,
+      /^chozi\s+la\s+heri$/i,
+      /^tumbo\s+lisiloshiba(?:\s+na\s+hadithi\s+nyingine)?$/i,
+      /^(?:the\s+)?48\s+laws\s+of\s+power$/i
+    ];
     DEFAULT_HEADERS2 = {
       "User-Agent": "Mozilla/5.0 (compatible; ZAMIFU-E-MATERIALS/2.0; Educational Aggregator)",
       "Accept": "application/json"
@@ -4834,7 +4842,7 @@ app.get("/api/search", async (req, res) => {
       const inSiteDownloadUrl = token ? `/api/download?token=${token}` : "";
       return {
         ...book,
-        formats: token ? { ...formats, pdf: inSiteDownloadUrl } : formats,
+        formats: token ? { ...formats, pdf: inSiteDownloadUrl } : { ...formats, pdf: void 0 },
         downloadUrl: inSiteDownloadUrl,
         author: cleanMetadata2(book.author || ""),
         description: cleanMetadata2(book.description || ""),
