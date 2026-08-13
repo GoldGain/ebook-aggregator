@@ -781,7 +781,7 @@ app.get("/api/search", async (req: any, res: any) => {
       const inSiteDownloadUrl = token ? `/api/download?token=${token}` : "";
       return {
         ...book,
-        formats: token ? { ...formats, pdf: inSiteDownloadUrl } : formats,
+        formats: token ? { ...formats, pdf: inSiteDownloadUrl } : { ...formats, pdf: undefined },
         downloadUrl: inSiteDownloadUrl,
         author: cleanMetadata(book.author || ""),
         description: cleanMetadata(book.description || ""),
