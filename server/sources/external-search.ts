@@ -38,20 +38,40 @@ const SOURCE_NAMES = [
   "Anna's Archive", "LibGen", "Z-Library", "Internet Archive", "Open Library",
   "Teacher.co.ke", "KICD", "KNEC", "AJOLE", "Easy Elimu", "Atika School", "KenyaPlex",
   "Schools Net Kenya", "CBC Resources", "Teachers Updates", "Mutuku", "Makau", "GoldGain", "Zamifu",
-  "PDFDrive", "freehindibook.com", "niramaystudio.blogspot.com", "Library Genesis", "Z-Lib"
+  "PDFDrive", "freehindibook.com", "niramaystudio.blogspot.com", "Library Genesis", "Z-Lib", "Z-Library",
+  "IPFS", "Cloudflare", "Pinata", "Gateway", "Mirror", "Proxy", "Aggregator"
 ];
 
 export function cleanMetadata(text: string): string {
   if (!text) return "";
   let cleaned = text;
   for (const name of SOURCE_NAMES) {
-    const regex = new RegExp(`\\b${name}\\b`, "gi");
+    // Escape special characters in name for regex
+    const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`\\b${escapedName}\\b`, "gi");
     cleaned = cleaned.replace(regex, "").trim();
   }
+  
+  // Remove patterns like ( PDFDrive ), ( ), [ LibGen ], etc.
+  cleaned = cleaned.replace(/\s*\(\s*\)\s*/g, " ");
+  cleaned = cleaned.replace(/\s*\[\s*\]\s*/g, " ");
+  cleaned = cleaned.replace(/\s*\(\s*PDFDrive\s*\)\s*/gi, " ");
+  cleaned = cleaned.replace(/\s*\[\s*LibGen\s*\]\s*/gi, " ");
+  
+  // Remove common branding suffixes/prefixes
+  cleaned = cleaned.replace(/\s*\|\s*.*Archive.*/gi, "");
+  cleaned = cleaned.replace(/\s*\|\s*.*Library.*/gi, "");
+  cleaned = cleaned.replace(/\s*\|\s*.*Genesis.*/gi, "");
+  
   // Remove trailing "by ", "from ", etc.
-  cleaned = cleaned.replace(/\s*(by|from|source|via)\s*$/i, "").trim();
+  cleaned = cleaned.replace(/\s*(by|from|source|via|at)\s*$/i, "").trim();
   // Remove starting "by ", "from ", etc.
-  cleaned = cleaned.replace(/^\s*(by|from|source|via)\s*/i, "").trim();
+  cleaned = cleaned.replace(/^\s*(by|from|source|via|at)\s*/i, "").trim();
+  
+  // Clean up multiple spaces and punctuation
+  cleaned = cleaned.replace(/\s+/g, " ").trim();
+  cleaned = cleaned.replace(/^[:\-\s]+|[:\-\s]+$/g, "").trim();
+  
   return cleaned || "Educational Resource";
 }
 

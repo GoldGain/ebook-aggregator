@@ -277,21 +277,23 @@ app.all("/api/download", async (req: any, res: any) => {
   const annaJsonUrls = annaDomains.map(d => `https://${d}/md5/${md5}.json`);
 
   const axios = await import("axios");
+  const https = await import("https");
   const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
-  const TIMEOUT = 10000; // 10 seconds per attempt to fit within Vercel timeout
+  const TIMEOUT = 15000; // 15 seconds per attempt
 
   const isBinaryCt = (ct: string) =>
     /application\/pdf|application\/octet-stream|application\/epub|djvu|binary/i.test(ct || "");
 
-
+  const insecureAgent = new https.Agent({ rejectUnauthorized: false });
 
   const tryDownload = async (url: string, referer?: string): Promise<boolean> => {
     console.log(`[download] Trying: ${url}`);
     try {
       // First, do a HEAD request or a partial GET to check the content type and size
       const head = await axios.default.head(url, {
-        timeout: 5000,
+        timeout: 10000,
         maxRedirects: 8,
+        httpsAgent: insecureAgent,
         headers: { "User-Agent": UA, "Referer": referer || "https://annas-archive.gd/", "Accept": "*/*" },
         validateStatus: (s: number) => s < 500,
       });
@@ -304,8 +306,9 @@ app.all("/api/download", async (req: any, res: any) => {
         // Double check with a small GET if content-length is missing
         if (!cl || cl < 100000) {
           const check = await axios.default.get(url, {
-            timeout: 5000,
+            timeout: 10000,
             maxRedirects: 8,
+            httpsAgent: insecureAgent,
             headers: { "User-Agent": UA, "Referer": referer || "https://annas-archive.gd/", "Accept": "*/*" },
           });
           const checkCt = check.headers["content-type"] || "";
@@ -322,8 +325,9 @@ app.all("/api/download", async (req: any, res: any) => {
       // If we are here, it's likely a file. Let's stream it.
       const response = await axios.default.get(url, {
         responseType: "stream",
-        timeout: 30000,
+        timeout: 60000,
         maxRedirects: 8,
+        httpsAgent: insecureAgent,
         headers: { "User-Agent": UA, "Referer": referer || "https://annas-archive.gd/", "Accept": "*/*" },
       });
 
