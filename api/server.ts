@@ -272,7 +272,7 @@ app.all("/api/download", async (req: any, res: any) => {
   }
 
   // ── Anna's Archive fallback URLs (most reliable, returns JSON with mirror list) ──
-  const annaDomains = ["annas-archive.li", "annas-archive.se", "annas-archive.org", "annas-archive.gd", "annas-archive.gl", "annas-archive.pk"];
+  const annaDomains = ["annas-archive.gd", "annas-archive.li", "annas-archive.gl", "annas-archive.pk", "annas-archive.se", "annas-archive.org"];
   const annaHtmlUrls = annaDomains.map(d => `https://${d}/md5/${md5}`);
   const annaJsonUrls = annaDomains.map(d => `https://${d}/md5/${md5}.json`);
 
@@ -291,7 +291,7 @@ app.all("/api/download", async (req: any, res: any) => {
     try {
       // First, do a HEAD request or a partial GET to check the content type and size
       const head = await axios.default.head(url, {
-        timeout: 10000,
+        timeout: 20000,
         maxRedirects: 8,
         httpsAgent: insecureAgent,
         headers: { "User-Agent": UA, "Referer": referer || "https://annas-archive.gd/", "Accept": "*/*" },
@@ -325,7 +325,7 @@ app.all("/api/download", async (req: any, res: any) => {
       // If we are here, it's likely a file. Let's stream it.
       const response = await axios.default.get(url, {
         responseType: "stream",
-        timeout: 60000,
+        timeout: 120000,
         maxRedirects: 8,
         httpsAgent: insecureAgent,
         headers: { "User-Agent": UA, "Referer": referer || "https://annas-archive.gd/", "Accept": "*/*" },
@@ -437,13 +437,14 @@ app.all("/api/download", async (req: any, res: any) => {
 
   // Attempt 3: Try direct download from multiple libgen and z-library mirrors
   const directUrls = [
-    `https://libgen.rocks/get.php?md5=${md5}`,
+    `https://libgen.rs/get.php?md5=${md5}`,
     `https://libgen.is/get.php?md5=${md5}`,
-    `https://libgen.gs/get.php?md5=${md5}`,
+    `https://libgen.st/get.php?md5=${md5}`,
+    `https://libgen.rocks/get.php?md5=${md5}`,
     `https://libgen.li/get.php?md5=${md5}`,
-    `https://z-lib.gs/get.php?md5=${md5}`,
     `https://z-lib.is/get.php?md5=${md5}`,
-    `https://z-lib.se/get.php?md5=${md5}`,
+    `https://z-lib.io/get.php?md5=${md5}`,
+    `https://z-lib.id/get.php?md5=${md5}`
   ];
 
   for (const url of directUrls) {

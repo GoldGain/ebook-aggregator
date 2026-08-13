@@ -4199,7 +4199,7 @@ app.all("/api/download", async (req, res) => {
   if (!md5 || typeof md5 !== "string" || !/^[a-f0-9]{32}$/i.test(md5)) {
     return res.status(404).json({ success: false, error: "Download unavailable", message: "This document is not available right now. Try another result." });
   }
-  const annaDomains = ["annas-archive.li", "annas-archive.se", "annas-archive.org", "annas-archive.gd", "annas-archive.gl", "annas-archive.pk"];
+  const annaDomains = ["annas-archive.gd", "annas-archive.li", "annas-archive.gl", "annas-archive.pk", "annas-archive.se", "annas-archive.org"];
   const annaHtmlUrls = annaDomains.map((d) => `https://${d}/md5/${md5}`);
   const annaJsonUrls = annaDomains.map((d) => `https://${d}/md5/${md5}.json`);
   const axios8 = await import("axios");
@@ -4212,7 +4212,7 @@ app.all("/api/download", async (req, res) => {
     console.log(`[download] Trying: ${url}`);
     try {
       const head = await axios8.default.head(url, {
-        timeout: 1e4,
+        timeout: 2e4,
         maxRedirects: 8,
         httpsAgent: insecureAgent,
         headers: { "User-Agent": UA2, "Referer": referer || "https://annas-archive.gd/", "Accept": "*/*" },
@@ -4239,7 +4239,7 @@ app.all("/api/download", async (req, res) => {
       }
       const response = await axios8.default.get(url, {
         responseType: "stream",
-        timeout: 6e4,
+        timeout: 12e4,
         maxRedirects: 8,
         httpsAgent: insecureAgent,
         headers: { "User-Agent": UA2, "Referer": referer || "https://annas-archive.gd/", "Accept": "*/*" }
@@ -4337,13 +4337,14 @@ app.all("/api/download", async (req, res) => {
   } catch {
   }
   const directUrls = [
-    `https://libgen.rocks/get.php?md5=${md5}`,
+    `https://libgen.rs/get.php?md5=${md5}`,
     `https://libgen.is/get.php?md5=${md5}`,
-    `https://libgen.gs/get.php?md5=${md5}`,
+    `https://libgen.st/get.php?md5=${md5}`,
+    `https://libgen.rocks/get.php?md5=${md5}`,
     `https://libgen.li/get.php?md5=${md5}`,
-    `https://z-lib.gs/get.php?md5=${md5}`,
     `https://z-lib.is/get.php?md5=${md5}`,
-    `https://z-lib.se/get.php?md5=${md5}`
+    `https://z-lib.io/get.php?md5=${md5}`,
+    `https://z-lib.id/get.php?md5=${md5}`
   ];
   for (const url of directUrls) {
     if (await tryDownload(url)) return;
