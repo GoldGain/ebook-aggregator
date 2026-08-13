@@ -35,9 +35,10 @@ export interface ExternalSearchResult {
 }
 
 const SOURCE_NAMES = [
-  "Internet Archive", "Open Library", "Project Gutenberg", "OpenStax", "Z-Library", "Anna's Archive",
+  "Anna's Archive", "LibGen", "Z-Library", "Internet Archive", "Open Library",
   "Teacher.co.ke", "KICD", "KNEC", "AJOLE", "Easy Elimu", "Atika School", "KenyaPlex",
-  "Schools Net Kenya", "CBC Resources", "Teachers Updates", "Mutuku", "Makau", "GoldGain", "Zamifu"
+  "Schools Net Kenya", "CBC Resources", "Teachers Updates", "Mutuku", "Makau", "GoldGain", "Zamifu",
+  "PDFDrive", "freehindibook.com", "niramaystudio.blogspot.com", "Library Genesis", "Z-Lib"
 ];
 
 export function cleanMetadata(text: string): string {

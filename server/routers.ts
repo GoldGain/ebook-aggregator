@@ -65,6 +65,7 @@ const cleanBook = (book: any) => {
   if (!book) return book;
   return {
     ...book,
+    title: cleanMetadata(book.title || ""),
     author: cleanMetadata(book.author || ""),
     description: cleanMetadata(book.description || ""),
     publisher: undefined,
