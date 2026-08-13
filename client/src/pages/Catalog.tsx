@@ -16,7 +16,8 @@ export default function Catalog() {
 
   const initialGenre = params.get("genre") || "";
   const initialLevel = params.get("level") || "";
-  const initialSource = params.get("source") || "";
+  // Source hidden in UI
+  const initialSource = "";
   const initialLanguage = params.get("language") || "";
   const initialSearch = params.get("q") || "";
   const initialSort = (params.get("sort") as "newest" | "downloads" | "title" | "author") || "newest";
@@ -24,7 +25,7 @@ export default function Catalog() {
   const [selectedGenre, setSelectedGenre] = useState<string>(initialGenre);
   const [selectedLanguage, setSelectedLanguage] = useState<string>(initialLanguage);
   const [selectedLevel, setSelectedLevel] = useState<string>(initialLevel);
-  const [selectedSource, setSelectedSource] = useState<string>(initialSource);
+  const [selectedSource] = useState<string>(initialSource);
   const [localSearch, setLocalSearch] = useState<string>(initialSearch);
   const [sortBy, setSortBy] = useState<"newest" | "downloads" | "title" | "author">(initialSort);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -34,7 +35,7 @@ export default function Catalog() {
   useEffect(() => { setSelectedGenre(initialGenre); }, [initialGenre]);
   useEffect(() => { setSelectedLanguage(initialLanguage); }, [initialLanguage]);
   useEffect(() => { setSelectedLevel(initialLevel); }, [initialLevel]);
-  useEffect(() => { setSelectedSource(initialSource); }, [initialSource]);
+  // Source effect hidden
   useEffect(() => { setLocalSearch(initialSearch); }, [initialSearch]);
   useEffect(() => { setSortBy(initialSort); }, [initialSort]);
 
@@ -43,7 +44,7 @@ export default function Catalog() {
     const qs = new URLSearchParams();
     if (selectedGenre) qs.set("genre", selectedGenre);
     if (selectedLevel) qs.set("level", selectedLevel);
-    if (selectedSource) qs.set("source", selectedSource);
+    // Source URL sync hidden
     if (selectedLanguage) qs.set("language", selectedLanguage);
     if (localSearch) qs.set("q", localSearch);
     if (sortBy !== "newest") qs.set("sort", sortBy);
@@ -61,7 +62,7 @@ export default function Catalog() {
     genre: selectedGenre || undefined,
     language: selectedLanguage || undefined,
     educationalLevel: selectedLevel || undefined,
-    source: selectedSource || undefined,
+    // Source query hidden
     search: localSearch || undefined,
     sort: sortBy,
   });
@@ -88,13 +89,13 @@ export default function Catalog() {
     setSelectedGenre("");
     setSelectedLanguage("");
     setSelectedLevel("");
-    setSelectedSource("");
+    // Source clear hidden
     setLocalSearch("");
     setSortBy("newest");
     setCurrentPage(0);
   };
 
-  const activeFilters = [selectedGenre, selectedLanguage, selectedLevel, selectedSource].filter(Boolean).length;
+  const activeFilters = [selectedGenre, selectedLanguage, selectedLevel].filter(Boolean).length;
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -206,32 +207,7 @@ export default function Catalog() {
               </select>
             </div>
 
-            {/* Source Filter */}
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Source</label>
-              <select
-                value={selectedSource}
-                onChange={(e) => { setSelectedSource(e.target.value); setCurrentPage(0); }}
-                className="w-full bg-background border border-border rounded px-3 py-2 text-sm text-foreground focus:border-primary outline-none"
-              >
-                <option value="">All Sources</option>
-                <option value="gutenberg">Project Gutenberg</option>
-                <option value="open_library">Open Library</option>
-                <option value="internet_archive">Internet Archive</option>
-                <option value="openstax">OpenStax</option>
-                <option value="doab">DOAB</option>
-                <option value="open_textbook">Open Textbook</option>
-                <option value="kicd">KICD</option>
-                <option value="knec">KNEC</option>
-                <option value="teacher_co_ke">Teacher.co.ke</option>
-                <option value="revisekenya">Revise Kenya</option>
-                <option value="educationnewshub">Education News Hub</option>
-                <option value="ajol">AJOL</option>
-                <option value="unesco">UNESCO</option>
-                <option value="worldbank">World Bank</option>
-                <option value="google_books">Google Books</option>
-              </select>
-            </div>
+{/* Source filter hidden */}
           </div>
 
           {/* Sort and View */}

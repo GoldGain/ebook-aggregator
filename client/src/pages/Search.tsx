@@ -10,34 +10,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useDebounce } from "@/hooks/useDebounce";
 import { DownloadButton } from "@/components/DownloadButton";
 
-const SOURCES = [
-  { key: "", label: "All Sources" },
-  { key: "gutenberg", label: "Project Gutenberg" },
-  { key: "doab", label: "DOAB" },
-  { key: "open_textbook", label: "Open Textbook Library" },
-  { key: "internet_archive", label: "Internet Archive" },
-  { key: "open_library", label: "Open Library" },
-  { key: "openstax", label: "OpenStax" },
-  { key: "libretexts", label: "LibreTexts" },
-  { key: "wikibooks", label: "Wikibooks" },
-  { key: "wikisource", label: "Wikisource" },
-  { key: "doaj", label: "DOAJ" },
-  { key: "pubmed", label: "PubMed Central" },
-  { key: "saylor", label: "Saylor Academy" },
-  { key: "oer_commons", label: "OER Commons" },
-  { key: "mit_ocw", label: "MIT OpenCourseWare" },
-  { key: "ck12", label: "CK-12" },
-  { key: "openlearn", label: "OpenLearn" },
-  { key: "kicd", label: "KICD" },
-  { key: "knec", label: "KNEC" },
-  { key: "ajol", label: "AJOL" },
-  { key: "easy_elimu", label: "Easy Elimu" },
-  { key: "atika_school", label: "Atika School" },
-  { key: "kenyaplex", label: "KenyaPlex" },
-  { key: "schools_net", label: "Schools Net Kenya" },
-  { key: "cbc_resources", label: "CBC Resources" },
-  { key: "teachers_updates", label: "Teachers Updates" },
-];
+// Sources hidden in UI
 
 const LEVELS = [
   { key: "", label: "All Levels" },
@@ -140,7 +113,7 @@ export default function Search() {
   const searchStr = useSearch();
   const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
-  const [selectedSource, setSelectedSource] = useState<string>("");
+  const [selectedSource] = useState<string>("");
   const [selectedLevel, setSelectedLevel] = useState<string>("");
   const [selectedLanguage, setSelectedLanguage] = useState<string>("");
   const [selectedSort, setSelectedSort] = useState<"newest" | "downloads" | "title" | "author">("newest");
@@ -181,7 +154,7 @@ export default function Search() {
 
   useEffect(() => {
     const hasSearch = query.trim().length >= 2;
-    const hasFilters = !!(selectedSource || selectedLevel || selectedLanguage || selectedGenre);
+    const hasFilters = !!(selectedLevel || selectedLanguage || selectedGenre);
     if (!hasSearch && !hasFilters) {
       setResults([]);
       setTotalResults(0);
@@ -200,7 +173,7 @@ export default function Search() {
         if (hasSearch) searchParams.set("q", query.trim());
         searchParams.set("limit", String(pageSize));
         searchParams.set("offset", String(currentPage * pageSize));
-        if (selectedSource) searchParams.set("source", selectedSource);
+        // Source filter hidden
         if (selectedLevel) searchParams.set("level", selectedLevel);
         if (selectedLanguage) searchParams.set("language", selectedLanguage);
         if (selectedGenre) searchParams.set("genre", selectedGenre);
@@ -254,7 +227,6 @@ export default function Search() {
   };
 
   const clearFilters = () => {
-    setSelectedSource("");
     setSelectedLevel("");
     setSelectedLanguage("");
     setSelectedGenre("");
@@ -262,7 +234,7 @@ export default function Search() {
     setCurrentPage(0);
   };
 
-  const hasFilters = !!(selectedSource || selectedLevel || selectedLanguage || selectedGenre || selectedSort !== "newest");
+  const hasFilters = !!(selectedLevel || selectedLanguage || selectedGenre || selectedSort !== "newest");
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -375,19 +347,7 @@ export default function Search() {
                 </div>
               </div>
 
-              {/* Source */}
-              <div className="mb-5">
-                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Source</p>
-                <select
-                  value={selectedSource}
-                  onChange={(e) => { setSelectedSource(e.target.value); setCurrentPage(0); }}
-                  className="w-full bg-card border border-border rounded px-2.5 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none"
-                >
-                  {SOURCES.map((s) => (
-                    <option key={s.key} value={s.key}>{s.label}</option>
-                  ))}
-                </select>
-              </div>
+{/* Source hidden */}
 
               {/* Level */}
               <div className="mb-5">
@@ -480,12 +440,7 @@ export default function Search() {
             {/* Active filter chips */}
             {hasFilters && (
               <div className="flex flex-wrap gap-2 mb-4">
-                {selectedSource && (
-                  <span className="flex items-center gap-1 px-2.5 py-1 bg-primary/10 text-primary rounded-full text-xs">
-                    {SOURCES.find(s => s.key === selectedSource)?.label}
-                    <button onClick={() => setSelectedSource("")}><X className="w-3 h-3" /></button>
-                  </span>
-                )}
+{/* Source badge hidden */}
                 {selectedLevel && (
                   <span className="flex items-center gap-1 px-2.5 py-1 bg-accent/10 text-accent rounded-full text-xs">
                     {LEVELS.find(l => l.key === selectedLevel)?.label}
@@ -520,7 +475,7 @@ export default function Search() {
                 <SearchIcon className="w-14 h-14 mx-auto mb-4 text-muted-foreground/30" />
                 <h3 className="text-xl font-bold mb-2">Search ZAMIFU E-MATERIALS</h3>
                 <p className="text-muted-foreground text-sm max-w-sm mx-auto mb-6">
-                  Search thousands of public-domain, open-access, and educational titles from Project Gutenberg, Open Library, the Internet Archive, OpenStax, KICD, and more.
+                  Search thousands of public-domain, open-access, and educational titles.
                 </p>
                 <div className="flex flex-wrap gap-2 justify-center">
                   {POPULAR_SEARCHES.map((tag) => (

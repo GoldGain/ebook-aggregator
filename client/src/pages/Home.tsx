@@ -11,41 +11,7 @@ import {
   BookMarked, ChevronLeft, ArrowRight
 } from "lucide-react";
 
-const SOURCE_CATEGORIES = [
-  {
-    category: "Global Open Access",
-    sources: [
-      { key: "gutenberg", label: "Project Gutenberg", count: "70,000+", color: "from-blue-500/20 to-blue-600/10", icon: "📕" },
-      { key: "doab", label: "DOAB", count: "60,000+", color: "from-green-500/20 to-green-600/10", icon: "📗" },
-      { key: "open_textbook", label: "Open Textbook Library", count: "1,500+", color: "from-purple-500/20 to-purple-600/10", icon: "📘" },
-      { key: "internet_archive", label: "Internet Archive", count: "20M+", color: "from-yellow-500/20 to-yellow-600/10", icon: "🏛️" },
-      { key: "open_library", label: "Open Library", count: "3M+", color: "from-red-500/20 to-red-600/10", icon: "📚" },
-      { key: "openstax", label: "OpenStax", count: "50+", color: "from-cyan-500/20 to-cyan-600/10", icon: "🔬" },
-    ],
-  },
-  {
-    category: "Academic & Research",
-    sources: [
-      { key: "doaj", label: "DOAJ", count: "7M+", color: "from-indigo-500/20 to-indigo-600/10", icon: "📄" },
-      { key: "pubmed", label: "PubMed Central", count: "9M+", color: "from-teal-500/20 to-teal-600/10", icon: "🧬" },
-      { key: "mit_ocw", label: "MIT OpenCourseWare", count: "2,500+", color: "from-orange-500/20 to-orange-600/10", icon: "🎓" },
-      { key: "saylor", label: "Saylor Academy", count: "300+", color: "from-pink-500/20 to-pink-600/10", icon: "🏫" },
-      { key: "oer_commons", label: "OER Commons", count: "50,000+", color: "from-violet-500/20 to-violet-600/10", icon: "🌐" },
-      { key: "libretexts", label: "LibreTexts", count: "400+", color: "from-emerald-500/20 to-emerald-600/10", icon: "📓" },
-    ],
-  },
-  {
-    category: "Kenyan Education",
-    sources: [
-      { key: "kicd", label: "KICD", count: "500+", color: "from-red-600/20 to-red-700/10", icon: "🇰🇪" },
-      { key: "knec", label: "KNEC", count: "300+", color: "from-green-600/20 to-green-700/10", icon: "📝" },
-      { key: "ajol", label: "AJOL", count: "500K+", color: "from-yellow-600/20 to-yellow-700/10", icon: "🌍" },
-      { key: "easy_elimu", label: "Easy Elimu", count: "1,000+", color: "from-blue-600/20 to-blue-700/10", icon: "✏️" },
-      { key: "atika_school", label: "Atika School", count: "800+", color: "from-purple-600/20 to-purple-700/10", icon: "🏫" },
-      { key: "cbc_resources", label: "CBC Resources", count: "600+", color: "from-cyan-600/20 to-cyan-700/10", icon: "📋" },
-    ],
-  },
-];
+// Source categories hidden in UI
 
 const EDUCATIONAL_LEVELS = [
   { key: "primary", label: "Primary", icon: "🏫", desc: "Grades 1–6" },
@@ -58,7 +24,7 @@ const EDUCATIONAL_LEVELS = [
 ];
 
 const FEATURES = [
-  { icon: <Globe className="w-6 h-6" />, title: "50+ Sources", desc: "Aggregated from the world's best open-access repositories" },
+  { icon: <Globe className="w-6 h-6" />, title: "Global Access", desc: "Aggregated from the world's best open-access repositories" },
   { icon: <Zap className="w-6 h-6" />, title: "Instant Search", desc: "Full-text search powered by PostgreSQL tsvector" },
   { icon: <GraduationCap className="w-6 h-6" />, title: "All Levels", desc: "Primary to PhD — CBC, KCSE, and beyond" },
   { icon: <Download className="w-6 h-6" />, title: "Free Downloads", desc: "PDF, EPUB, TXT — no subscription required" },
@@ -174,14 +140,13 @@ export default function Home() {
           <div className="max-w-4xl mx-auto text-center">
             <div className="mb-6 inline-flex items-center gap-2 px-4 py-1.5 bg-accent/10 border border-accent/20 text-accent rounded-full text-sm font-medium">
               <Zap className="w-3.5 h-3.5" />
-              50+ Open-Access Sources · Updated Daily
+              Millions of E-Materials · Updated Daily
             </div>
             <h1 className="text-5xl md:text-7xl font-black mb-6 neon-glow leading-none tracking-tight">
               YOUR FREE<br />DIGITAL LIBRARY
             </h1>
             <p className="text-lg md:text-xl text-muted-foreground mb-10 leading-relaxed max-w-2xl mx-auto">
-              Access millions of free ebooks from Project Gutenberg, DOAB, Internet Archive, KICD, KNEC, OpenStax,
-              and 44 more world-class sources — all in one beautifully designed platform.
+              Access millions of free ebooks and educational materials in one beautifully designed platform.
             </p>
             <form onSubmit={handleSearch} className="mb-10 max-w-2xl mx-auto">
               <div className="relative flex gap-2">
@@ -207,8 +172,8 @@ export default function Home() {
                 <p className="text-[11px] text-muted-foreground mt-0.5">Books</p>
               </div>
               <div className="card-neon text-center py-3 px-2">
-                <p className="text-2xl font-black text-accent">50+</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Sources</p>
+                <p className="text-2xl font-black text-accent">Free</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Access</p>
               </div>
               <div className="card-neon text-center py-3 px-2">
                 <p className="text-2xl font-black gradient-text">7</p>
@@ -240,49 +205,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ─── Sources by Category ─── */}
-      <section className="py-16 border-b border-border">
-        <div className="container">
-          <div className="flex items-center justify-between mb-8">
-            <div className="accent-line-left">
-              <h2 className="text-3xl font-black">COLLECTIONS & CURRICULUM</h2>
-              <p className="text-sm text-muted-foreground mt-1">Curated libraries, past papers, and curriculum guides</p>
-            </div>
-            <Button variant="ghost" size="sm" onClick={() => navigate("/catalog")} className="gap-1 text-muted-foreground hover:text-primary">
-              Browse All <ArrowRight className="w-3.5 h-3.5" />
-            </Button>
-          </div>
-          {/* Category tabs */}
-          <div className="flex gap-2 mb-6 overflow-x-auto pb-1">
-            {SOURCE_CATEGORIES.map((cat, i) => (
-              <button
-                key={i}
-                onClick={() => setActiveCategoryIdx(i)}
-                className={`px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition ${
-                  activeCategoryIdx === i
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-card border border-border text-muted-foreground hover:border-primary/50"
-                }`}
-              >
-                {cat.category}
-              </button>
-            ))}
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            {SOURCE_CATEGORIES[activeCategoryIdx].sources.map((source) => (
-              <button
-                key={source.key}
-                onClick={() => navigate(`/catalog?source=${source.key}`)}
-                className={`card-neon text-center py-5 px-3 hover:border-primary/60 transition-all group bg-gradient-to-br ${source.color}`}
-              >
-                <span className="text-2xl mb-2 block">{source.icon}</span>
-                <p className="font-semibold text-xs group-hover:text-primary transition leading-tight">{source.label}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">{source.count}</p>
-              </button>
-            ))}
-          </div>
-        </div>
-      </section>
+{/* Source categories hidden */}
 
       {/* ─── Educational Levels ─── */}
       <section className="py-16 border-b border-border bg-card/10">
@@ -315,7 +238,7 @@ export default function Home() {
           <div className="flex items-center justify-between mb-8">
             <div className="accent-line-left">
               <h2 className="text-3xl font-black">RECENTLY ADDED</h2>
-              <p className="text-sm text-muted-foreground mt-1">Fresh content from all sources</p>
+              <p className="text-sm text-muted-foreground mt-1">Fresh content for you</p>
             </div>
             <Button variant="ghost" size="sm" onClick={() => navigate("/catalog?sort=newest")} className="gap-1 text-muted-foreground hover:text-primary">
               View All <ArrowRight className="w-3.5 h-3.5" />
@@ -342,7 +265,7 @@ export default function Home() {
             <div className="flex items-center gap-3">
               <div className="accent-line-left">
                 <h2 className="text-3xl font-black">MOST POPULAR</h2>
-                <p className="text-sm text-muted-foreground mt-1">Top downloads across all sources</p>
+                <p className="text-sm text-muted-foreground mt-1">Top downloads</p>
               </div>
               <TrendingUp className="w-6 h-6 text-accent" />
             </div>
@@ -413,7 +336,7 @@ export default function Home() {
                     <Star key={j} className="w-4 h-4 fill-accent text-accent" />
                   ))}
                 </div>
-                <p className="text-sm text-muted-foreground mb-5 leading-relaxed italic">"{t.text}"</p>
+                <p className="text-sm text-muted-foreground mb-5 leading-relaxed italic">{t.text}</p>
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold text-primary">
                     {t.avatar}
@@ -457,7 +380,7 @@ export default function Home() {
                 <h5 className="font-black text-primary tracking-widest">ZAMIFU E-MATERIALS</h5>
               </div>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                A world-class multi-source ebook aggregator. Free knowledge for everyone, everywhere.
+                A world-class digital library. Free knowledge for everyone, everywhere.
               </p>
             </div>
             <div>
@@ -484,12 +407,7 @@ export default function Home() {
                 )}
               </ul>
             </div>
-            <div>
-              <h5 className="font-bold text-accent mb-4 text-sm uppercase tracking-wider">Sources</h5>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                Gutenberg · DOAB · Internet Archive · Open Library · OpenStax · KICD · KNEC · AJOL · MIT OCW · PubMed · and 40+ more.
-              </p>
-            </div>
+{/* Sources footer hidden */}
           </div>
           <div className="border-t border-border pt-6 flex flex-col md:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
             <p>&copy; 2026 ZAMIFU E-MATERIALS. All content is free and open-access.</p>

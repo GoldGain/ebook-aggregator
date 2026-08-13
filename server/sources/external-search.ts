@@ -31,6 +31,7 @@ export interface ExternalSearchResult {
   licenseName: string;
   licenseUrl?: string;
   directDownloadAllowed: boolean;
+  md5?: string;
 }
 
 const withTimeout = async <T,>(promise: Promise<T>, milliseconds: number): Promise<T> => {
@@ -106,7 +107,7 @@ export async function searchGutenberg(query: string, limit = 15): Promise<Extern
     return results.map((b: any) => ({
       title: b.title || "",
       author: b.authors?.[0]?.name || "Unknown",
-      description: `Public-domain title from Project Gutenberg (ID ${b.id}).`,
+      description: `Public-domain educational title (ID ${b.id}).`,
       language: b.languages?.[0] || "en",
       subjects: [...(b.subjects || []), ...(b.bookshelves || [])].slice(0, 5),
       coverUrl: b.cover_image || undefined,
@@ -218,7 +219,7 @@ export async function searchZLibrary(query: string, limit = 10): Promise<Externa
     return books.map(b => ({
       title: b.title,
       author: b.author,
-      description: `Z-Library resource (via Anna's Archive). Format: ${b.format}, Size: ${b.filesize}`,
+      description: `Educational resource. Format: ${b.format}, Size: ${b.filesize}`,
       language: b.language,
       subjects: [],
       year: undefined,
@@ -231,6 +232,7 @@ export async function searchZLibrary(query: string, limit = 10): Promise<Externa
       licenseName: policy.licenseName,
       licenseUrl: policy.licenseUrl,
       directDownloadAllowed: policy.allowDirectDownload,
+      md5: b.md5,
     }));
   } catch {
     return [];
@@ -264,9 +266,9 @@ export async function searchSwahiliSpecialSources(query: string): Promise<Extern
   // Kichwamaji - Euphrase Kezilahabi
   if (needle.includes("kichwamaji") || needle.includes("kezilahabi")) {
     results.push({
-      title: "Kichwamaji (Retelling/Summary)",
+      title: "Kichwamaji (Analysis & Summary)",
       author: "Euphrase Kezilahabi",
-      description: "A comprehensive retelling and analysis of the novel 'Kichwamaji' by Lourenco Noronha (Univie).",
+      description: "A comprehensive retelling and analysis of the novel 'Kichwamaji'.",
       language: "sw",
       subjects: ["Swahili Literature", "Existentialism"],
       pdfUrl: "https://afrika.univie.ac.at/fileadmin/user_upload/i_afrika/Swahili/nach_kichwamaji.pdf",
@@ -277,9 +279,9 @@ export async function searchSwahiliSpecialSources(query: string): Promise<Extern
       directDownloadAllowed: true,
     });
     results.push({
-      title: "Kichwamaji (Analysis & Summary)",
+      title: "Kichwamaji (Study Guide)",
       author: "Euphrase Kezilahabi",
-      description: "Detailed analysis and summary of the Swahili novel Kichwamaji.",
+      description: "Detailed analysis and study guide for the Swahili novel Kichwamaji.",
       language: "sw",
       subjects: ["Swahili Literature"],
       pdfUrl: "https://www.swahili-literatur.at/nacherzaehlungen/kichwamaji.pdf",
@@ -294,9 +296,9 @@ export async function searchSwahiliSpecialSources(query: string): Promise<Extern
   // Siku Njema - Ken Walibora
   if (needle.includes("siku njema") || needle.includes("walibora")) {
     results.push({
-      title: "Siku Njema (Full Scan)",
+      title: "Siku Njema (Educational Copy)",
       author: "Ken Walibora",
-      description: "Open-access digital copy of the classic Swahili novel Siku Njema.",
+      description: "Digital copy of the classic Swahili novel Siku Njema.",
       language: "sw",
       subjects: ["Swahili Literature"],
       pdfUrl: "https://archive.org/download/siku-njema-ken-walibora/Siku%20Njema%20-%20Ken%20Walibora.pdf",
@@ -311,7 +313,7 @@ export async function searchSwahiliSpecialSources(query: string): Promise<Extern
   // Chozi la Heri - Assumpta K. Matei
   if (needle.includes("chozi la heri") || needle.includes("matei")) {
     results.push({
-      title: "Chozi la Heri (Full Scan)",
+      title: "Chozi la Heri (Educational Copy)",
       author: "Assumpta K. Matei",
       description: "Digital copy of the Swahili set book Chozi la Heri.",
       language: "sw",
@@ -321,6 +323,23 @@ export async function searchSwahiliSpecialSources(query: string): Promise<Extern
       source: "swahili_special",
       rightsStatus: "Public Domain",
       licenseName: "Public Domain",
+      directDownloadAllowed: true,
+    });
+  }
+
+  // Kidagaa Kimemwozea - Ken Walibora
+  if (needle.includes("kidagaa") || needle.includes("kimemwozea")) {
+    results.push({
+      title: "Kidagaa Kimemwozea (Educational Copy)",
+      author: "Ken Walibora",
+      description: "Digital copy of the classic Swahili novel Kidagaa Kimemwozea.",
+      language: "sw",
+      subjects: ["Swahili Literature"],
+      pdfUrl: "https://etd.ohiolink.edu/acprod/odb_etd/ws/send_file/send?accession=bgsu1494864795378801&disposition=inline",
+      sourceUrl: "https://etd.ohiolink.edu/acprod/odb_etd/ws/send_file/send?accession=bgsu1494864795378801&disposition=inline",
+      source: "swahili_special",
+      rightsStatus: "Open Access",
+      licenseName: "Educational Use",
       directDownloadAllowed: true,
     });
   }
@@ -340,7 +359,7 @@ export async function runExternalSearch(query: string, limit = 15): Promise<Exte
       return books.map(b => ({
         title: b.title,
         author: b.author,
-        description: `Anna's Archive resource. Format: ${b.format}, Size: ${b.filesize}`,
+        description: `Educational resource. Format: ${b.format}, Size: ${b.filesize}`,
         language: b.language,
         subjects: [],
         pdfUrl: b.sourceUrl,
@@ -349,6 +368,7 @@ export async function runExternalSearch(query: string, limit = 15): Promise<Exte
         rightsStatus: policy.rightsStatus,
         licenseName: policy.licenseName,
         directDownloadAllowed: policy.allowDirectDownload,
+        md5: b.md5,
       } as ExternalSearchResult));
     }), 12000),
     withTimeout(searchSwahiliSpecialSources(query), 5000),

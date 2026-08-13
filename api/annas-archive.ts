@@ -89,7 +89,16 @@ export async function searchAnnasArchive(query: string, limit: number = 20): Pro
         if (!title || title.length < 2) return;
         title = title.slice(0, 255);
 
-        const author = container.find(".text-gray-500, .text-sm, .italic, a[href*='author']").first().text().trim() || "Unknown";
+        let author = container.find(".text-gray-500, .text-sm, .italic, a[href*='author']").first().text().trim() || "Unknown";
+        // Clean up author if it looks like a file path or contains source markers
+        if (author.includes("/") || author.includes("\\") || author.includes("lgli/") || author.includes("zlib/")) {
+          const parts = author.split(/[/\\]/);
+          const lastPart = parts[parts.length - 1];
+          // Try to extract author from filename like "James Clear - Atomic Habits.pdf"
+          const nameMatch = lastPart.match(/^([^-\.]+)\s*-\s*.*$/);
+          author = nameMatch ? nameMatch[1].trim() : "Unknown";
+        }
+        author = author.replace(/✅/g, "").trim();
         const meta = container.find(".text-gray-800, .text-xs, .opacity-80").text().trim();
         const { language, format, filesize } = extractMetaInformation(meta);
 

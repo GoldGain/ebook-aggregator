@@ -328,12 +328,7 @@ export default function BookDetail() {
                   <p className="font-semibold">{book.publisher}</p>
                 </div>
               )}
-              {book.source && (
-                <div>
-                  <p className="text-sm text-muted-foreground">Source</p>
-                  <p className="font-semibold capitalize">{String(book.source).replace(/_/g, " ")}</p>
-                </div>
-              )}
+{/* Source hidden */}
               {book.isbn && (
                 <div>
                   <p className="text-sm text-muted-foreground">ISBN</p>
@@ -428,11 +423,7 @@ export default function BookDetail() {
                     <ExternalLink className="w-3 h-3" /> License and access terms
                   </a>
                 )}
-                {book.sourceUrl && (
-                  <a href={book.sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-accent hover:text-primary transition">
-                    <ExternalLink className="w-3 h-3" /> View original record
-                  </a>
-                )}
+{/* Source URL hidden */}
               </div>
             </div>
 

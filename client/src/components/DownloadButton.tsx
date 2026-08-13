@@ -126,7 +126,7 @@ async function requestDownload(
     }
   }
 
-  throw new Error("Book not available right now. Try another source.");
+    throw new Error("Book not available right now. Try another version.");
 }
 
 export function DownloadButton({ md5, title, format = "pdf", url, query, onSuccess }: DownloadButtonProps) {
@@ -142,7 +142,7 @@ export function DownloadButton({ md5, title, format = "pdf", url, query, onSucce
     try {
       await requestDownload({ md5, url, query, format, title }, onSuccess);
     } catch (downloadError) {
-      setError(downloadError instanceof Error ? downloadError.message : "Book not available right now. Try another source.");
+      setError(downloadError instanceof Error ? downloadError.message : "Book not available right now. Try another version.");
     } finally {
       setLoading(false);
     }

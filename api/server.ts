@@ -244,12 +244,15 @@ app.all("/api/download", async (req: any, res: any) => {
       });
       const buf = Buffer.from(r.data);
       const ct = r.headers["content-type"] || "";
-      if (buf.length > 1000 && !/text\/html|text\/xml|application\/json/i.test(ct)) {
+      if (buf.length > 5000 && !/text\/html|text\/xml|application\/json/i.test(ct)) {
         const magic = buf.slice(0, 4).toString("hex");
         const isPdf = magic === "25504446" || magic === "41542654" || magic === "0000001c" || /pdf/i.test(ct);
-        if (isPdf || buf.length > 100000) {
-          const ext = /application\/epub|epub|\.epub/i.test(ct + directUrl) ? "epub" : "pdf";
-          res.setHeader("Content-Type", isPdf ? "application/pdf" : ct || "application/octet-stream");
+        const isEpub = magic === "504b0304" || /epub/i.test(ct);
+        
+        // If it's a known binary format OR a large file that doesn't look like HTML
+        if (isPdf || isEpub || (buf.length > 200000 && !buf.slice(0, 500).toString().toLowerCase().includes("<html"))) {
+          const ext = isEpub ? "epub" : "pdf";
+          res.setHeader("Content-Type", isPdf ? "application/pdf" : (isEpub ? "application/epub+zip" : ct || "application/octet-stream"));
           res.setHeader("Content-Disposition", `attachment; filename="document.${ext}"`);
           res.setHeader("Content-Length", buf.length.toString());
           res.setHeader("Access-Control-Allow-Origin", "*");
@@ -296,15 +299,24 @@ app.all("/api/download", async (req: any, res: any) => {
       const ct = head.headers["content-type"] || "";
       const cl = parseInt(head.headers["content-length"] || "0", 10);
 
-      if (/text\/html|application\/json/.test(ct) && cl < 50000) {
-        // If it's a small HTML/JSON, it's probably an error page, but let's double check with a GET
-        const check = await axios.default.get(url, {
-          timeout: 5000,
-          maxRedirects: 8,
-          headers: { "User-Agent": UA, "Referer": referer || "https://annas-archive.gd/", "Accept": "*/*" },
-        });
-        const checkCt = check.headers["content-type"] || "";
-        if (/text\/html|application\/json/.test(checkCt) && check.data.length < 50000) return false;
+      // If it's HTML or JSON, it's almost certainly a landing page or error, not the file itself.
+      if (/text\/html|application\/json/i.test(ct)) {
+        // Double check with a small GET if content-length is missing
+        if (!cl || cl < 100000) {
+          const check = await axios.default.get(url, {
+            timeout: 5000,
+            maxRedirects: 8,
+            headers: { "User-Agent": UA, "Referer": referer || "https://annas-archive.gd/", "Accept": "*/*" },
+          });
+          const checkCt = check.headers["content-type"] || "";
+          const checkData = check.data instanceof Buffer ? check.data : Buffer.from(check.data);
+          if (/text\/html|application\/json/i.test(checkCt) || checkData.slice(0, 500).toString().toLowerCase().includes("<html")) {
+            return false;
+          }
+        } else {
+          // Large HTML is still likely a landing page
+          return false;
+        }
       }
 
       // If we are here, it's likely a file. Let's stream it.
