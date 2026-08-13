@@ -193,7 +193,7 @@ export default function BookDetail() {
   };
   const formats = parseJson(book.formats, {});
   const subjects = parseJson(book.subjects, []);
-  const pdfUrl = formats?.pdf || (book as any).directDownloadUrl || book.sourceUrl || "";
+  const pdfUrl = formats?.pdf || (book as any).directDownloadUrl || "";
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(window.location.href);

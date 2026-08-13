@@ -8,6 +8,7 @@
 
 import { isApprovedSource, getSourceRightsPolicy } from "./policy";
 import { searchAnnasArchive } from "../../api/annas-archive";
+import { searchResearchSources } from "./research-search";
 
 const DEFAULT_HEADERS = {
   "User-Agent": "Mozilla/5.0 (compatible; ZAMIFU-E-MATERIALS/2.0; Educational Aggregator)",
@@ -292,6 +293,7 @@ export interface ExternalSearchAggregate {
   z_library: ExternalSearchResult[];
   annas_archive: ExternalSearchResult[];
   swahili_special: ExternalSearchResult[];
+  research: ExternalSearchResult[];
 }
 
 /**
@@ -393,7 +395,7 @@ export async function searchSwahiliSpecialSources(query: string): Promise<Extern
 }
 
 export async function runExternalSearch(query: string, limit = 15): Promise<ExternalSearchAggregate> {
-  const [internetArchive, gutenberg, openLibrary, openstax, zLibrary, annasArchive, swahiliSpecial] = await Promise.allSettled([
+  const [internetArchive, gutenberg, openLibrary, openstax, zLibrary, annasArchive, swahiliSpecial, research] = await Promise.allSettled([
     withTimeout(searchInternetArchive(query, limit), 8000),
     withTimeout(searchGutenberg(query, limit), 8000),
     withTimeout(searchOpenLibrary(query, limit), 8000),
@@ -417,6 +419,7 @@ export async function runExternalSearch(query: string, limit = 15): Promise<Exte
       } as ExternalSearchResult));
     }), 12000),
     withTimeout(searchSwahiliSpecialSources(query), 5000),
+    withTimeout(searchResearchSources(query, Math.min(limit, 8)), 15000),
   ]);
   return {
     internet_archive: internetArchive.status === "fulfilled" ? internetArchive.value : [],
@@ -426,5 +429,6 @@ export async function runExternalSearch(query: string, limit = 15): Promise<Exte
     z_library: zLibrary.status === "fulfilled" ? zLibrary.value : [],
     annas_archive: annasArchive.status === "fulfilled" ? annasArchive.value : [],
     swahili_special: swahiliSpecial.status === "fulfilled" ? swahiliSpecial.value : [],
+    research: research.status === "fulfilled" ? research.value : [],
   };
 }

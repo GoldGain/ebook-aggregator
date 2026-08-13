@@ -176,6 +176,48 @@ export const APPROVED_SOURCE_POLICIES: Record<string, SourceRightsPolicy> = {
     licenseUrl: "https://cbcresources.co.ke",
     allowDirectDownload: false,
   },
+  arxiv: {
+    rightsStatus: "open_access",
+    licenseName: "Repository copy; item license varies",
+    licenseUrl: "https://info.arxiv.org/help/license/index.html",
+    allowDirectDownload: true,
+  },
+  europe_pmc: {
+    rightsStatus: "open_access",
+    licenseName: "Open-access full text where marked",
+    licenseUrl: "https://europepmc.org/downloads",
+    allowDirectDownload: true,
+  },
+  pubmed_central: {
+    rightsStatus: "open_access",
+    licenseName: "PMC full-text rights vary by article",
+    licenseUrl: "https://pmc.ncbi.nlm.nih.gov/about/copyright/",
+    allowDirectDownload: true,
+  },
+  crossref: {
+    rightsStatus: "metadata_only",
+    licenseName: "DOI metadata; publisher rights apply",
+    licenseUrl: "https://www.crossref.org/documentation/retrieve-metadata/rest-api/",
+    allowDirectDownload: false,
+  },
+  openalex: {
+    rightsStatus: "metadata_only",
+    licenseName: "Scholarly metadata; open-access locations vary",
+    licenseUrl: "https://creativecommons.org/public-domain/cc0/",
+    allowDirectDownload: true,
+  },
+  zenodo: {
+    rightsStatus: "open_access",
+    licenseName: "Item-specific open license",
+    licenseUrl: "https://about.zenodo.org/principles/",
+    allowDirectDownload: true,
+  },
+  core: {
+    rightsStatus: "metadata_only",
+    licenseName: "Repository metadata; item rights vary",
+    licenseUrl: "https://core.ac.uk/documentation/api",
+    allowDirectDownload: true,
+  },
   teachers_updates: {
     rightsStatus: "open_access",
     licenseName: "Teachers Updates Kenya - educational resource",

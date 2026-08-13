@@ -381,8 +381,8 @@ async function upsertUser(user) {
 async function getUserByOpenId(openId) {
   const db = await getDb();
   if (!db) return void 0;
-  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
-  return result.length > 0 ? result[0] : void 0;
+  const result2 = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
+  return result2.length > 0 ? result2[0] : void 0;
 }
 async function getAllUsers(limit = 50, offset = 0) {
   const db = await getDb();
@@ -392,8 +392,8 @@ async function getAllUsers(limit = 50, offset = 0) {
 async function getUserById(id) {
   const db = await getDb();
   if (!db) return void 0;
-  const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
-  return result.length > 0 ? result[0] : void 0;
+  const result2 = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  return result2.length > 0 ? result2[0] : void 0;
 }
 async function updateUserRole(id, role) {
   const db = await getDb();
@@ -403,8 +403,8 @@ async function updateUserRole(id, role) {
 async function getUserCount() {
   const db = await getDb();
   if (!db) return 0;
-  const result = await db.select({ count: count() }).from(users);
-  return result[0]?.count ?? 0;
+  const result2 = await db.select({ count: count() }).from(users);
+  return result2[0]?.count ?? 0;
 }
 async function getBooks(limit = 20, offset = 0) {
   const db = await getDb();
@@ -414,14 +414,14 @@ async function getBooks(limit = 20, offset = 0) {
 async function getBookById(id) {
   const db = await getDb();
   if (!db) return void 0;
-  const result = await db.select().from(books).where(eq(books.id, id)).limit(1);
-  return result.length > 0 ? result[0] : void 0;
+  const result2 = await db.select().from(books).where(eq(books.id, id)).limit(1);
+  return result2.length > 0 ? result2[0] : void 0;
 }
 async function getBookByGutenbergId(gutenbergId) {
   const db = await getDb();
   if (!db) return void 0;
-  const result = await db.select().from(books).where(eq(books.gutenbergId, gutenbergId)).limit(1);
-  return result.length > 0 ? result[0] : void 0;
+  const result2 = await db.select().from(books).where(eq(books.gutenbergId, gutenbergId)).limit(1);
+  return result2.length > 0 ? result2[0] : void 0;
 }
 async function getBookByTitleAuthor(title, author) {
   const db = await getDb();
@@ -430,8 +430,8 @@ async function getBookByTitleAuthor(title, author) {
   if (author) {
     conditions.push(like(books.author, `%${author.substring(0, 50)}%`));
   }
-  const result = await db.select().from(books).where(and(...conditions)).limit(1);
-  return result.length > 0 ? result[0] : void 0;
+  const result2 = await db.select().from(books).where(and(...conditions)).limit(1);
+  return result2.length > 0 ? result2[0] : void 0;
 }
 async function searchBooks(query, limit = 20, offset = 0) {
   const db = await getDb();
@@ -480,8 +480,8 @@ async function countBooks(options) {
   if (options.educationalLevel) conditions.push(eq(books.educationalLevel, options.educationalLevel));
   if (options.source) conditions.push(eq(books.source, options.source));
   if (options.search) conditions.push(buildSearchCondition(options.search));
-  const result = await db.select({ count: count() }).from(books).where(conditions.length > 0 ? and(...conditions) : void 0);
-  return result[0]?.count ?? 0;
+  const result2 = await db.select({ count: count() }).from(books).where(conditions.length > 0 ? and(...conditions) : void 0);
+  return result2[0]?.count ?? 0;
 }
 async function listBooks(options) {
   const db = await getDb();
@@ -541,8 +541,8 @@ async function getBooksByLanguage(language, limit = 20, offset = 0) {
 async function createBook(book) {
   const db = await getDb();
   if (!db) return void 0;
-  const result = await db.insert(books).values(book).returning({ id: books.id });
-  return result[0]?.id;
+  const result2 = await db.insert(books).values(book).returning({ id: books.id });
+  return result2[0]?.id;
 }
 async function updateBook(id, updates) {
   const db = await getDb();
@@ -562,8 +562,8 @@ async function deleteBook(id) {
 async function getBookCount() {
   const db = await getDb();
   if (!db) return 0;
-  const result = await db.select({ count: count() }).from(books);
-  return result[0]?.count ?? 0;
+  const result2 = await db.select({ count: count() }).from(books);
+  return result2[0]?.count ?? 0;
 }
 async function getAllSubjects() {
   const db = await getDb();
@@ -576,8 +576,8 @@ async function getOrCreateSubject(name) {
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
   const existing = await db.select().from(subjects).where(eq(subjects.slug, slug)).limit(1);
   if (existing.length > 0) return existing[0].id;
-  const result = await db.insert(subjects).values({ name, slug }).returning({ id: subjects.id });
-  return result[0]?.id ?? null;
+  const result2 = await db.insert(subjects).values({ name, slug }).returning({ id: subjects.id });
+  return result2[0]?.id ?? null;
 }
 async function linkBookToSubject(bookId, subjectId) {
   const db = await getDb();
@@ -601,8 +601,8 @@ async function getGenres() {
 async function getGenreBySlug(slug) {
   const db = await getDb();
   if (!db) return void 0;
-  const result = await db.select().from(genres).where(eq(genres.slug, slug)).limit(1);
-  return result.length > 0 ? result[0] : void 0;
+  const result2 = await db.select().from(genres).where(eq(genres.slug, slug)).limit(1);
+  return result2.length > 0 ? result2[0] : void 0;
 }
 async function createGenre(genre) {
   const db = await getDb();
@@ -615,8 +615,8 @@ async function getOrCreateGenre(name) {
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
   const existing = await getGenreBySlug(slug);
   if (existing) return existing.id;
-  const result = await db.insert(genres).values({ name, slug }).returning({ id: genres.id });
-  return result[0]?.id ?? null;
+  const result2 = await db.insert(genres).values({ name, slug }).returning({ id: genres.id });
+  return result2[0]?.id ?? null;
 }
 async function getUserBookshelf(userId, limit = 50, offset = 0) {
   const db = await getDb();
@@ -636,8 +636,8 @@ async function removeFromBookshelf(userId, bookId) {
 async function isBookInBookshelf(userId, bookId) {
   const db = await getDb();
   if (!db) return false;
-  const result = await db.select().from(bookshelves).where(and(eq(bookshelves.userId, userId), eq(bookshelves.bookId, bookId))).limit(1);
-  return result.length > 0;
+  const result2 = await db.select().from(bookshelves).where(and(eq(bookshelves.userId, userId), eq(bookshelves.bookId, bookId))).limit(1);
+  return result2.length > 0;
 }
 async function getBookshelfBookIds(userId) {
   const db = await getDb();
@@ -653,21 +653,21 @@ async function getUserDownloadHistory(userId, limit = 50, offset = 0) {
 async function recordDownload(userId, bookId, format) {
   const db = await getDb();
   if (!db) return void 0;
-  const result = await db.insert(downloadHistory).values({ userId, bookId, format });
+  const result2 = await db.insert(downloadHistory).values({ userId, bookId, format });
   await incrementDownloadCount(bookId);
-  return result;
+  return result2;
 }
 async function getUserDownloads(userId) {
   const db = await getDb();
   if (!db) return 0;
-  const result = await db.select({ count: count() }).from(downloadHistory).where(eq(downloadHistory.userId, userId));
-  return result[0]?.count ?? 0;
+  const result2 = await db.select({ count: count() }).from(downloadHistory).where(eq(downloadHistory.userId, userId));
+  return result2[0]?.count ?? 0;
 }
 async function getTotalDownloadCount() {
   const db = await getDb();
   if (!db) return 0;
-  const result = await db.select({ count: count() }).from(downloadHistory);
-  return result[0]?.count ?? 0;
+  const result2 = await db.select({ count: count() }).from(downloadHistory);
+  return result2[0]?.count ?? 0;
 }
 async function updateReadingProgress(userId, bookId, data) {
   const db = await getDb();
@@ -692,8 +692,8 @@ async function updateReadingProgress(userId, bookId, data) {
 async function getReadingProgress(userId, bookId) {
   const db = await getDb();
   if (!db) return void 0;
-  const result = await db.select().from(readingProgress).where(and(eq(readingProgress.userId, userId), eq(readingProgress.bookId, bookId))).limit(1);
-  return result.length > 0 ? result[0] : void 0;
+  const result2 = await db.select().from(readingProgress).where(and(eq(readingProgress.userId, userId), eq(readingProgress.bookId, bookId))).limit(1);
+  return result2.length > 0 ? result2[0] : void 0;
 }
 async function getAllReadingProgress(userId, limit = 20, offset = 0) {
   const db = await getDb();
@@ -755,8 +755,8 @@ async function getAggregatorLogs(limit = 20, offset = 0) {
 async function createAggregatorLog(log) {
   const db = await getDb();
   if (!db) return void 0;
-  const result = await db.insert(aggregatorLogs).values(log).returning({ id: aggregatorLogs.id });
-  return result[0];
+  const result2 = await db.insert(aggregatorLogs).values(log).returning({ id: aggregatorLogs.id });
+  return result2[0];
 }
 async function updateAggregatorLog(id, updates) {
   const db = await getDb();
@@ -766,8 +766,8 @@ async function updateAggregatorLog(id, updates) {
 async function getLatestAggregatorLog() {
   const db = await getDb();
   if (!db) return void 0;
-  const result = await db.select().from(aggregatorLogs).orderBy(desc(aggregatorLogs.startedAt)).limit(1);
-  return result.length > 0 ? result[0] : void 0;
+  const result2 = await db.select().from(aggregatorLogs).orderBy(desc(aggregatorLogs.startedAt)).limit(1);
+  return result2.length > 0 ? result2[0] : void 0;
 }
 async function getAggregatorSources() {
   const db = await getDb();
@@ -1244,6 +1244,48 @@ var init_policy = __esm({
         licenseUrl: "https://cbcresources.co.ke",
         allowDirectDownload: false
       },
+      arxiv: {
+        rightsStatus: "open_access",
+        licenseName: "Repository copy; item license varies",
+        licenseUrl: "https://info.arxiv.org/help/license/index.html",
+        allowDirectDownload: true
+      },
+      europe_pmc: {
+        rightsStatus: "open_access",
+        licenseName: "Open-access full text where marked",
+        licenseUrl: "https://europepmc.org/downloads",
+        allowDirectDownload: true
+      },
+      pubmed_central: {
+        rightsStatus: "open_access",
+        licenseName: "PMC full-text rights vary by article",
+        licenseUrl: "https://pmc.ncbi.nlm.nih.gov/about/copyright/",
+        allowDirectDownload: true
+      },
+      crossref: {
+        rightsStatus: "metadata_only",
+        licenseName: "DOI metadata; publisher rights apply",
+        licenseUrl: "https://www.crossref.org/documentation/retrieve-metadata/rest-api/",
+        allowDirectDownload: false
+      },
+      openalex: {
+        rightsStatus: "metadata_only",
+        licenseName: "Scholarly metadata; open-access locations vary",
+        licenseUrl: "https://creativecommons.org/public-domain/cc0/",
+        allowDirectDownload: true
+      },
+      zenodo: {
+        rightsStatus: "open_access",
+        licenseName: "Item-specific open license",
+        licenseUrl: "https://about.zenodo.org/principles/",
+        allowDirectDownload: true
+      },
+      core: {
+        rightsStatus: "metadata_only",
+        licenseName: "Repository metadata; item rights vary",
+        licenseUrl: "https://core.ac.uk/documentation/api",
+        allowDirectDownload: true
+      },
       teachers_updates: {
         rightsStatus: "open_access",
         licenseName: "Teachers Updates Kenya - educational resource",
@@ -1477,6 +1519,145 @@ var init_annas_archive = __esm({
   }
 });
 
+// server/sources/research-search.ts
+async function json(url, init) {
+  const response = await fetch(url, { ...init, headers: { ...HEADERS, ...init?.headers || {} }, signal: AbortSignal.timeout(9e3) });
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return response.json();
+}
+function policy(source) {
+  return getSourceRightsPolicy(source) || { rightsStatus: "open_access", licenseName: "Item-specific open-access terms", licenseUrl: void 0, allowDirectDownload: false };
+}
+function result(source, value) {
+  const p = policy(source);
+  return {
+    title: value.title,
+    author: value.author || "",
+    description: value.description || "Open-access research record.",
+    language: value.language || "en",
+    subjects: value.subjects || [],
+    year: value.year,
+    pages: value.pages,
+    publisher: value.publisher,
+    coverUrl: value.coverUrl,
+    pdfUrl: value.directDownloadAllowed === false ? void 0 : value.pdfUrl,
+    sourceUrl: value.sourceUrl || value.pdfUrl || "",
+    source,
+    rightsStatus: value.rightsStatus || p.rightsStatus,
+    licenseName: value.licenseName || p.licenseName,
+    licenseUrl: value.licenseUrl || p.licenseUrl,
+    directDownloadAllowed: value.directDownloadAllowed ?? Boolean(value.pdfUrl && p.allowDirectDownload)
+  };
+}
+async function searchArxiv(query, limit = 8) {
+  if (!isApprovedSource("arxiv")) return [];
+  try {
+    const url = `https://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(query)}&start=0&max_results=${Math.min(limit, 20)}`;
+    const xml = await (await fetch(url, { headers: { "User-Agent": HEADERS["User-Agent"] }, signal: AbortSignal.timeout(9e3) })).text();
+    return [...xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)].slice(0, limit).map((m) => {
+      const body = m[1];
+      const pick = (tag) => body.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`))?.[1]?.trim() || "";
+      const id = pick("id");
+      const pdf = (body.match(/<link[^>]+title="pdf"[^>]+href="([^"]+)"/)?.[1] || (id ? id.replace("abs/", "pdf/") : "")).replace(/^http:\/\//i, "https://");
+      return result("arxiv", { title: pick("title").replace(/\s+/g, " "), author: [...body.matchAll(/<author>[\s\S]*?<name>([\s\S]*?)<\/name>[\s\S]*?<\/author>/g)].map((x) => x[1].trim()).join(", "), description: pick("summary").replace(/\s+/g, " "), pdfUrl: pdf, sourceUrl: id, year: pick("published").slice(0, 4), subjects: [...body.matchAll(/<category[^>]+term="([^"]+)"/g)].map((x) => x[1]).slice(0, 5), directDownloadAllowed: Boolean(pdf) });
+    }).filter((x) => x.title.length > 2);
+  } catch {
+    return [];
+  }
+}
+async function searchEuropePmc(query, limit = 8) {
+  if (!isApprovedSource("europe_pmc")) return [];
+  try {
+    const data = await json(`https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=${encodeURIComponent(query)}&format=json&pageSize=${Math.min(limit, 25)}`);
+    return (data?.resultList?.result || []).slice(0, limit).map((item) => {
+      const pmcid = item.pmcid || "";
+      const pdf = pmcid ? `https://europepmc.org/api/getPdf?pmcid=${encodeURIComponent(pmcid)}` : void 0;
+      return result("europe_pmc", { title: item.title || "", author: item.authorString || "", description: item.abstractText || "Open-access life-sciences publication.", year: item.firstPublicationDate?.slice(0, 4), sourceUrl: `https://europepmc.org/article/${item.source}/${item.id}`, pdfUrl: item.isOpenAccess === "Y" ? pdf : void 0, directDownloadAllowed: item.isOpenAccess === "Y" && Boolean(pdf) });
+    }).filter((x) => x.title.length > 2);
+  } catch {
+    return [];
+  }
+}
+async function searchCrossref(query, limit = 8) {
+  if (!isApprovedSource("crossref")) return [];
+  try {
+    const data = await json(`https://api.crossref.org/works?query.bibliographic=${encodeURIComponent(query)}&rows=${Math.min(limit, 20)}&select=DOI,title,author,published,URL,link,container-title,publisher`);
+    return (data?.message?.items || []).slice(0, limit).map((item) => {
+      const link = (item.link || []).find((l) => /pdf/i.test(l["content-type"] || ""))?.URL;
+      return result("crossref", { title: item.title?.[0] || "", author: (item.author || []).slice(0, 3).map((a) => [a.given, a.family].filter(Boolean).join(" ")).join(", "), publisher: item.publisher, year: String(item.published?.["date-parts"]?.[0]?.[0] || ""), sourceUrl: item.URL || `https://doi.org/${item.DOI}`, pdfUrl: link, directDownloadAllowed: false });
+    }).filter((x) => x.title.length > 2);
+  } catch {
+    return [];
+  }
+}
+async function searchOpenAlex(query, limit = 8) {
+  if (!isApprovedSource("openalex")) return [];
+  try {
+    const key = process.env.OPENALEX_API_KEY;
+    const suffix = key ? `&api_key=${encodeURIComponent(key)}` : "";
+    const data = await json(`https://api.openalex.org/works?search=${encodeURIComponent(query)}&per-page=${Math.min(limit, 20)}${suffix}`);
+    return (data?.results || []).slice(0, limit).map((item) => {
+      const loc = item.best_oa_location || item.primary_location || {};
+      return result("openalex", { title: item.title || "", author: item.authorships?.[0]?.author?.display_name || "", description: "Scholarly work with open-access location metadata.", year: item.publication_year ? String(item.publication_year) : void 0, sourceUrl: item.doi || item.id || "", pdfUrl: loc.is_oa ? loc.pdf_url || void 0 : void 0, directDownloadAllowed: Boolean(loc.is_oa && loc.pdf_url) });
+    }).filter((x) => x.title.length > 2);
+  } catch {
+    return [];
+  }
+}
+async function searchDoaj(query, limit = 8) {
+  if (!isApprovedSource("doaj")) return [];
+  try {
+    const data = await json(`https://doaj.org/api/search/articles/${encodeURIComponent(query)}?pageSize=${Math.min(limit, 20)}`);
+    return (data?.results || []).slice(0, limit).map((item) => {
+      const b = item.bibjson || {};
+      const fulltext = (b.link || []).find((l) => /pdf/i.test(`${l.type || ""} ${l.url || ""}`) || /\.pdf(?:$|[?#])/i.test(l.url || ""))?.url;
+      return result("doaj", { title: b.title || "", author: (b.author || []).slice(0, 3).map((a) => a.name).join(", "), description: b.abstract || "Open-access journal article.", year: b.year, sourceUrl: b.link?.[0]?.url || fulltext || "", pdfUrl: fulltext, directDownloadAllowed: Boolean(fulltext) });
+    }).filter((x) => x.title.length > 2);
+  } catch {
+    return [];
+  }
+}
+async function searchZenodo(query, limit = 8) {
+  if (!isApprovedSource("zenodo")) return [];
+  try {
+    const data = await json(`https://zenodo.org/api/records?q=${encodeURIComponent(query)}&size=${Math.min(limit, 20)}`);
+    return (data?.hits?.hits || []).slice(0, limit).map((item) => {
+      const file = (item.files || []).find((f) => /pdf/i.test(f.key || f.type || ""));
+      return result("zenodo", { title: item.metadata?.title || "", author: (item.metadata?.creators || []).slice(0, 3).map((a) => a.name).join(", "), description: item.metadata?.description || "Open research record.", year: item.metadata?.publication_date?.slice(0, 4), sourceUrl: `https://zenodo.org/records/${item.id}`, pdfUrl: file?.links?.self, directDownloadAllowed: Boolean(file?.links?.self) });
+    }).filter((x) => x.title.length > 2);
+  } catch {
+    return [];
+  }
+}
+async function searchCore(query, limit = 8) {
+  if (!isApprovedSource("core") || !process.env.CORE_API_KEY) return [];
+  try {
+    const data = await json(`https://api.core.ac.uk/v3/search/works?q=${encodeURIComponent(query)}&limit=${Math.min(limit, 20)}`, { headers: { Authorization: `Bearer ${process.env.CORE_API_KEY}` } });
+    return (data?.results || []).slice(0, limit).map((item) => result("core", { title: item.title || "", author: (item.authors || []).slice(0, 3).map((a) => a.name).join(", "), description: item.abstract || "Open research repository record.", year: item.yearPublished ? String(item.yearPublished) : void 0, sourceUrl: item.downloadUrl || item.links?.[0]?.url || `https://core.ac.uk/works/${item.id}`, pdfUrl: item.downloadUrl, directDownloadAllowed: Boolean(item.downloadUrl) })).filter((x) => x.title.length > 2);
+  } catch {
+    return [];
+  }
+}
+async function searchResearchSources(query, limit = 8) {
+  const jobs = await Promise.allSettled([
+    searchArxiv(query, limit),
+    searchEuropePmc(query, limit),
+    searchCrossref(query, limit),
+    searchOpenAlex(query, limit),
+    searchDoaj(query, limit),
+    searchZenodo(query, limit),
+    searchCore(query, limit)
+  ]);
+  return jobs.flatMap((job) => job.status === "fulfilled" ? job.value : []);
+}
+var HEADERS;
+var init_research_search = __esm({
+  "server/sources/research-search.ts"() {
+    init_policy();
+    HEADERS = { "User-Agent": "ZAMIFU-E-MATERIALS/2.0 (open-access research aggregator)", Accept: "application/json" };
+  }
+});
+
 // server/sources/external-search.ts
 var external_search_exports = {};
 __export(external_search_exports, {
@@ -1523,7 +1704,7 @@ async function searchInternetArchive(query, limit = 15) {
     const url = `https://archive.org/advancedsearch.php?q=${qTerm}+AND+mediatype%3Atexts&fl[]=identifier,title,creator,description,language,subject,date,publisher,pdf&rows=${Math.min(limit, 50)}&output=json`;
     const data = await fetchJson(url);
     const docs = (data?.response?.docs || []).slice(0, limit);
-    const policy = getSourceRightsPolicy("internet_archive");
+    const policy2 = getSourceRightsPolicy("internet_archive");
     return docs.map((d) => {
       const rawAuthor = Array.isArray(d.creator) ? d.creator[0] || "" : d.creator || "";
       const rawDesc = Array.isArray(d.description) ? d.description[0] || "" : d.description || "";
@@ -1539,10 +1720,10 @@ async function searchInternetArchive(query, limit = 15) {
         coverUrl: `https://archive.org/services/img/${d.identifier}`,
         sourceUrl: `https://archive.org/details/${d.identifier}`,
         source: "internet_archive",
-        rightsStatus: policy.rightsStatus,
-        licenseName: policy.licenseName,
-        licenseUrl: policy.licenseUrl,
-        directDownloadAllowed: policy.allowDirectDownload
+        rightsStatus: policy2.rightsStatus,
+        licenseName: policy2.licenseName,
+        licenseUrl: policy2.licenseUrl,
+        directDownloadAllowed: policy2.allowDirectDownload
       };
     }).filter((b) => b.title.length > 2);
   } catch {
@@ -1556,7 +1737,7 @@ async function searchGutenberg(query, limit = 15) {
       `https://gutendex.com/books?search=${encodeURIComponent(query)}&limit=${Math.min(limit, 50)}`
     );
     const results = (data?.results || []).slice(0, limit);
-    const policy = getSourceRightsPolicy("gutenberg");
+    const policy2 = getSourceRightsPolicy("gutenberg");
     return results.map((b) => ({
       title: b.title || "",
       author: cleanMetadata(b.authors?.[0]?.name || ""),
@@ -1567,10 +1748,10 @@ async function searchGutenberg(query, limit = 15) {
       pdfUrl: b.formats?.["application/pdf"] || void 0,
       sourceUrl: `https://www.gutenberg.org/ebooks/${b.id}`,
       source: "gutenberg",
-      rightsStatus: policy.rightsStatus,
-      licenseName: policy.licenseName,
-      licenseUrl: policy.licenseUrl,
-      directDownloadAllowed: policy.allowDirectDownload
+      rightsStatus: policy2.rightsStatus,
+      licenseName: policy2.licenseName,
+      licenseUrl: policy2.licenseUrl,
+      directDownloadAllowed: policy2.allowDirectDownload
     })).filter((r) => r.title.length > 2);
   } catch {
     return [];
@@ -1583,7 +1764,7 @@ async function searchOpenLibrary(query, limit = 8) {
       `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=${Math.min(limit, 20)}`
     );
     const docs = (data?.docs || []).slice(0, limit);
-    const policy = getSourceRightsPolicy("open_library");
+    const policy2 = getSourceRightsPolicy("open_library");
     return docs.map((b) => ({
       title: b.title || "",
       author: cleanMetadata(b.author_name?.[0] || ""),
@@ -1600,10 +1781,10 @@ async function searchOpenLibrary(query, limit = 8) {
       pdfUrl: b.ia?.[0] ? `https://archive.org/download/${b.ia[0]}/${b.ia[0]}.pdf` : void 0,
       sourceUrl: b.key ? `https://openlibrary.org${b.key}` : "https://openlibrary.org",
       source: "open_library",
-      rightsStatus: policy.rightsStatus,
-      licenseName: policy.licenseName,
-      licenseUrl: policy.licenseUrl,
-      directDownloadAllowed: policy.allowDirectDownload
+      rightsStatus: policy2.rightsStatus,
+      licenseName: policy2.licenseName,
+      licenseUrl: policy2.licenseUrl,
+      directDownloadAllowed: policy2.allowDirectDownload
     })).filter((r) => r.title.length > 2);
   } catch {
     return [];
@@ -1614,7 +1795,7 @@ async function searchOpenStax(query, limit = 10) {
   try {
     const data = await fetchJson("https://openstax.org/api/v2/books/?format=json&limit=100", 8e3);
     const books2 = (data?.items || data?.results || []).slice(0, limit);
-    const policy = getSourceRightsPolicy("openstax");
+    const policy2 = getSourceRightsPolicy("openstax");
     const needle = query.toLowerCase();
     return books2.filter(
       (b) => (b.title || "").toLowerCase().includes(needle) || (b.description || "").toLowerCase().includes(needle)
@@ -1629,10 +1810,10 @@ async function searchOpenStax(query, limit = 10) {
       sourceUrl: b.webview_rex_link || `https://openstax.org/details/books/${b.slug}`,
       publisher: void 0,
       source: "openstax",
-      rightsStatus: policy.rightsStatus,
-      licenseName: policy.licenseName,
-      licenseUrl: policy.licenseUrl,
-      directDownloadAllowed: policy.allowDirectDownload
+      rightsStatus: policy2.rightsStatus,
+      licenseName: policy2.licenseName,
+      licenseUrl: policy2.licenseUrl,
+      directDownloadAllowed: policy2.allowDirectDownload
     }));
   } catch {
     return [];
@@ -1642,7 +1823,7 @@ async function searchZLibrary(query, limit = 10) {
   if (!isApprovedSource("z_library")) return [];
   try {
     const books2 = await searchAnnasArchive(`${query} source:zlibrary`, limit);
-    const policy = getSourceRightsPolicy("z_library");
+    const policy2 = getSourceRightsPolicy("z_library");
     return books2.map((b) => ({
       title: b.title,
       author: cleanMetadata(b.author),
@@ -1655,10 +1836,10 @@ async function searchZLibrary(query, limit = 10) {
       coverUrl: void 0,
       sourceUrl: b.sourceUrl,
       source: "z_library",
-      rightsStatus: policy.rightsStatus,
-      licenseName: policy.licenseName,
-      licenseUrl: policy.licenseUrl,
-      directDownloadAllowed: policy.allowDirectDownload,
+      rightsStatus: policy2.rightsStatus,
+      licenseName: policy2.licenseName,
+      licenseUrl: policy2.licenseUrl,
+      directDownloadAllowed: policy2.allowDirectDownload,
       md5: b.md5
     }));
   } catch {
@@ -1668,7 +1849,7 @@ async function searchZLibrary(query, limit = 10) {
 async function searchSwahiliSpecialSources(query) {
   const needle = query.toLowerCase();
   const results = [];
-  const policy = getSourceRightsPolicy("kicd");
+  const policy2 = getSourceRightsPolicy("kicd");
   if (needle.includes("kichwamaji") || needle.includes("kezilahabi")) {
     results.push({
       title: "Kichwamaji (Analysis & Summary)",
@@ -1745,14 +1926,14 @@ async function searchSwahiliSpecialSources(query) {
   return results;
 }
 async function runExternalSearch(query, limit = 15) {
-  const [internetArchive, gutenberg, openLibrary, openstax, zLibrary, annasArchive, swahiliSpecial] = await Promise.allSettled([
+  const [internetArchive, gutenberg, openLibrary, openstax, zLibrary, annasArchive, swahiliSpecial, research] = await Promise.allSettled([
     withTimeout(searchInternetArchive(query, limit), 8e3),
     withTimeout(searchGutenberg(query, limit), 8e3),
     withTimeout(searchOpenLibrary(query, limit), 8e3),
     withTimeout(searchOpenStax(query, limit), 8e3),
     withTimeout(searchZLibrary(query, limit), 8e3),
     withTimeout(searchAnnasArchive(query, limit).then((books2) => {
-      const policy = getSourceRightsPolicy("annas_archive");
+      const policy2 = getSourceRightsPolicy("annas_archive");
       return books2.map((b) => ({
         title: b.title,
         author: cleanMetadata(b.author),
@@ -1762,13 +1943,14 @@ async function runExternalSearch(query, limit = 15) {
         pdfUrl: b.sourceUrl,
         sourceUrl: b.sourceUrl,
         source: "annas_archive",
-        rightsStatus: policy.rightsStatus,
-        licenseName: policy.licenseName,
-        directDownloadAllowed: policy.allowDirectDownload,
+        rightsStatus: policy2.rightsStatus,
+        licenseName: policy2.licenseName,
+        directDownloadAllowed: policy2.allowDirectDownload,
         md5: b.md5
       }));
     }), 12e3),
-    withTimeout(searchSwahiliSpecialSources(query), 5e3)
+    withTimeout(searchSwahiliSpecialSources(query), 5e3),
+    withTimeout(searchResearchSources(query, Math.min(limit, 8)), 15e3)
   ]);
   return {
     internet_archive: internetArchive.status === "fulfilled" ? internetArchive.value : [],
@@ -1777,7 +1959,8 @@ async function runExternalSearch(query, limit = 15) {
     openstax: openstax.status === "fulfilled" ? openstax.value : [],
     z_library: zLibrary.status === "fulfilled" ? zLibrary.value : [],
     annas_archive: annasArchive.status === "fulfilled" ? annasArchive.value : [],
-    swahili_special: swahiliSpecial.status === "fulfilled" ? swahiliSpecial.value : []
+    swahili_special: swahiliSpecial.status === "fulfilled" ? swahiliSpecial.value : [],
+    research: research.status === "fulfilled" ? research.value : []
   };
 }
 var DEFAULT_HEADERS2, SOURCE_NAMES, withTimeout;
@@ -1785,6 +1968,7 @@ var init_external_search = __esm({
   "server/sources/external-search.ts"() {
     init_policy();
     init_annas_archive();
+    init_research_search();
     DEFAULT_HEADERS2 = {
       "User-Agent": "Mozilla/5.0 (compatible; ZAMIFU-E-MATERIALS/2.0; Educational Aggregator)",
       "Accept": "application/json"
@@ -2178,7 +2362,7 @@ async function importGutenbergBook(urlOrId) {
       message: "Book not found on Project Gutenberg"
     });
   }
-  const result = await createBook({
+  const result2 = await createBook({
     gutenbergId,
     title: gutenbergBook.title,
     author: gutenbergBook.author,
@@ -2194,7 +2378,7 @@ async function importGutenbergBook(urlOrId) {
     directDownloadAllowed: true,
     provenanceCheckedAt: /* @__PURE__ */ new Date()
   });
-  return result;
+  return result2;
 }
 
 // server/sources/doab.ts
@@ -2500,9 +2684,9 @@ async function fetchPubMedBooks(limit = 30) {
     if (ids.length === 0) return [];
     const summaryUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pmc&id=${ids.slice(0, 20).join(",")}&retmode=json`;
     const summaryRes = await axios5.get(summaryUrl, { timeout: 2e4, headers: DEFAULT_HEADERS });
-    const result = summaryRes.data?.result || {};
+    const result2 = summaryRes.data?.result || {};
     return ids.slice(0, 20).map((id) => {
-      const doc = result[id] || {};
+      const doc = result2[id] || {};
       return {
         title: doc.title || "",
         author: (doc.authors || []).map((a) => a.name).join(", ") || "Unknown",
@@ -2650,13 +2834,13 @@ async function fetchCk12Books(limit = 50) {
       headers: DEFAULT_HEADERS
     });
     const $ = cheerio4.load(pageRes.data);
-    const result = [];
+    const result2 = [];
     $("a[href*='/book/'], .book-card, .resource-card").each((_, el) => {
-      if (result.length >= limit) return false;
+      if (result2.length >= limit) return false;
       const title = $(el).find("h3, .title").first().text().trim() || $(el).attr("title") || "";
       const href = $(el).is("a") ? $(el).attr("href") : $(el).find("a").first().attr("href");
       if (title && title.length > 3) {
-        result.push({
+        result2.push({
           title,
           author: "CK-12 Foundation",
           description: `Free, customizable STEM textbook from CK-12: ${title}`,
@@ -2668,7 +2852,7 @@ async function fetchCk12Books(limit = 50) {
         });
       }
     });
-    return result;
+    return result2;
   } catch {
     return [];
   }
@@ -4018,7 +4202,14 @@ var DOWNLOAD_HOST_ALLOWLIST = /* @__PURE__ */ new Set([
   "openstax.org",
   "www.openstax.org",
   "kicd.ac.ke",
-  "cba.knec.ac.ke"
+  "cba.knec.ac.ke",
+  "arxiv.org",
+  "export.arxiv.org",
+  "europepmc.org",
+  "www.ebi.ac.uk",
+  "pmc.ncbi.nlm.nih.gov",
+  "zenodo.org",
+  "api.zenodo.org"
 ]);
 function decodeDownloadToken(token) {
   if (typeof token !== "string" || token.length < 8 || token.length > 4096) return void 0;
@@ -4053,8 +4244,8 @@ app.get("/api/scheduled/aggregator", async (req, res) => {
     return res.status(401).json({ error: "unauthorized" });
   }
   try {
-    const result = await runScheduledAggregator();
-    res.json({ ok: true, ...result });
+    const result2 = await runScheduledAggregator();
+    res.json({ ok: true, ...result2 });
   } catch (error) {
     console.error("Scheduled aggregator error:", error);
     res.status(500).json({
@@ -4521,13 +4712,13 @@ app.get("/api/search", async (req, res) => {
       return books3;
     })();
     const externalPromise = (async () => {
-      if (q.length < 2) return { internet_archive: [], gutenberg: [], open_library: [], openstax: [], z_library: [], annas_archive: [] };
+      if (q.length < 2) return { internet_archive: [], gutenberg: [], open_library: [], openstax: [], z_library: [], annas_archive: [], research: [] };
       try {
         const { runExternalSearch: runExternalSearch2 } = await Promise.resolve().then(() => (init_external_search(), external_search_exports));
         return await withTimeout2(runExternalSearch2(q, 30), 2e4);
       } catch (err) {
         console.error("External search error:", err);
-        return { internet_archive: [], gutenberg: [], open_library: [], openstax: [], z_library: [], annas_archive: [] };
+        return { internet_archive: [], gutenberg: [], open_library: [], openstax: [], z_library: [], annas_archive: [], research: [] };
       }
     })();
     const [localResult, libgenResult, externalResult, kicdResult, knecResult] = await Promise.allSettled([
@@ -4575,16 +4766,18 @@ app.get("/api/search", async (req, res) => {
     }) : [];
     const localError = localResult.status === "rejected" ? localResult.reason : null;
     const libgenBooks = libgenResult.status === "fulfilled" ? libgenResult.value : [];
-    const externalData = externalResult.status === "fulfilled" ? externalResult.value : { internet_archive: [], gutenberg: [], open_library: [], openstax: [], z_library: [], annas_archive: [], swahili_special: [] };
+    const externalData = externalResult.status === "fulfilled" ? externalResult.value : { internet_archive: [], gutenberg: [], open_library: [], openstax: [], z_library: [], annas_archive: [], swahili_special: [], research: [] };
     const iaBooks = externalData.internet_archive || [];
     const olBooks = externalData.open_library || [];
     const zLibBooks = externalData.z_library || [];
     const annaBooks = externalData.annas_archive || [];
     const swahiliSpecialBooks = externalData.swahili_special || [];
+    const researchBooks = externalData.research || [];
     const kicdBooks = kicdResult.status === "fulfilled" ? kicdResult.value : [];
     const knecBooks = knecResult.status === "fulfilled" ? knecResult.value : [];
     const candidates = [
       ...swahiliSpecialBooks,
+      ...researchBooks,
       ...annaBooks,
       ...zLibBooks,
       ...localBooks,
@@ -4636,7 +4829,7 @@ app.get("/api/search", async (req, res) => {
     const { cleanMetadata: cleanMetadata2 } = await Promise.resolve().then(() => (init_external_search(), external_search_exports));
     const finalBooks = books2.slice(offset, offset + limit).map((book) => {
       const formats = parseFormats(book.formats);
-      const directUrl = book.downloadUrl || book.pdfUrl || formats.pdf || "";
+      const directUrl = book.directDownloadAllowed === false ? "" : book.downloadUrl || book.pdfUrl || formats.pdf || "";
       const token = encodeDownloadToken(directUrl);
       const inSiteDownloadUrl = token ? `/api/download?token=${token}` : "";
       return {

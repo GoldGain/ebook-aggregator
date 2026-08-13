@@ -25,6 +25,13 @@ const DOWNLOAD_HOST_ALLOWLIST = new Set([
   "www.openstax.org",
   "kicd.ac.ke",
   "cba.knec.ac.ke",
+  "arxiv.org",
+  "export.arxiv.org",
+  "europepmc.org",
+  "www.ebi.ac.uk",
+  "pmc.ncbi.nlm.nih.gov",
+  "zenodo.org",
+  "api.zenodo.org",
 ]);
 
 function decodeDownloadToken(token: unknown): string | undefined {
@@ -658,13 +665,13 @@ app.get("/api/search", async (req: any, res: any) => {
     })();
 
     const externalPromise = (async () => {
-      if (q.length < 2) return { internet_archive: [], gutenberg: [], open_library: [], openstax: [], z_library: [], annas_archive: [] };
+      if (q.length < 2) return { internet_archive: [], gutenberg: [], open_library: [], openstax: [], z_library: [], annas_archive: [], research: [] };
       try {
         const { runExternalSearch } = await import("../server/sources/external-search");
         return await withTimeout(runExternalSearch(q, 30), 20000);
       } catch (err) {
         console.error("External search error:", err);
-        return { internet_archive: [], gutenberg: [], open_library: [], openstax: [], z_library: [], annas_archive: [] };
+        return { internet_archive: [], gutenberg: [], open_library: [], openstax: [], z_library: [], annas_archive: [], research: [] };
       }
     })();
 
@@ -706,19 +713,21 @@ app.get("/api/search", async (req: any, res: any) => {
     }) : [];
     const localError = localResult.status === "rejected" ? localResult.reason : null;
     const libgenBooks = libgenResult.status === "fulfilled" ? libgenResult.value : [];
-    const externalData = externalResult.status === "fulfilled" ? externalResult.value : { internet_archive: [], gutenberg: [], open_library: [], openstax: [], z_library: [], annas_archive: [], swahili_special: [] };
+    const externalData = externalResult.status === "fulfilled" ? externalResult.value : { internet_archive: [], gutenberg: [], open_library: [], openstax: [], z_library: [], annas_archive: [], swahili_special: [], research: [] };
     const iaBooks = externalData.internet_archive || [];
     const olBooks = externalData.open_library || [];
     const zLibBooks = externalData.z_library || [];
     const annaBooks = externalData.annas_archive || [];
     // @ts-ignore
     const swahiliSpecialBooks = (externalData as any).swahili_special || [];
+    const researchBooks = (externalData as any).research || [];
     const kicdBooks = kicdResult.status === "fulfilled" ? kicdResult.value : [];
     const knecBooks = knecResult.status === "fulfilled" ? knecResult.value : [];
     
     // Prioritize Special Sources, Anna's Archive, and Z-Library results
     const candidates = [
       ...swahiliSpecialBooks,
+      ...researchBooks,
       ...annaBooks, 
       ...zLibBooks, 
       ...localBooks, 
@@ -767,7 +776,7 @@ app.get("/api/search", async (req: any, res: any) => {
     const { cleanMetadata } = await import("../server/sources/external-search");
     const finalBooks = books.slice(offset, offset + limit).map((book: any) => {
       const formats = parseFormats(book.formats);
-      const directUrl = book.downloadUrl || book.pdfUrl || formats.pdf || "";
+      const directUrl = book.directDownloadAllowed === false ? "" : (book.downloadUrl || book.pdfUrl || formats.pdf || "");
       const token = encodeDownloadToken(directUrl);
       const inSiteDownloadUrl = token ? `/api/download?token=${token}` : "";
       return {
