@@ -48,6 +48,11 @@ function isAllowedDownloadUrl(rawUrl: string): boolean {
   }
 }
 
+function encodeDownloadToken(rawUrl: unknown): string | undefined {
+  if (typeof rawUrl !== "string" || !isAllowedDownloadUrl(rawUrl)) return undefined;
+  return Buffer.from(rawUrl, "utf8").toString("base64url");
+}
+
 // Configure body parser
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
@@ -760,15 +765,24 @@ app.get("/api/search", async (req: any, res: any) => {
     });
 
     const { cleanMetadata } = await import("../server/sources/external-search");
-    const finalBooks = books.slice(offset, offset + limit).map((book: any) => ({
-      ...book,
-      author: cleanMetadata(book.author || ""),
-      description: cleanMetadata(book.description || ""),
-      publisher: undefined,
-      source: undefined,
-      sourceUrl: undefined, // Hide source URL
-      annaUrl: undefined,
-    }));
+    const finalBooks = books.slice(offset, offset + limit).map((book: any) => {
+      const formats = parseFormats(book.formats);
+      const directUrl = book.downloadUrl || book.pdfUrl || formats.pdf || "";
+      const token = encodeDownloadToken(directUrl);
+      const inSiteDownloadUrl = token ? `/api/download?token=${token}` : "";
+      return {
+        ...book,
+        formats: token ? { ...formats, pdf: inSiteDownloadUrl } : formats,
+        downloadUrl: inSiteDownloadUrl,
+        author: cleanMetadata(book.author || ""),
+        description: cleanMetadata(book.description || ""),
+        publisher: undefined,
+        source: undefined,
+        sourceUrl: undefined, // Hide source URL
+        pdfUrl: undefined,
+        annaUrl: undefined,
+      };
+    });
 
     return res.status(200).json({
       success: true, query: q, total: books.length,

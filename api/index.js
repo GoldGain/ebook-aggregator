@@ -4039,6 +4039,10 @@ function isAllowedDownloadUrl(rawUrl) {
     return false;
   }
 }
+function encodeDownloadToken(rawUrl) {
+  if (typeof rawUrl !== "string" || !isAllowedDownloadUrl(rawUrl)) return void 0;
+  return Buffer.from(rawUrl, "utf8").toString("base64url");
+}
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 registerStorageProxy(app);
@@ -4630,16 +4634,25 @@ app.get("/api/search", async (req, res) => {
       return relevance(b) - relevance(a) || String(a.title || "").localeCompare(String(b.title || ""));
     });
     const { cleanMetadata: cleanMetadata2 } = await Promise.resolve().then(() => (init_external_search(), external_search_exports));
-    const finalBooks = books2.slice(offset, offset + limit).map((book) => ({
-      ...book,
-      author: cleanMetadata2(book.author || ""),
-      description: cleanMetadata2(book.description || ""),
-      publisher: void 0,
-      source: void 0,
-      sourceUrl: void 0,
-      // Hide source URL
-      annaUrl: void 0
-    }));
+    const finalBooks = books2.slice(offset, offset + limit).map((book) => {
+      const formats = parseFormats(book.formats);
+      const directUrl = book.downloadUrl || book.pdfUrl || formats.pdf || "";
+      const token = encodeDownloadToken(directUrl);
+      const inSiteDownloadUrl = token ? `/api/download?token=${token}` : "";
+      return {
+        ...book,
+        formats: token ? { ...formats, pdf: inSiteDownloadUrl } : formats,
+        downloadUrl: inSiteDownloadUrl,
+        author: cleanMetadata2(book.author || ""),
+        description: cleanMetadata2(book.description || ""),
+        publisher: void 0,
+        source: void 0,
+        sourceUrl: void 0,
+        // Hide source URL
+        pdfUrl: void 0,
+        annaUrl: void 0
+      };
+    });
     return res.status(200).json({
       success: true,
       query: q,
