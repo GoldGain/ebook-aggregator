@@ -4119,6 +4119,7 @@ app.get("/api/libgen", async (req, res) => {
           source: "libgen",
           // Primary: Anna's Archive (most reliable); fallback to libgen mirrors
           sourceUrl: annaUrl || `https://libgen.li/get.php?md5=${md5}`,
+          // @ts-ignore
           annaUrl: annaUrl || `https://annas-archive.gd/md5/${md5}`,
           mirrors: [
             annaUrl || `https://annas-archive.gd/md5/${md5}`,

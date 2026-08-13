@@ -27,7 +27,8 @@ export const supabasePublic = createClient(supabaseUrl, supabaseAnonKey, {
  */
 export async function verifySupabaseToken(accessToken: string): Promise<{ id: string; email?: string } | null> {
   try {
-    const { data, error } = await supabaseAdmin.auth.getUser(accessToken);
+    // @ts-ignore
+    const { data, error } = await (supabaseAdmin.auth as any).getUser(accessToken);
     if (error || !data.user) return null;
     return { id: data.user.id, email: data.user.email };
   } catch {
