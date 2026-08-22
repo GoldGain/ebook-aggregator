@@ -47,9 +47,10 @@ function BookCard({ book, query, onClick }: { book: any; query: string; onClick?
   const formats = typeof book.formats === "string"
     ? (() => { try { return JSON.parse(book.formats); } catch { return {}; } })()
     : (book.formats || {});
-  // Prefer an actual PDF/EPUB file over a source landing page so the request
-  // can be proxied through Zamifu without redirecting the student elsewhere.
-  const downloadUrl = formats.pdf || book.downloadUrl || book.sourceUrl || "";
+  // Prefer an actual file URL or a verified MD5. Never treat a catalog/source
+  // landing page as a downloadable PDF.
+  const downloadUrl = formats.pdf || book.downloadUrl || book.pdfUrl || "";
+  const canDownload = Boolean(book.md5 || downloadUrl);
 
   return (
     <div
@@ -85,7 +86,9 @@ function BookCard({ book, query, onClick }: { book: any; query: string; onClick?
             <p className="mb-2 line-clamp-2 text-[11px] text-muted-foreground/70">{book.description}</p>
           )}
           <div className="flex flex-wrap items-center gap-1">
-            <span className="rounded border border-red-500/30 bg-red-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-400">PDF</span>
+            <span className={`rounded border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${canDownload ? "border-red-500/30 bg-red-500/20 text-red-400" : "border-muted-foreground/30 bg-muted/20 text-muted-foreground"}`}>
+              {canDownload ? "PDF" : "CATALOG"}
+            </span>
             {book.language && <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px] text-accent">{String(book.language).toUpperCase()}</span>}
             {book.educationalLevel && <span className="rounded bg-secondary/10 px-1.5 py-0.5 text-[10px] text-secondary">{String(book.educationalLevel).replace("_", " ")}</span>}
             {book.downloadCount > 0 && <span className="rounded bg-muted/30 px-1.5 py-0.5 text-[10px] text-muted-foreground">{book.downloadCount} ↓</span>}
@@ -93,16 +96,19 @@ function BookCard({ book, query, onClick }: { book: any; query: string; onClick?
         </div>
       </div>
         <div className="flex shrink-0 items-end" onClick={(event) => event.stopPropagation()}>
-        <DownloadButton
-          md5={book.md5}
-          title={book.title || "document"}
-          format="pdf"
-          url={downloadUrl}
-          query={query}
-          author={book.author || null}
-          bookId={typeof book.id === "number" ? book.id : null}
-          language={book.language || null}
-        />
+        {canDownload ? (
+          <DownloadButton
+            md5={book.md5}
+            title={book.title || "document"}
+            format="pdf"
+            url={downloadUrl}
+            query={query}
+          />
+        ) : (
+          <span className="whitespace-nowrap text-[10px] font-medium text-muted-foreground" title="No verified digital file is available for this catalog record">
+            No direct file
+          </span>
+        )}
       </div>
     </div>
   );
