@@ -8,10 +8,6 @@ interface DownloadButtonProps {
   url?: string | null;
   query?: string;
   onSuccess?: () => void;
-  author?: string | null;
-  bookId?: number | null;
-  rightsStatus?: string | null;
-  language?: string | null;
 }
 
 interface SearchCandidate {

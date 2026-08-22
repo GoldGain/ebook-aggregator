@@ -11,55 +11,6 @@ import { runScheduledAggregator } from "../server/sources/aggregator";
 
 const app = express();
 
-// Only proxy URLs from the open-access and educational providers used by the
-// catalog. The browser never receives these upstream URLs as a navigation target.
-const DOWNLOAD_HOST_ALLOWLIST = new Set([
-  "archive.org",
-  "www.archive.org",
-  "afrika.univie.ac.at",
-  "www.swahili-literatur.at",
-  "swahili-literatur.at",
-  "etd.ohiolink.edu",
-  "www.gutenberg.org",
-  "openstax.org",
-  "www.openstax.org",
-  "kicd.ac.ke",
-  "cba.knec.ac.ke",
-  "arxiv.org",
-  "export.arxiv.org",
-  "europepmc.org",
-  "www.ebi.ac.uk",
-  "pmc.ncbi.nlm.nih.gov",
-  "zenodo.org",
-  "api.zenodo.org",
-]);
-
-function decodeDownloadToken(token: unknown): string | undefined {
-  if (typeof token !== "string" || token.length < 8 || token.length > 4096) return undefined;
-  try {
-    const decoded = Buffer.from(token, "base64url").toString("utf8");
-    const url = new URL(decoded);
-    if (url.protocol !== "https:" || !DOWNLOAD_HOST_ALLOWLIST.has(url.hostname.toLowerCase())) return undefined;
-    return url.toString();
-  } catch {
-    return undefined;
-  }
-}
-
-function isAllowedDownloadUrl(rawUrl: string): boolean {
-  try {
-    const url = new URL(rawUrl);
-    return url.protocol === "https:" && DOWNLOAD_HOST_ALLOWLIST.has(url.hostname.toLowerCase());
-  } catch {
-    return false;
-  }
-}
-
-function encodeDownloadToken(rawUrl: unknown): string | undefined {
-  if (typeof rawUrl !== "string" || !isAllowedDownloadUrl(rawUrl)) return undefined;
-  return Buffer.from(rawUrl, "utf8").toString("base64url");
-}
-
 // Configure body parser
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
@@ -270,21 +221,18 @@ app.all("/api/download", async (req: any, res: any) => {
 
   if (req.method === "GET") {
     md5 = req.query.md5 as string | undefined;
-    directUrl = decodeDownloadToken(req.query.token) || req.query.url as string | undefined;
+    directUrl = req.query.url as string | undefined;
     format = (req.query.format as string) || "pdf";
   } else if (req.method === "POST") {
     const body = req.body || {};
     md5 = body.md5;
-    directUrl = decodeDownloadToken(body.token) || body.url;
+    directUrl = body.url;
     format = body.format || "pdf";
   }
 
   // Try a provided URL first. A source page is not treated as a download; if it
   // contains an MD5, execution continues through the server-side mirror flow.
   if (directUrl && /^https?:\/\//i.test(directUrl)) {
-    if (!isAllowedDownloadUrl(directUrl)) {
-      return res.status(403).json({ success: false, error: "Download source not approved", message: "This file can only be downloaded from an approved open-access source." });
-    }
     try {
       const axios = await import("axios");
       const r = await axios.default.get(directUrl, {
@@ -665,13 +613,13 @@ app.get("/api/search", async (req: any, res: any) => {
     })();
 
     const externalPromise = (async () => {
-      if (q.length < 2) return { internet_archive: [], gutenberg: [], open_library: [], openstax: [], z_library: [], annas_archive: [], research: [] };
+      if (q.length < 2) return { internet_archive: [], gutenberg: [], open_library: [], openstax: [], z_library: [], annas_archive: [] };
       try {
         const { runExternalSearch } = await import("../server/sources/external-search");
         return await withTimeout(runExternalSearch(q, 30), 20000);
       } catch (err) {
         console.error("External search error:", err);
-        return { internet_archive: [], gutenberg: [], open_library: [], openstax: [], z_library: [], annas_archive: [], research: [] };
+        return { internet_archive: [], gutenberg: [], open_library: [], openstax: [], z_library: [], annas_archive: [] };
       }
     })();
 
@@ -713,21 +661,19 @@ app.get("/api/search", async (req: any, res: any) => {
     }) : [];
     const localError = localResult.status === "rejected" ? localResult.reason : null;
     const libgenBooks = libgenResult.status === "fulfilled" ? libgenResult.value : [];
-    const externalData = externalResult.status === "fulfilled" ? externalResult.value : { internet_archive: [], gutenberg: [], open_library: [], openstax: [], z_library: [], annas_archive: [], swahili_special: [], research: [] };
+    const externalData = externalResult.status === "fulfilled" ? externalResult.value : { internet_archive: [], gutenberg: [], open_library: [], openstax: [], z_library: [], annas_archive: [], swahili_special: [] };
     const iaBooks = externalData.internet_archive || [];
     const olBooks = externalData.open_library || [];
     const zLibBooks = externalData.z_library || [];
     const annaBooks = externalData.annas_archive || [];
     // @ts-ignore
     const swahiliSpecialBooks = (externalData as any).swahili_special || [];
-    const researchBooks = (externalData as any).research || [];
     const kicdBooks = kicdResult.status === "fulfilled" ? kicdResult.value : [];
     const knecBooks = knecResult.status === "fulfilled" ? knecResult.value : [];
     
     // Prioritize Special Sources, Anna's Archive, and Z-Library results
     const candidates = [
       ...swahiliSpecialBooks,
-      ...researchBooks,
       ...annaBooks, 
       ...zLibBooks, 
       ...localBooks, 
@@ -774,24 +720,15 @@ app.get("/api/search", async (req: any, res: any) => {
     });
 
     const { cleanMetadata } = await import("../server/sources/external-search");
-    const finalBooks = books.slice(offset, offset + limit).map((book: any) => {
-      const formats = parseFormats(book.formats);
-      const directUrl = book.directDownloadAllowed === false ? "" : (book.downloadUrl || book.pdfUrl || formats.pdf || "");
-      const token = encodeDownloadToken(directUrl);
-      const inSiteDownloadUrl = token ? `/api/download?token=${token}` : "";
-      return {
-        ...book,
-        formats: token ? { ...formats, pdf: inSiteDownloadUrl } : { ...formats, pdf: undefined },
-        downloadUrl: inSiteDownloadUrl,
-        author: cleanMetadata(book.author || ""),
-        description: cleanMetadata(book.description || ""),
-        publisher: undefined,
-        source: undefined,
-        sourceUrl: undefined, // Hide source URL
-        pdfUrl: undefined,
-        annaUrl: undefined,
-      };
-    });
+    const finalBooks = books.slice(offset, offset + limit).map((book: any) => ({
+      ...book,
+      author: cleanMetadata(book.author || ""),
+      description: cleanMetadata(book.description || ""),
+      publisher: undefined,
+      source: undefined,
+      sourceUrl: undefined, // Hide source URL
+      annaUrl: undefined,
+    }));
 
     return res.status(200).json({
       success: true, query: q, total: books.length,

@@ -49,7 +49,7 @@ function BookCard({ book, query, onClick }: { book: any; query: string; onClick?
     : (book.formats || {});
   // Prefer an actual PDF/EPUB file over a source landing page so the request
   // can be proxied through Zamifu without redirecting the student elsewhere.
-  const downloadUrl = formats.pdf || book.downloadUrl || "";
+  const downloadUrl = formats.pdf || book.downloadUrl || book.sourceUrl || "";
 
   return (
     <div
